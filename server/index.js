@@ -101,6 +101,11 @@ async function initDb() {
     )
   `);
 
+  // Migration: add missing columns if tasks table already existed without them
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'pre'`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000`);
+
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
