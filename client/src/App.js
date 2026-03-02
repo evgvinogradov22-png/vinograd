@@ -766,9 +766,16 @@ function ProjectsView({projects,setProjects}){
     </div>}
     {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#2d2d44"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#4b5563"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
-      {visible.map(proj=>{
-        const [nl,setNl]=useState("");
-        return <div key={proj.id} style={{background:"#111118",border:`1px solid ${proj.color}30`,borderTop:`3px solid ${proj.color}`,borderRadius:12,padding:"14px"}}>
+      {visible.map(proj=>(
+        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects}/>
+      ))}
+    </div>
+  </div>;
+}
+
+function ProjectCard({proj, showArchive, setProjects}){
+  const [nl,setNl]=useState("");
+  return <div style={{background:"#111118",border:`1px solid ${proj.color}30`,borderTop:`3px solid ${proj.color}`,borderRadius:12,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
             <div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{proj.label[0]}</div>
             <input value={proj.label} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,label:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{label:e.target.value}).catch(()=>{})} style={{...SI,flex:1,padding:"4px 8px",fontSize:13,fontWeight:700}}/>
@@ -785,9 +792,6 @@ function ProjectsView({projects,setProjects}){
             <button onClick={()=>{if(nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:6,padding:"0 10px",color:"#a78bfa",cursor:"pointer",fontSize:15}}>+</button>
           </div>
         </div>;
-      })}
-    </div>
-  </div>;
 }
 
 // ── Team View ─────────────────────────────────────────────────────────────────
@@ -946,18 +950,18 @@ function MainApp({currentUser, onLogout}){
     loadAll();
   }, []);
 
+  // Per-tab filters — must be before any conditional return!
+  const [preFilt,setPreFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+  const [prodFilt,setProdFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+  const [postFilt,setPostFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+  const [pubFilt,setPubFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+
   if (loading) return (
     <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,background:"#0a0a0f"}}>
       <div style={{fontSize:48}}>🍇</div>
       <div style={{fontSize:12,color:"#4b5563",fontFamily:"monospace"}}>Загрузка...</div>
     </div>
   );
-
-  // Per-tab filters
-  const [preFilt,setPreFilt]=useState({pf:"all",member:"all",sortBy:"default"});
-  const [prodFilt,setProdFilt]=useState({pf:"all",member:"all",sortBy:"default"});
-  const [postFilt,setPostFilt]=useState({pf:"all",member:"all",sortBy:"default"});
-  const [pubFilt,setPubFilt]=useState({pf:"all",member:"all",sortBy:"default"});
 
   const activeProjs=projects.filter(p=>!p.archived);
 
@@ -1148,4 +1152,3 @@ function MainApp({currentUser, onLogout}){
     {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close}><PubForm          item={modal.item} onSave={d=>save("pub",d)}           onClose={close} projects={projects} team={teamMembers}/></Modal>}
   </div>;
 }
-
