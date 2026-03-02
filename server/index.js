@@ -51,6 +51,7 @@ function hash(str) {
 
 // ── Init DB ───────────────────────────────────────────────────────────────────
 async function initDb() {
+  // Each statement must be a separate query call for pg
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -60,8 +61,10 @@ async function initDb() {
       color TEXT NOT NULL DEFAULT '#8b5cf6',
       password_hash TEXT NOT NULL,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
-    );
+    )
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       label TEXT NOT NULL,
@@ -70,8 +73,10 @@ async function initDb() {
       links JSONB DEFAULT '[]',
       archived BOOLEAN DEFAULT FALSE,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
-    );
+    )
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
@@ -81,8 +86,10 @@ async function initDb() {
       data JSONB DEFAULT '{}',
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
       updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
-    );
+    )
+  `);
 
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
@@ -91,12 +98,12 @@ async function initDb() {
       file_url TEXT DEFAULT '',
       file_name TEXT DEFAULT '',
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type);
-    CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
-    CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id);
+    )
   `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
 
   // Seed projects
   await pool.query(`
