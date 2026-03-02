@@ -1,0 +1,1151 @@
+import { useState, useRef, useEffect } from "react";
+import { api, createWS } from "./api";
+
+const APP_NAME = "Виноград";
+
+const TABS = [
+  { id:"pre",      label:"Препродакшн",  icon:"✍️",  color:"#8b5cf6" },
+  { id:"prod",     label:"Продакшн",      icon:"🎬",  color:"#3b82f6" },
+  { id:"post",     label:"Постпродакшн",  icon:"🎞️", color:"#ec4899" },
+  { id:"pub",      label:"Публикация",    icon:"🚀",  color:"#10b981" },
+  { id:"summary",  label:"Сводка",        icon:"📊",  color:"#f97316" },
+  { id:"projects", label:"Проекты",       icon:"📁",  color:"#f59e0b" },
+  { id:"team",     label:"Команда",       icon:"👥",  color:"#06b6d4" },
+];
+
+const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
+const PROD_STATUSES = [{id:"planned",l:"Запланировано",c:"#6b7280"},{id:"ready",l:"Готово к съёмке",c:"#f59e0b"},{id:"shooting",l:"Идёт съёмка",c:"#3b82f6"},{id:"done",l:"Снято",c:"#10b981"}];
+const POST_STATUSES = [{id:"not_started",l:"Не начат",c:"#4b5563"},{id:"in_progress",l:"В монтаже",c:"#f59e0b"},{id:"review",l:"На проверке",c:"#8b5cf6"},{id:"done",l:"Готово",c:"#10b981"}];
+const PUB_STATUSES  = [{id:"draft",l:"Черновик",c:"#6b7280"},{id:"ready",l:"Готово",c:"#f59e0b"},{id:"scheduled",l:"Запланировано",c:"#3b82f6"},{id:"published",l:"Опубликовано",c:"#10b981"}];
+const ROLES_LIST    = ["Менеджер проекта","Сценарист","Оператор","Монтажёр","Продюсер","Таргетолог","Дизайнер","Другое"];
+const MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+const WDAYS  = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+const AVATAR_COLORS = ["#ef4444","#3b82f6","#ec4899","#10b981","#f59e0b","#8b5cf6","#06b6d4","#f97316"];
+
+
+const genId = () => Math.random().toString(36).slice(2,9);
+const dim=(y,m)=>new Date(y,m+1,0).getDate();
+const fd=(y,m)=>{const d=new Date(y,m,1).getDay();return d===0?6:d-1;};
+
+
+const SI={background:"#16161f",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 11px",color:"#f0eee8",fontSize:12,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"};
+const LB={fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:"0.1em",marginBottom:4,display:"block",fontFamily:"monospace"};
+const projOf=(id,projects)=>projects.find(p=>p.id===id)||{label:"?",color:"#6b7280"};
+const teamOf=(id,team)=>team.find(u=>u.id===id);
+const stColor=(sts,id)=>sts.find(s=>s.id===id)?.c||"#6b7280";
+
+function Badge({color,children}){ return <span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:color+"20",color,fontFamily:"monospace"}}>{children}</span>; }
+function Field({label,children}){ return <div><span style={LB}>{label}</span>{children}</div>; }
+function Btn({onClick,color="#7c3aed",disabled,children,style={}}){
+  return <button onClick={onClick} disabled={disabled} style={{background:disabled?"#1a1a2e":`linear-gradient(135deg,${color},${color}cc)`,border:"none",borderRadius:7,padding:"4px 11px",color:disabled?"#4b5563":"#fff",cursor:disabled?"not-allowed":"pointer",fontSize:10,fontFamily:"inherit",fontWeight:600,...style}}>{children}</button>;
+}
+function TeamSelect({label,value,onChange,team}){
+  return <Field label={label}>
+    <select value={value||""} onChange={e=>onChange(e.target.value)} style={SI}>
+      <option value="">— не назначен —</option>
+      {team.map(u=><option key={u.id} value={u.id}>@{u.name} · {u.role}</option>)}
+    </select>
+  </Field>;
+}
+
+// ── MiniChat ──────────────────────────────────────────────────────────────────
+function MiniChat({msgs=[],onNewMsg,team}){
+  const [text,setText]=useState(""); const [files,setFiles]=useState([]);
+  const bottomRef=useRef(null); const fileRef=useRef(null);
+  function send(){
+    if(!text.trim()&&files.length===0) return;
+    onNewMsg({id:genId(),user:"u1",text,ts:Date.now(),files:[...files]});
+    setText(""); setFiles([]);
+    setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50);
+  }
+  const rc=id=>teamOf(id,team)?.color||"#6b7280";
+  const nm=id=>teamOf(id,team)?.name||"user";
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:230,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10}}>
+      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700}}>💬 ЧАТ</div>
+      <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:5}}>
+        {msgs.length===0&&<div style={{textAlign:"center",color:"#2d2d44",fontSize:10,paddingTop:20}}>Начните обсуждение</div>}
+        {msgs.map(m=>{
+          const isMe=m.user==="u1";
+          return <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",background:`linear-gradient(135deg,${rc(m.user)},#7c3aed)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0}}>{nm(m.user)[0].toUpperCase()}</div>
+            <div style={{maxWidth:"75%"}}>
+              {!isMe&&<div style={{fontSize:8,color:rc(m.user),fontFamily:"monospace",marginBottom:1}}>@{nm(m.user)}</div>}
+              <div style={{background:isMe?"#2d1a4e":"#1a1a2e",border:`1px solid ${isMe?"#7c3aed30":"#2d2d44"}`,borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"5px 9px"}}>
+                {m.text&&<div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@\w+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:600}}>{p}</span>:p)}</div>}
+                {m.files?.map((f,i)=><div key={i} style={{fontSize:10,color:"#a78bfa",marginTop:2}}>📎 {f.name}</div>)}
+              </div>
+            </div>
+          </div>;
+        })}
+        <div ref={bottomRef}/>
+      </div>
+      {files.length>0&&<div style={{padding:"3px 8px",display:"flex",gap:4,flexWrap:"wrap",borderTop:"1px solid #1e1e2e"}}>
+        {files.map((f,i)=><div key={i} style={{fontSize:9,background:"#1a1a2e",borderRadius:4,padding:"2px 6px",color:"#9ca3af"}}>📎 {f.name}<button onClick={()=>setFiles(p=>p.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:9,marginLeft:3}}>×</button></div>)}
+      </div>}
+      <div style={{padding:"5px 6px",borderTop:"1px solid #1e1e2e",display:"flex",gap:4}}>
+        <input ref={fileRef} type="file" multiple style={{display:"none"}} onChange={e=>setFiles(p=>[...p,...Array.from(e.target.files).map(f=>({name:f.name}))])}/>
+        <button onClick={()=>fileRef.current?.click()} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#6b7280",cursor:"pointer",fontSize:13}}>📎</button>
+        <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} placeholder="Сообщение..." style={{...SI,flex:1,fontSize:11,padding:"4px 8px"}}/>
+        <button onClick={send} style={{background:"linear-gradient(135deg,#7c3aed,#ec4899)",border:"none",borderRadius:6,padding:"4px 10px",color:"#fff",cursor:"pointer",fontSize:13}}>➤</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Kanban with drag-drop ─────────────────────────────────────────────────────
+function Kanban({statuses,items,renderCard,onDrop,onAddClick}){
+  const [dragId,setDragId]=useState(null);
+  const [overSt,setOverSt]=useState(null);
+  return(
+    <div style={{display:"flex",gap:10,overflowX:"auto",alignItems:"flex-start",paddingBottom:8}}>
+      {statuses.map(st=>{
+        const col=items.filter(x=>x.status===st.id);
+        return <div key={st.id}
+          onDragOver={e=>{e.preventDefault();setOverSt(st.id);}}
+          onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverSt(null);}}
+          onDrop={e=>{e.preventDefault();if(dragId){onDrop(dragId,st.id);setDragId(null);setOverSt(null);}}}
+          style={{minWidth:235,width:235,background:overSt===st.id?"#111120":"#0d0d16",border:`1px solid ${overSt===st.id?st.c+"70":"#1e1e2e"}`,borderRadius:12,padding:"10px 8px",flexShrink:0,transition:"all 0.12s"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"0 2px"}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:st.c}}/>
+            <span style={{fontSize:10,fontWeight:700,color:st.c,fontFamily:"monospace"}}>{st.l}</span>
+            <span style={{fontSize:9,background:st.c+"20",color:st.c,borderRadius:10,padding:"0 6px",marginLeft:"auto",fontFamily:"monospace"}}>{col.length}</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {col.map(item=>(
+              <div key={item.id} draggable onDragStart={()=>setDragId(item.id)} style={{cursor:"grab",userSelect:"none"}}>{renderCard(item)}</div>
+            ))}
+            <button onClick={()=>onAddClick(st.id)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#3d3d55",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить</button>
+          </div>
+        </div>;
+      })}
+    </div>
+  );
+}
+
+// ── Calendar with drag between days ──────────────────────────────────────────
+function CalView({items,dateField,onDayClick,renderChip,color,onMoveToDay}){
+  const [y,setY]=useState(2026); const [m,setM]=useState(2);
+  const [dragId,setDragId]=useState(null);
+  const today=new Date(); const todayStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  const days=dim(y,m); const first=fd(y,m);
+  const byDay={};
+  items.forEach(x=>{const df=x[dateField];if(df){const dk=df.slice(0,10);(byDay[dk]=byDay[dk]||[]).push(x);}});
+  const dk=d=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const [overDay,setOverDay]=useState(null);
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <button onClick={()=>m===0?(setM(11),setY(y=>y-1)):setM(m=>m-1)} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
+        <h3 style={{fontSize:15,fontWeight:800,margin:0}}>{MONTHS[m]} <span style={{color:"#2d2d44"}}>{y}</span></h3>
+        <button onClick={()=>m===11?(setM(0),setY(y=>y+1)):setM(m=>m+1)} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
+        {WDAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:"#2d2d44",fontFamily:"monospace",padding:"2px 0",fontWeight:700}}>{d}</div>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+        {Array.from({length:first}).map((_,i)=><div key={"e"+i} style={{minHeight:74}}/>)}
+        {Array.from({length:days},(_,i)=>i+1).map(day=>{
+          const k=dk(day); const its=byDay[k]||[]; const isToday=k===todayStr; const isOver=overDay===k;
+          return <div key={day}
+            onDragOver={e=>{e.preventDefault();setOverDay(k);}}
+            onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverDay(null);}}
+            onDrop={e=>{e.preventDefault();if(dragId){onMoveToDay(dragId,k);setDragId(null);setOverDay(null);}}}
+            onClick={()=>onDayClick(k)}
+            style={{minHeight:74,background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?`1px solid ${color}`:isToday?`1px solid ${color}`:"1px solid #1e1e2e",borderRadius:6,padding:"4px 4px 3px",cursor:"pointer",transition:"all 0.1s"}}
+            onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor=color+"50";}}
+            onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
+            <div style={{fontSize:9,color:isToday||isOver?color:"#2d2d44",fontWeight:isToday?800:400,marginBottom:2,fontFamily:"monospace"}}>{day}</div>
+            {its.slice(0,2).map(x=>(
+              <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}} style={{cursor:"grab",userSelect:"none"}}>
+                {renderChip(x)}
+              </div>
+            ))}
+            {its.length>2&&<div style={{fontSize:8,color:"#2d2d44"}}>+{its.length-2}</div>}
+          </div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Week View ─────────────────────────────────────────────────────────────────
+function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
+  const [base,setBase]=useState(()=>{const d=new Date(2026,2,2);const dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1));return d;});
+  const [dragId,setDragId]=useState(null); const [overDay,setOverDay]=useState(null);
+  const days=Array.from({length:7},(_,i)=>{const d=new Date(base);d.setDate(d.getDate()+i);return d;});
+  const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const byDay={};items.forEach(x=>{if(x.planned_date){const k=x.planned_date.slice(0,10);(byDay[k]=byDay[k]||[]).push(x);}});
+  const todayStr=fmt(new Date());
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()-7);setBase(d);}} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
+        <span style={{fontSize:13,fontWeight:700}}>{days[0].getDate()} {MONTHS[days[0].getMonth()]} — {days[6].getDate()} {MONTHS[days[6].getMonth()]} {days[0].getFullYear()}</span>
+        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()+7);setBase(d);}} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+        {days.map(d=>{
+          const k=fmt(d); const its=byDay[k]||[]; const isToday=k===todayStr; const isOver=overDay===k;
+          return <div key={k}
+            onDragOver={e=>{e.preventDefault();setOverDay(k);}}
+            onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverDay(null);}}
+            onDrop={e=>{e.preventDefault();if(dragId){onMoveToDay(dragId,k+"T12:00");setDragId(null);setOverDay(null);}}}
+            onClick={()=>onDayClick(k+"T12:00")}
+            style={{background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?"1px solid #7c3aed":isToday?"1px solid #7c3aed":"1px solid #1e1e2e",borderRadius:10,padding:"8px 7px",minHeight:130,cursor:"pointer",transition:"all 0.1s"}}
+            onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#3d3d5c";}}
+            onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
+            <div style={{textAlign:"center",marginBottom:6}}>
+              <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{WDAYS[days.indexOf(d)]}</div>
+              <div style={{fontSize:15,fontWeight:800,color:isToday?"#a78bfa":"#f0eee8"}}>{d.getDate()}</div>
+            </div>
+            {its.map(x=>{const sc=stColor(PUB_STATUSES,x.status);return(
+              <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
+                onClick={e=>{e.stopPropagation();onItemClick(x);}}
+                style={{background:sc+"18",border:`1px solid ${sc}40`,borderRadius:5,padding:"3px 5px",marginBottom:3,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"grab"}}>{x.title}
+              </div>
+            );})}
+          </div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function Modal({title,color,onClose,children}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.87)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+      <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,width:"min(700px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"14px 18px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",flexShrink:0}}>
+          <div style={{flex:1,fontSize:14,fontWeight:800,color}}>{title}</div>
+          <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#6b7280",fontSize:14}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reusable form pieces ──────────────────────────────────────────────────────
+function SaveRow({onClose,onSave,color}){
+  return <div style={{display:"flex",gap:8,marginTop:4}}>
+    <button onClick={onClose} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
+    <button onClick={onSave} style={{flex:2,background:`linear-gradient(135deg,${color},${color}cc)`,border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Сохранить</button>
+  </div>;
+}
+function StatusRow({statuses,value,onChange}){
+  return <Field label="СТАТУС">
+    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+      {statuses.map(s=><button key={s.id} onClick={()=>onChange(s.id)} style={{flex:1,minWidth:80,padding:"6px 4px",borderRadius:7,cursor:"pointer",background:value===s.id?s.c+"20":"#111118",border:`1px solid ${value===s.id?s.c:"#2d2d44"}`,color:value===s.id?s.c:"#4b5563",fontSize:9,fontFamily:"monospace"}}>{s.l}</button>)}
+    </div>
+  </Field>;
+}
+
+// ── Tab-level filter bar ──────────────────────────────────────────────────────
+function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,showMember=true,showSort=true,addLabel,onAdd}){
+  const activeProjs=projects.filter(p=>!p.archived);
+  return(
+    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:14,padding:"10px 14px",background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10}}>
+      <div style={{flex:1,display:"flex",gap:8,flexWrap:"wrap"}}>
+        <div>
+          <span style={{...LB,display:"inline",marginRight:6}}>ПРОЕКТ</span>
+          <select value={pf} onChange={e=>setPf(e.target.value)} style={{...SI,width:"auto",padding:"4px 8px",fontSize:11,display:"inline-block"}}>
+            <option value="all">Все</option>
+            {activeProjs.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </div>
+        {showMember&&<div>
+          <span style={{...LB,display:"inline",marginRight:6}}>СОТРУДНИК</span>
+          <select value={member} onChange={e=>setMember(e.target.value)} style={{...SI,width:"auto",padding:"4px 8px",fontSize:11,display:"inline-block"}}>
+            <option value="all">Все</option>
+            {team.map(u=><option key={u.id} value={u.id}>@{u.name}</option>)}
+          </select>
+        </div>}
+        {showSort&&<div>
+          <span style={{...LB,display:"inline",marginRight:6}}>СОРТИРОВКА</span>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...SI,width:"auto",padding:"4px 8px",fontSize:11,display:"inline-block"}}>
+            <option value="default">По умолчанию</option>
+            <option value="deadline">По дедлайну</option>
+            <option value="project">По проекту</option>
+            <option value="status">По статусу</option>
+          </select>
+        </div>}
+      </div>
+      {onAdd&&<button onClick={onAdd} style={{background:"linear-gradient(135deg,#7c3aed,#ec4899)",border:"none",borderRadius:8,padding:"7px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit",whiteSpace:"nowrap"}}>＋ {addLabel}</button>}
+    </div>
+  );
+}
+
+// ── Forms ─────────────────────────────────────────────────────────────────────
+function PreForm({item,onSave,onClose,projects,team}){
+  const [d,setD]=useState({...item}); const [ai,setAi]=useState(false); const [newRef,setNewRef]=useState("");
+  const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  async function genScript(){setAi(true);await new Promise(r=>setTimeout(r,1500));u("script","[AI сценарий]\n\nСцена 1 (0-3с): Хук\nСцена 2 (3-12с): Демонстрация\nСцена 3 (12-25с): Ключевое сообщение\nСцена 4 (25-30с): CTA — \"Ссылка в профиле 👆\"");setAi(false);}
+  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
+      <Field label="ТИП КОНТЕНТА"><input value={d.type} onChange={e=>u("type",e.target.value)} placeholder="Рилс, Клип..." style={SI}/></Field>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+      <Field label="ДЕДЛАЙН"><input type="date" value={d.deadline} onChange={e=>u("deadline",e.target.value)} style={SI}/></Field>
+    </div>
+    <StatusRow statuses={PRE_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <Field label="БРИФ / ИДЕЯ"><textarea value={d.brief} onChange={e=>u("brief",e.target.value)} placeholder="Идея, ЦА, месседж..." style={{...SI,minHeight:65,resize:"vertical",lineHeight:1.5}}/></Field>
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <span style={LB}>СЦЕНАРИЙ</span>
+        <Btn onClick={genScript} disabled={ai||!d.brief}>{ai?"⏳ Генерирую...":"✨ AI сценарий"}</Btn>
+      </div>
+      <textarea value={d.script} onChange={e=>u("script",e.target.value)} placeholder="По сценам..." style={{...SI,minHeight:90,resize:"vertical",lineHeight:1.5}}/>
+    </div>
+    <Field label="РЕФЕРЕНСЫ">
+      <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:5}}>
+        {d.refs.map((r,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 9px"}}>
+          <a href={r} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {r}</a>
+          <button onClick={()=>u("refs",d.refs.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+        </div>)}
+      </div>
+      <div style={{display:"flex",gap:5}}>
+        <input value={newRef} onChange={e=>setNewRef(e.target.value)} placeholder="https://..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&newRef){u("refs",[...d.refs,newRef]);setNewRef("");}}}/>
+        <button onClick={()=>{if(newRef){u("refs",[...d.refs,newRef]);setNewRef("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+      </div>
+    </Field>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <TeamSelect label="СЦЕНАРИСТ" value={d.scriptwriter} onChange={v=>u("scriptwriter",v)} team={team}/>
+      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
+    </div>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#8b5cf6"/>
+  </div>;
+}
+
+function ProdForm({item,onSave,onClose,projects,team}){
+  const [d,setD]=useState({...item,checklist:[...item.checklist]}); const [ne,setNe]=useState(""); const [na,setNa]=useState(""); const [nc,setNc]=useState("");
+  const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
+      <Field label="ТИП КОНТЕНТА"><input value={d.type} onChange={e=>u("type",e.target.value)} style={SI}/></Field>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+      <Field label="ДАТА СЪЁМКИ"><input type="datetime-local" value={d.shoot_date} onChange={e=>u("shoot_date",e.target.value)} style={SI}/></Field>
+    </div>
+    <StatusRow statuses={PROD_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <Field label="ЛОКАЦИЯ"><input value={d.location} onChange={e=>u("location",e.target.value)} placeholder="Адрес / место" style={SI}/></Field>
+    <Field label="ОБОРУДОВАНИЕ">
+      {d.equipment.map((eq,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
+        <span>🎥</span><span style={{flex:1,fontSize:11,color:"#d1d5db"}}>{eq}</span>
+        <button onClick={()=>u("equipment",d.equipment.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+      </div>)}
+      <div style={{display:"flex",gap:5}}>
+        <input value={ne} onChange={e=>setNe(e.target.value)} placeholder="Добавить..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&ne){u("equipment",[...d.equipment,ne]);setNe("");}}}/>
+        <button onClick={()=>{if(ne){u("equipment",[...d.equipment,ne]);setNe("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+      </div>
+    </Field>
+    <Field label="АКТЁРЫ / УЧАСТНИКИ">
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
+        {d.actors.map((a,i)=><div key={i} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:20,padding:"3px 10px",fontSize:11,color:"#d1d5db",display:"flex",gap:5}}>
+          👤 {a}<button onClick={()=>u("actors",d.actors.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",lineHeight:1}}>×</button>
+        </div>)}
+      </div>
+      <div style={{display:"flex",gap:5}}>
+        <input value={na} onChange={e=>setNa(e.target.value)} placeholder="Имя..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&na){u("actors",[...d.actors,na]);setNa("");}}}/>
+        <button onClick={()=>{if(na){u("actors",[...d.actors,na]);setNa("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+      </div>
+    </Field>
+    <Field label="ЧЕК-ЛИСТ">
+      {d.checklist.map(item=><div key={item.id} onClick={()=>u("checklist",d.checklist.map(c=>c.id===item.id?{...c,done:!c.done}:c))} style={{display:"flex",alignItems:"center",gap:7,background:item.done?"#0a1a0a":"#1a1a2e",border:`1px solid ${item.done?"#10b98130":"#2d2d44"}`,borderRadius:7,padding:"5px 9px",cursor:"pointer",marginBottom:3}}>
+        <div style={{width:15,height:15,borderRadius:4,border:`2px solid ${item.done?"#10b981":"#3d3d55"}`,background:item.done?"#10b981":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{item.done&&<span style={{color:"#fff",fontSize:9}}>✓</span>}</div>
+        <span style={{fontSize:11,flex:1,color:item.done?"#10b981":"#d1d5db",textDecoration:item.done?"line-through":"none"}}>{item.text}</span>
+        <button onClick={e=>{e.stopPropagation();u("checklist",d.checklist.filter(c=>c.id!==item.id));}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:11}}>×</button>
+      </div>)}
+      <div style={{display:"flex",gap:5}}>
+        <input value={nc} onChange={e=>setNc(e.target.value)} placeholder="Новый пункт..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&nc){u("checklist",[...d.checklist,{id:genId(),text:nc,done:false}]);setNc("");}}}/>
+        <button onClick={()=>{if(nc){u("checklist",[...d.checklist,{id:genId(),text:nc,done:false}]);setNc("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+      </div>
+      <div style={{fontSize:9,color:"#3d3d55",fontFamily:"monospace",marginTop:3}}>{d.checklist.filter(c=>c.done).length}/{d.checklist.length} выполнено</div>
+    </Field>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
+      <TeamSelect label="ОПЕРАТОР" value={d.operator} onChange={v=>u("operator",v)} team={team}/>
+    </div>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#3b82f6"/>
+  </div>;
+}
+
+function PostReelsForm({item,onSave,onClose,projects,team}){
+  const [d,setD]=useState({...item}); const [tr,setTr]=useState(false); const [gb,setGb]=useState(false);
+  const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  async function transcribe(){setTr(true);await new Promise(r=>setTimeout(r,2000));u("transcript","Привет! Сегодня покажу нашу новую коллекцию. Первая модель — пуховик кэмел, до -20°C, из эко-материала. Вторая — спортивная куртка...");setTr(false);}
+  async function genBirolls(){setGb(true);await new Promise(r=>setTimeout(r,1500));u("birolls","БИРОЛЫ:\n\n[0:00] Новая коллекция 🧥\n[0:04] Пуховик кэмел\n[0:08] До -20°C\n[0:12] Эко-материалы ♻️\n[0:18] Ссылка в профиле 👆");setGb(false);}
+  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
+      <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+    </div>
+    <StatusRow statuses={POST_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <Field label="ИСХОДНИК (ВИДЕО)">
+      <input ref={fileRef} type="file" accept="video/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)u("source_name",f.name);}}/>
+      {d.source_name
+        ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+            <span>🎬</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.source_name}</span>
+            <button onClick={()=>u("source_name","")} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+          </div>
+        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#6b7280",cursor:"pointer",fontSize:12}}>📤 Загрузить исходник</button>}
+    </Field>
+    <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Описание задачи..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <span style={LB}>ТРАНСКРИПЦИЯ (Whisper AI)</span>
+        <Btn onClick={transcribe} disabled={tr||!d.source_name} color="#7c3aed">{tr?"⏳ Транскрибирую...":"🎙️ Транскрибировать"}</Btn>
+      </div>
+      <textarea value={d.transcript} onChange={e=>u("transcript",e.target.value)} placeholder="Загрузите исходник и нажмите кнопку..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/>
+    </div>
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <span style={LB}>ИДЕИ ДЛЯ БИРОЛОВ (GPT-4)</span>
+        <Btn onClick={genBirolls} disabled={gb||!d.transcript} color="#10b981">{gb?"⏳ Генерирую...":"✨ Сгенерировать"}</Btn>
+      </div>
+      <textarea value={d.birolls} onChange={e=>u("birolls",e.target.value)} placeholder="Появятся после транскрипции..." style={{...SI,minHeight:90,resize:"vertical",fontFamily:"monospace",fontSize:11}}/>
+    </div>
+    <Field label="ФИНАЛЬНАЯ ССЫЛКА"><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={SI}/></Field>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
+      <TeamSelect label="МОНТАЖЁР" value={d.editor} onChange={v=>u("editor",v)} team={team}/>
+    </div>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#ec4899"/>
+  </div>;
+}
+
+function PostVideoForm({item,onSave,onClose,projects,team}){
+  const [d,setD]=useState({...item}); const [nl,setNl]=useState("");
+  const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
+      <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+    </div>
+    <StatusRow statuses={POST_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <Field label="ИСХОДНИКИ (ССЫЛКИ)">
+      {d.source_links.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
+        <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
+        <button onClick={()=>u("source_links",d.source_links.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+      </div>)}
+      <div style={{display:"flex",gap:5}}>
+        <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&nl){u("source_links",[...d.source_links,nl]);setNl("");}}}/>
+        <button onClick={()=>{if(nl){u("source_links",[...d.source_links,nl]);setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+      </div>
+    </Field>
+    <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Подробное ТЗ..." style={{...SI,minHeight:100,resize:"vertical",lineHeight:1.5}}/></Field>
+    <Field label="ФИНАЛЬНАЯ ССЫЛКА"><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={SI}/></Field>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
+      <TeamSelect label="МОНТАЖЁР" value={d.editor} onChange={v=>u("editor",v)} team={team}/>
+    </div>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#3b82f6"/>
+  </div>;
+}
+
+function PostCarouselForm({item,onSave,onClose,projects,team}){
+  const [d,setD]=useState({...item,slides:[...item.slides]}); const [newSlide,setNewSlide]=useState("");
+  const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  const fileRef=useRef(null);
+  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
+      <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+    </div>
+    <StatusRow statuses={POST_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <Field label="ТЕКСТ НА ОБЛОЖКЕ (слайд 1)"><input value={d.cover_text} onChange={e=>u("cover_text",e.target.value)} placeholder="Заголовок карусели..." style={SI}/></Field>
+    <Field label="СЛАЙДЫ КАРУСЕЛИ">
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
+        {d.slides.map((sl,i)=>(
+          <div key={sl.id} style={{display:"flex",gap:6,alignItems:"flex-start",background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 10px"}}>
+            <div style={{width:24,height:24,borderRadius:6,background:"#2d2d44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#6b7280",flexShrink:0}}>{i+1}</div>
+            <div style={{flex:1}}>
+              <textarea value={sl.text} onChange={e=>u("slides",d.slides.map((s,j)=>j===i?{...s,text:e.target.value}:s))} placeholder={`Текст слайда ${i+1}...`} style={{...SI,minHeight:40,resize:"vertical",fontSize:11,lineHeight:1.4}}/>
+              {sl.img&&<div style={{fontSize:9,color:"#a78bfa",marginTop:3}}>🖼 {sl.img}</div>}
+              <button onClick={()=>{const fi=document.createElement("input");fi.type="file";fi.accept="image/*";fi.onchange=e=>{const f=e.target.files[0];if(f)u("slides",d.slides.map((s,j)=>j===i?{...s,img:f.name}:s));};fi.click();}} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:5,padding:"2px 8px",color:"#4b5563",cursor:"pointer",fontSize:9,marginTop:3}}>🖼 Загрузить изображение</button>
+            </div>
+            <button onClick={()=>u("slides",d.slides.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:14,marginTop:2}}>×</button>
+          </div>
+        ))}
+      </div>
+      <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#6b7280",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
+    </Field>
+    <Field label="ТЗ ДЛЯ ДИЗАЙНЕРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Стиль, цвета, шрифты, особенности оформления..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/></Field>
+    <Field label="ФИНАЛЬНАЯ ССЫЛКА"><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={SI}/></Field>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
+      <TeamSelect label="ДИЗАЙНЕР" value={d.designer} onChange={v=>u("designer",v)} team={team}/>
+    </div>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#a78bfa"/>
+  </div>;
+}
+
+function PubForm({item,onSave,onClose,projects,team}){
+  const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
+  const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  async function genCap(){setAiCap(true);await new Promise(r=>setTimeout(r,1500));u("caption","Это не просто контент — это история ✨\n\nКаждый кадр создан с душой. Сохраняй, чтобы не потерять 🔖\n\n👆 Ссылка в профиле");setAiCap(false);}
+  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
+      <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+    </div>
+    <StatusRow statuses={PUB_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <Field label="ДАТА ПУБЛИКАЦИИ"><input type="datetime-local" value={d.planned_date} onChange={e=>u("planned_date",e.target.value)} style={SI}/></Field>
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <span style={LB}>ПОДПИСЬ / CAPTION</span>
+        <Btn onClick={genCap} disabled={aiCap} color="#10b981">{aiCap?"⏳ Генерирую...":"✨ AI caption"}</Btn>
+      </div>
+      <textarea value={d.caption} onChange={e=>u("caption",e.target.value)} placeholder="Текст публикации..." style={{...SI,minHeight:90,resize:"vertical",lineHeight:1.5}}/>
+      <div style={{fontSize:9,color:"#3d3d55",marginTop:2,fontFamily:"monospace"}}>{d.caption.length} символов</div>
+    </div>
+    <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"monospace",fontSize:11}}/></Field>
+    <Field label="ФАЙЛ / МЕДИА">
+      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)u("file_name",f.name);}}/>
+      {d.file_name
+        ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+            <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.file_name}</span>
+            <button onClick={()=>u("file_name","")} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+          </div>
+        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#6b7280",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
+    </Field>
+    <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#10b981"/>
+  </div>;
+}
+
+// ── Summary View ──────────────────────────────────────────────────────────────
+function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team}){
+  const ME = currentUser.id;
+  const [scope,setScope]=useState("all"); // "all" | "my"
+  const [projFilter,setProjFilter]=useState("all");
+  const [period,setPeriod]=useState("all"); // "all"|"week"|"month"|"quarter"
+  const activeProjs=projects.filter(p=>!p.archived);
+  const nm=id=>teamOf(id,team)?.name||"?";
+  const rc=id=>teamOf(id,team)?.color||"#6b7280";
+
+  // Period cutoff
+  const now=Date.now();
+  const periodMs={week:7*86400000,month:30*86400000,quarter:90*86400000};
+  function inPeriod(item){
+    if(period==="all") return true;
+    const cutoff=now-periodMs[period];
+    const dates=[item.deadline,item.shoot_date,item.planned_date].filter(Boolean);
+    if(dates.length===0) return true; // no date — include always
+    return dates.some(d=>new Date(d).getTime()>=cutoff);
+  }
+  // Member fields
+  const MF=["producer","editor","scriptwriter","operator","designer"];
+  function isMyTask(item){ return MF.some(f=>item[f]===ME); }
+
+  // Apply all filters
+  function applyAll(items){
+    let r=items;
+    if(projFilter!=="all") r=r.filter(x=>x.project===projFilter);
+    if(scope==="my") r=r.filter(isMyTask);
+    r=r.filter(inPeriod);
+    return r;
+  }
+  const fPre=applyAll(preItems);
+  const fProd=applyAll(prodItems);
+  const fReels=applyAll(postReels);
+  const fVideo=applyAll(postVideo);
+  const fCarousels=applyAll(postCarousels);
+  const fPub=applyAll(pubItems);
+  const all=[...fPre,...fProd,...fReels,...fVideo,...fCarousels,...fPub];
+  const allChats=all.flatMap(x=>(x.chat||[]).map(m=>({...m,taskTitle:x.title,taskProject:x.project})));
+  const statCards=[
+    {label:"Сценариев",count:fPre.length,color:"#8b5cf6",icon:"✍️"},
+    {label:"Съёмок",count:fProd.length,color:"#3b82f6",icon:"🎬"},
+    {label:"Постпродакшн",count:fReels.length+fVideo.length+fCarousels.length,color:"#ec4899",icon:"🎞️"},
+    {label:"К публикации",count:fPub.filter(x=>x.status!=="published").length,color:"#10b981",icon:"🚀"},
+    {label:"Опубликовано",count:fPub.filter(x=>x.status==="published").length,color:"#34d399",icon:"✅"},
+    {label:"Сообщений",count:allChats.length,color:"#f97316",icon:"💬"},
+  ];
+  const byProject=(projFilter==="all"?activeProjs:activeProjs.filter(p=>p.id===projFilter)).map(proj=>{
+    const items=[...fPre,...fProd,...fReels,...fVideo,...fCarousels,...fPub].filter(x=>x.project===proj.id);
+    const done=items.filter(x=>["done","published","approved"].includes(x.status)).length;
+    return {...proj,total:items.length,done};
+  }).filter(p=>p.total>0);
+  const recentChats=allChats.slice(-10).reverse();
+  // Deadlines from filtered items
+  const deadlines=[
+    ...fPre.filter(x=>x.deadline).map(x=>({...x,_type:"Сценарий",_date:x.deadline})),
+    ...fProd.filter(x=>x.shoot_date).map(x=>({...x,_type:"Съёмка",_date:x.shoot_date.slice(0,10)})),
+    ...fPub.filter(x=>x.planned_date&&x.status!=="published").map(x=>({...x,_type:"Публикация",_date:x.planned_date.slice(0,10)})),
+  ].sort((a,b)=>a._date>b._date?1:-1).slice(0,8);
+
+  const scopeLabel = scope==="my" ? `Мои задачи (@evg)` : "Вся компания";
+  const projLabel  = projFilter==="all" ? "Все проекты" : (activeProjs.find(p=>p.id===projFilter)?.label||"?");
+  const periodLabel= {all:"Всё время",week:"Неделя",month:"Месяц",quarter:"Квартал"}[period];
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* ── FILTER BAR ── */}
+      <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px 16px"}}>
+        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700,marginBottom:10,letterSpacing:"0.1em"}}>ФИЛЬТРЫ СВОДКИ</div>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-end"}}>
+
+          {/* Scope: my / all */}
+          <div>
+            <span style={{...LB,display:"block"}}>ОБЛАСТЬ</span>
+            <div style={{display:"flex",gap:4}}>
+              {[["all","🏢 Вся компания"],["my","👤 Мои задачи"]].map(([id,l])=>(
+                <button key={id} onClick={()=>setScope(id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:scope===id?"#f97316"+"20":"#111118",border:`1px solid ${scope===id?"#f97316":"#2d2d44"}`,color:scope===id?"#f97316":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:scope===id?700:400,whiteSpace:"nowrap"}}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Project filter */}
+          <div>
+            <span style={{...LB,display:"block"}}>ПРОЕКТ</span>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+              <button onClick={()=>setProjFilter("all")} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:projFilter==="all"?"#f59e0b20":"#111118",border:`1px solid ${projFilter==="all"?"#f59e0b":"#2d2d44"}`,color:projFilter==="all"?"#f59e0b":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:projFilter==="all"?700:400}}>Все</button>
+              {activeProjs.map(p=>(
+                <button key={p.id} onClick={()=>setProjFilter(p.id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:projFilter===p.id?p.color+"20":"#111118",border:`1px solid ${projFilter===p.id?p.color:"#2d2d44"}`,color:projFilter===p.id?p.color:"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:projFilter===p.id?700:400}}>{p.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Period filter */}
+          <div>
+            <span style={{...LB,display:"block"}}>ПЕРИОД</span>
+            <div style={{display:"flex",gap:4}}>
+              {[["all","Всё время"],["week","Неделя"],["month","Месяц"],["quarter","Квартал"]].map(([id,l])=>(
+                <button key={id} onClick={()=>setPeriod(id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:period===id?"#06b6d420":"#111118",border:`1px solid ${period===id?"#06b6d4":"#2d2d44"}`,color:period===id?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:period===id?700:400,whiteSpace:"nowrap"}}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Active filter summary */}
+        <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1e1e2e",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>ПОКАЗАНО:</span>
+          <span style={{fontSize:10,background:"#f97316"+"20",color:"#f97316",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{scopeLabel}</span>
+          <span style={{fontSize:10,background:"#f59e0b"+"20",color:"#f59e0b",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>📁 {projLabel}</span>
+          <span style={{fontSize:10,background:"#06b6d4"+"20",color:"#06b6d4",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>⏱ {periodLabel}</span>
+          <span style={{fontSize:10,background:"#2d2d44",color:"#6b7280",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{all.length} задач</span>
+        </div>
+      </div>
+
+      {/* ── STAT CARDS ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+        {statCards.map((s,i)=>(
+          <div key={i} style={{background:"#111118",border:`1px solid ${s.color}25`,borderTop:`3px solid ${s.color}`,borderRadius:10,padding:"14px 12px",textAlign:"center"}}>
+            <div style={{fontSize:22,marginBottom:5}}>{s.icon}</div>
+            <div style={{fontSize:30,fontWeight:800,color:s.color,fontFamily:"monospace",lineHeight:1}}>{s.count}</div>
+            <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── BOTTOM GRID ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+
+        {/* By project progress */}
+        <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
+          <div style={{fontSize:10,fontWeight:700,color:"#f59e0b",fontFamily:"monospace",marginBottom:12}}>📁 ПРОГРЕСС ПО ПРОЕКТАМ</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {byProject.map(p=>(
+              <div key={p.id} style={{background:"#111118",border:`1px solid ${p.color}25`,borderLeft:`3px solid ${p.color}`,borderRadius:8,padding:"9px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                  <span style={{fontWeight:700,fontSize:12,color:p.color}}>{p.label}</span>
+                  <span style={{fontSize:9,fontFamily:"monospace",color:"#4b5563"}}>{p.done}/{p.total} · {p.total>0?Math.round(p.done/p.total*100):0}%</span>
+                </div>
+                <div style={{height:5,background:"#1e1e2e",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{width:`${p.total>0?Math.round(p.done/p.total*100):0}%`,height:"100%",background:`linear-gradient(90deg,${p.color},${p.color}88)`,borderRadius:3,transition:"width 0.4s"}}/>
+                </div>
+              </div>
+            ))}
+            {byProject.length===0&&<div style={{textAlign:"center",color:"#2d2d44",fontSize:11,padding:"20px 0"}}>Нет задач по выбранным фильтрам</div>}
+          </div>
+        </div>
+
+        {/* Chats */}
+        <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
+          <div style={{fontSize:10,fontWeight:700,color:"#f97316",fontFamily:"monospace",marginBottom:12}}>💬 СООБЩЕНИЯ В ЧАТАХ</div>
+          <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:280,overflowY:"auto"}}>
+            {recentChats.length===0&&<div style={{textAlign:"center",color:"#2d2d44",fontSize:11,padding:"20px 0"}}>Сообщений нет</div>}
+            {recentChats.map((m,i)=>{
+              const proj=projOf(m.taskProject,projects);
+              return <div key={i} style={{background:"#111118",border:`1px solid ${proj.color}15`,borderLeft:`2px solid ${proj.color}`,borderRadius:7,padding:"7px 10px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+                  <div style={{width:15,height:15,borderRadius:"50%",background:`linear-gradient(135deg,${rc(m.user)},#7c3aed)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#fff",flexShrink:0}}>{nm(m.user)[0].toUpperCase()}</div>
+                  <span style={{fontSize:10,color:rc(m.user),fontFamily:"monospace",fontWeight:600}}>@{nm(m.user)}</span>
+                  <span style={{fontSize:9,color:proj.color,marginLeft:"auto",fontFamily:"monospace"}}>#{proj.label}</span>
+                </div>
+                <div style={{fontSize:10,color:"#9ca3af",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.text||"(файл)"}</div>
+                <div style={{fontSize:8,color:"#2d2d44",marginTop:2,fontFamily:"monospace"}}>в задаче «{m.taskTitle}»</div>
+              </div>;
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── DEADLINES ── */}
+      <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
+        <div style={{fontSize:10,fontWeight:700,color:"#06b6d4",fontFamily:"monospace",marginBottom:12}}>📅 БЛИЖАЙШИЕ ДЕДЛАЙНЫ</div>
+        {deadlines.length===0&&<div style={{textAlign:"center",color:"#2d2d44",fontSize:11,padding:"16px 0"}}>Нет предстоящих дедлайнов</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
+          {deadlines.map((x,i)=>{
+            const proj=projOf(x.project,projects);
+            const daysLeft=Math.ceil((new Date(x._date).getTime()-Date.now())/(86400000));
+            const urgent=daysLeft<=3;
+            return <div key={i} style={{background:"#111118",border:`1px solid ${urgent?"#ef444440":proj.color+"25"}`,borderLeft:`3px solid ${urgent?"#ef4444":proj.color}`,borderRadius:8,padding:"9px 12px",display:"flex",gap:10,alignItems:"center"}}>
+              <div style={{textAlign:"center",minWidth:38}}>
+                <div style={{fontSize:16,fontWeight:800,color:urgent?"#ef4444":"#f59e0b",fontFamily:"monospace",lineHeight:1}}>{daysLeft>0?daysLeft:"—"}</div>
+                <div style={{fontSize:7,color:"#4b5563",fontFamily:"monospace"}}>{daysLeft>0?"дн.":"сегодня"}</div>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>
+                <div style={{fontSize:9,color:"#4b5563",marginTop:1}}>{x._type} · <span style={{color:proj.color}}>{proj.label}</span></div>
+                <div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace"}}>{x._date}</div>
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+// ── Projects View ─────────────────────────────────────────────────────────────
+function ProjectsView({projects,setProjects}){
+  const [showArchive,setShowArchive]=useState(false);
+  const [adding,setAdding]=useState(false);
+  const [newP,setNewP]=useState({label:"",color:"#8b5cf6",description:"",links:[""]});
+  const visible=projects.filter(p=>showArchive?p.archived:!p.archived);
+  async function addProject(){
+    if(!newP.label.trim()) return;
+    try {
+      const created = await api.createProject({...newP, links:newP.links.filter(l=>l.trim())});
+      setProjects(p=>[...p,{...created,links:created.links||[],archived:false}]);
+      setNewP({label:"",color:"#8b5cf6",description:"",links:[""]});
+      setAdding(false);
+    } catch(e){ alert("Ошибка: "+e.message); }
+  }
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+      <h2 style={{fontSize:17,fontWeight:800,margin:0,color:"#f59e0b"}}>📁 Проекты</h2>
+      <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+        <button onClick={()=>setShowArchive(p=>!p)} style={{background:"transparent",border:`1px solid ${showArchive?"#f59e0b":"#2d2d44"}`,borderRadius:8,padding:"6px 12px",color:showArchive?"#f59e0b":"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>{showArchive?"← Активные":"🗄 Архив"}</button>
+        {!showArchive&&<button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"6px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>+ Добавить проект</button>}
+      </div>
+    </div>
+    {adding&&<div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:12,padding:"16px",marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,marginBottom:12,color:"#f59e0b"}}>+ Новый проект</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,marginBottom:10}}>
+        <Field label="НАЗВАНИЕ"><input value={newP.label} onChange={e=>setNewP(p=>({...p,label:e.target.value}))} placeholder="Название клиента / бренда" style={SI}/></Field>
+        <Field label="ЦВЕТ"><div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3}}>{AVATAR_COLORS.map(c=><div key={c} onClick={()=>setNewP(p=>({...p,color:c}))} style={{width:22,height:22,borderRadius:"50%",background:c,cursor:"pointer",border:newP.color===c?"3px solid #fff":"3px solid transparent"}}/>)}</div></Field>
+      </div>
+      <Field label="ОПИСАНИЕ"><textarea value={newP.description} onChange={e=>setNewP(p=>({...p,description:e.target.value}))} placeholder="ЦА, тон, особенности бренда..." style={{...SI,minHeight:65,resize:"vertical",lineHeight:1.5}}/></Field>
+      <Field label="ССЫЛКИ">
+        {newP.links.map((l,i)=><div key={i} style={{display:"flex",gap:5,marginBottom:4}}>
+          <input value={l} onChange={e=>setNewP(p=>({...p,links:p.links.map((x,j)=>j===i?e.target.value:x)}))} placeholder="https://..." style={{...SI,flex:1}}/>
+          <button onClick={()=>setNewP(p=>({...p,links:p.links.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+        </div>)}
+        <button onClick={()=>setNewP(p=>({...p,links:[...p.links,""]}))} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:6,padding:"4px 12px",color:"#4b5563",cursor:"pointer",fontSize:11}}>+ Ссылка</button>
+      </Field>
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
+        <button onClick={addProject} style={{flex:2,background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Создать</button>
+      </div>
+    </div>}
+    {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#2d2d44"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#4b5563"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
+      {visible.map(proj=>{
+        const [nl,setNl]=useState("");
+        return <div key={proj.id} style={{background:"#111118",border:`1px solid ${proj.color}30`,borderTop:`3px solid ${proj.color}`,borderRadius:12,padding:"14px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+            <div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{proj.label[0]}</div>
+            <input value={proj.label} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,label:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{label:e.target.value}).catch(()=>{})} style={{...SI,flex:1,padding:"4px 8px",fontSize:13,fontWeight:700}}/>
+            <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#4b5563",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
+          </div>
+          <textarea value={proj.description} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,description:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{description:e.target.value}).catch(()=>{})} placeholder="Описание проекта..." style={{...SI,minHeight:60,resize:"vertical",lineHeight:1.5,marginBottom:8,fontSize:11}}/>
+          <span style={LB}>ДОКУМЕНТЫ И ССЫЛКИ</span>
+          {proj.links.filter(l=>l).map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+            <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
+            <button onClick={()=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:x.links.filter((_,j)=>j!==i)}:x))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:11}}>×</button>
+          </div>)}
+          <div style={{display:"flex",gap:5,marginTop:4}}>
+            <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1,fontSize:11,padding:"5px 8px"}} onKeyDown={e=>{if(e.key==="Enter"&&nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}}/>
+            <button onClick={()=>{if(nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:6,padding:"0 10px",color:"#a78bfa",cursor:"pointer",fontSize:15}}>+</button>
+          </div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+// ── Team View ─────────────────────────────────────────────────────────────────
+function TeamView({teamMembers,setTeamMembers}){
+  const [adding,setAdding]=useState(false);
+  const [newM,setNewM]=useState({name:"",role:ROLES_LIST[0],telegram:"",color:"#8b5cf6",note:""});
+  async function addMember(){
+    if(!newM.name.trim()) return;
+    try {
+      const created = await api.register({...newM, password: "vinogradov", invite_password: "vinograd2026"});
+      setTeamMembers(p=>[...p,{...created, note:""}]);
+      setNewM({name:"",role:ROLES_LIST[0],telegram:"",color:"#8b5cf6",note:""});
+      setAdding(false);
+    } catch(e){ alert("Ошибка добавления: "+e.message); }
+  }
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+      <h2 style={{fontSize:17,fontWeight:800,margin:0,color:"#06b6d4"}}>👥 Команда</h2>
+      <button onClick={()=>setAdding(true)} style={{marginLeft:"auto",background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"6px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>+ Добавить сотрудника</button>
+    </div>
+    {adding&&<div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:12,padding:"16px",marginBottom:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <Field label="ИМЯ"><input value={newM.name} onChange={e=>setNewM(p=>({...p,name:e.target.value}))} placeholder="Имя Фамилия" style={SI}/></Field>
+        <Field label="ДОЛЖНОСТЬ"><select value={newM.role} onChange={e=>setNewM(p=>({...p,role:e.target.value}))} style={SI}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select></Field>
+        <Field label="TELEGRAM"><input value={newM.telegram} onChange={e=>setNewM(p=>({...p,telegram:e.target.value}))} placeholder="@username" style={SI}/></Field>
+        <Field label="ЦВЕТ"><div style={{display:"flex",gap:5,marginTop:3}}>{AVATAR_COLORS.map(c=><div key={c} onClick={()=>setNewM(p=>({...p,color:c}))} style={{width:24,height:24,borderRadius:"50%",background:c,cursor:"pointer",border:newM.color===c?"3px solid #fff":"3px solid transparent"}}/>)}</div></Field>
+      </div>
+      <Field label="ЗАМЕТКИ"><textarea value={newM.note} onChange={e=>setNewM(p=>({...p,note:e.target.value}))} placeholder="Специализация, контакты..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
+        <button onClick={addMember} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Добавить</button>
+      </div>
+    </div>}
+    {teamMembers.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#2d2d44"}}><div style={{fontSize:36,marginBottom:8}}>👥</div><div style={{fontSize:12,color:"#4b5563"}}>Нет сотрудников</div></div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
+      {teamMembers.map(m=><div key={m.id} style={{background:"#111118",border:`1px solid ${m.color}25`,borderTop:`3px solid ${m.color}`,borderRadius:12,padding:"14px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${m.color},${m.color}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>{(m.name[0]||"?").toUpperCase()}</div>
+          <div style={{flex:1}}>
+            <input value={m.name} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,name:e.target.value}:x))} onBlur={e=>api.updateUser(m.id,{name:e.target.value}).catch(()=>{})} style={{...SI,padding:"3px 7px",fontSize:13,fontWeight:700,marginBottom:3}}/>
+            <select value={m.role} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,role:e.target.value}:x))} style={{...SI,padding:"2px 7px",fontSize:10}}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select>
+          </div>
+          <button onClick={async()=>{ await api.deleteUser(m.id).catch(()=>{}); setTeamMembers(p=>p.filter(x=>x.id!==m.id)); }} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:14,alignSelf:"flex-start"}}>×</button>
+        </div>
+        <input value={m.telegram} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,telegram:e.target.value}:x))} placeholder="@telegram" style={{...SI,marginBottom:6,fontSize:11}}/>
+        <textarea value={m.note} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,note:e.target.value}:x))} placeholder="Заметки..." style={{...SI,minHeight:50,resize:"vertical",fontSize:11,lineHeight:1.4,marginBottom:8}}/>
+        <div style={{display:"flex",gap:4}}>{AVATAR_COLORS.map(c=><div key={c} onClick={()=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,color:c}:x))} style={{width:16,height:16,borderRadius:"50%",background:c,cursor:"pointer",border:m.color===c?"2px solid #fff":"2px solid transparent"}}/>)}</div>
+      </div>)}
+    </div>
+  </div>;
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+export default function App(){
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("vg_user") || "null"); } catch { return null; }
+  });
+
+  function handleLogout() {
+    localStorage.removeItem("vg_user");
+    setCurrentUser(null);
+  }
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={u => { localStorage.setItem("vg_user", JSON.stringify(u)); setCurrentUser(u); }}/>;
+  }
+
+  return <MainApp currentUser={currentUser} onLogout={handleLogout}/>;
+}
+
+// ── LoginScreen lazy import ────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const SI2 = {background:"#16161f",border:"1px solid #2d2d44",borderRadius:8,padding:"10px 14px",color:"#f0eee8",fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"};
+  const ROLES2 = ["Менеджер проекта","Сценарист","Оператор","Монтажёр","Продюсер","Таргетолог","Дизайнер"];
+  const [mode, setMode] = useState("login");
+  const [form, setForm] = useState({telegram:"",password:"",name:"",role:"Продюсер",color:"#8b5cf6",invite_password:""});
+  const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
+  const u=(k,v)=>setForm(p=>({...p,[k]:v}));
+  async function submit(){
+    setErr(""); setLoading(true);
+    try { const user = mode==="login" ? await api.login({telegram:form.telegram,password:form.password}) : await api.register(form); onLogin(user); }
+    catch(e){ setErr(e.message); }
+    setLoading(false);
+  }
+  return (
+    <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0f"}}>
+      <div style={{width:360,background:"#111118",border:"1px solid #2d2d44",borderRadius:16,padding:32}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{fontSize:48,marginBottom:8}}>🍇</div>
+          <div style={{fontSize:22,fontWeight:800}}>Виноград</div>
+          <div style={{fontSize:11,color:"#4b5563",fontFamily:"monospace",marginTop:4}}>production system</div>
+        </div>
+        <div style={{display:"flex",marginBottom:20,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:8,padding:3}}>
+          {[["login","Войти"],["register","Регистрация"]].map(([m,l])=>(
+            <button key={m} onClick={()=>setMode(m)} style={{flex:1,padding:"7px",borderRadius:6,cursor:"pointer",background:mode===m?"#8b5cf6":"transparent",border:"none",color:mode===m?"#fff":"#6b7280",fontFamily:"inherit",fontSize:12,fontWeight:mode===m?700:400}}>{l}</button>
+          ))}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {mode==="register"&&<input value={form.name} onChange={e=>u("name",e.target.value)} placeholder="Имя Фамилия" style={SI2}/>}
+          <input value={form.telegram} onChange={e=>u("telegram",e.target.value)} placeholder="@telegram" style={SI2}/>
+          <input type="password" value={form.password} onChange={e=>u("password",e.target.value)} placeholder="Пароль" style={SI2} onKeyDown={e=>e.key==="Enter"&&submit()}/>
+          {mode==="register"&&<>
+            <select value={form.role} onChange={e=>u("role",e.target.value)} style={SI2}>{ROLES2.map(r=><option key={r} value={r}>{r}</option>)}</select>
+            <div><div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:6}}>ЦВЕТ</div><div style={{display:"flex",gap:5}}>{AVATAR_COLORS.map(c=><div key={c} onClick={()=>u("color",c)} style={{width:26,height:26,borderRadius:"50%",background:c,cursor:"pointer",border:form.color===c?"3px solid #fff":"3px solid transparent"}}/>)}</div></div>
+            <input value={form.invite_password} onChange={e=>u("invite_password",e.target.value)} placeholder="Код приглашения" style={SI2}/>
+          </>}
+          {err&&<div style={{fontSize:11,color:"#ef4444",background:"#1a0000",border:"1px solid #ef444430",borderRadius:7,padding:"8px 12px"}}>{err}</div>}
+          <button onClick={submit} disabled={loading} style={{background:"linear-gradient(135deg,#8b5cf6,#ec4899)",border:"none",borderRadius:8,padding:"11px",color:"#fff",cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,marginTop:4}}>
+            {loading?"⏳ Загрузка...":mode==="login"?"Войти":"Зарегистрироваться"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MainApp({currentUser, onLogout}){
+  const [tab,setTab]=useState("pre");
+  const [viewMode,setViewMode]=useState("kanban");
+  const [postSubTab,setPostSubTab]=useState("reels");
+  const [pubViewMode,setPubViewMode]=useState("week");
+  const [projects,setProjects]=useState([]);
+  const [teamMembers,setTeamMembers]=useState([]);
+  const [preItems,setPreItems]=useState([]);
+  const [prodItems,setProdItems]=useState([]);
+  const [postReels,setPostReels]=useState([]);
+  const [postVideo,setPostVideo]=useState([]);
+  const [postCarousels,setPostCarousels]=useState([]);
+  const [pubItems,setPubItems]=useState([]);
+  const [modal,setModal]=useState(null);
+  const [loading,setLoading]=useState(true);
+
+  // ── Load data from API ──────────────────────────────────────────────────────
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        const [projs, users, tasks] = await Promise.all([
+          api.getProjects(),
+          api.getUsers(),
+          api.getTasks(),
+        ]);
+        setProjects(projs.map(p => ({...p, links: p.links || [], archived: p.archived || false})));
+        setTeamMembers(users.map(u => ({...u, note: u.note || ""})));
+        // Split tasks by type and merge data field
+        const expand = t => ({ id: t.id, project: t.project_id, status: t.status, title: t.title, chat: [], ...(t.data || {}) });
+        setPreItems(tasks.filter(t=>t.type==="pre").map(expand));
+        setProdItems(tasks.filter(t=>t.type==="prod").map(expand));
+        setPostReels(tasks.filter(t=>t.type==="post_reels").map(expand));
+        setPostVideo(tasks.filter(t=>t.type==="post_video").map(expand));
+        setPostCarousels(tasks.filter(t=>t.type==="post_carousel").map(expand));
+        setPubItems(tasks.filter(t=>t.type==="pub").map(expand));
+      } catch(e) { console.error("Load error:", e); }
+      setLoading(false);
+    }
+    loadAll();
+  }, []);
+
+  if (loading) return (
+    <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,background:"#0a0a0f"}}>
+      <div style={{fontSize:48}}>🍇</div>
+      <div style={{fontSize:12,color:"#4b5563",fontFamily:"monospace"}}>Загрузка...</div>
+    </div>
+  );
+
+  // Per-tab filters
+  const [preFilt,setPreFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+  const [prodFilt,setProdFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+  const [postFilt,setPostFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+  const [pubFilt,setPubFilt]=useState({pf:"all",member:"all",sortBy:"default"});
+
+  const activeProjs=projects.filter(p=>!p.archived);
+
+  function applyFilter(items,filt,memberFields=["producer","editor","scriptwriter","operator","designer"]){
+    let r=items;
+    if(filt.pf!=="all") r=r.filter(x=>x.project===filt.pf);
+    if(filt.member!=="all") r=r.filter(x=>memberFields.some(f=>x[f]===filt.member));
+    if(filt.sortBy==="deadline") r=[...r].sort((a,b)=>(a.deadline||a.shoot_date||a.planned_date||"")>(b.deadline||b.shoot_date||b.planned_date||"")?1:-1);
+    if(filt.sortBy==="project") r=[...r].sort((a,b)=>a.project>b.project?1:-1);
+    if(filt.sortBy==="status") r=[...r].sort((a,b)=>a.status>b.status?1:-1);
+    return r;
+  }
+
+  const filtPre=applyFilter(preItems,preFilt);
+  const filtProd=applyFilter(prodItems,prodFilt);
+  const filtPostReels=applyFilter(postReels,postFilt);
+  const filtPostVideo=applyFilter(postVideo,postFilt);
+  const filtPostCarousels=applyFilter(postCarousels,postFilt);
+  const filtPub=applyFilter(pubItems,pubFilt);
+
+  const ct=TABS.find(t=>t.id===tab);
+
+  function defItem(type,extra={}){
+    const proj=activeProjs[0]?.id||"brandx";
+    const base={pre:{id:genId(),title:"",type:"Сценарий",project:proj,status:"idea",brief:"",script:"",refs:[],deadline:"",scriptwriter:"",producer:"",chat:[]},
+      prod:{id:genId(),title:"",type:"Рилс",project:proj,status:"planned",location:"",equipment:[],actors:[],shoot_date:"",checklist:[],producer:"",operator:"",chat:[]},
+      post_reels:{id:genId(),title:"",project:proj,status:"not_started",source_name:"",transcript:"",tz:"",birolls:"",final_link:"",producer:"",editor:"",chat:[]},
+      post_video:{id:genId(),title:"",project:proj,status:"not_started",source_links:[],tz:"",final_link:"",producer:"",editor:"",chat:[]},
+      post_carousel:{id:genId(),title:"",project:proj,status:"not_started",slides:[{id:genId(),text:"",img:""}],cover_text:"",tz:"",final_link:"",producer:"",designer:"",chat:[]},
+      pub:{id:genId(),title:"",project:proj,status:"draft",planned_date:"",caption:"",hashtags:"",producer:"",file_name:"",chat:[]},
+    };
+    return {...base[type],...extra};
+  }
+
+  function openNew(type,extra={}){ setModal({type,item:defItem(type,extra)}); }
+  function openEdit(type,item){ setModal({type,item:{...item}}); }
+  function close(){ setModal(null); }
+
+  async function save(type,d){
+    try {
+      const { id, project, status, title, chat, ...rest } = d;
+      const payload = { type, title: title||"", project_id: project, status, data: rest };
+      // Check if item exists already
+      const setter = type==="pre"?setPreItems:type==="prod"?setProdItems:type==="post_reels"?setPostReels:type==="post_video"?setPostVideo:type==="post_carousel"?setPostCarousels:setPubItems;
+      const getter = type==="pre"?preItems:type==="prod"?prodItems:type==="post_reels"?postReels:type==="post_video"?postVideo:type==="post_carousel"?postCarousels:pubItems;
+      const exists = getter.find(x=>x.id===id);
+      if (exists) {
+        await api.updateTask(id, payload);
+        setter(p=>p.map(x=>x.id===id?d:x));
+      } else {
+        const saved = await api.createTask({...payload, id});
+        const expanded = {id:saved.id,project:saved.project_id,status:saved.status,title:saved.title,chat:[],...(saved.data||{})};
+        setter(p=>[...p, expanded]);
+      }
+    } catch(e) { console.error("Save error:", e); alert("Ошибка сохранения: "+e.message); }
+    close();
+  }
+
+  function drop(type,id,newStatus){
+    const upd=setter=>setter(p=>p.map(x=>x.id===id?{...x,status:newStatus}:x));
+    if(type==="pre") upd(setPreItems);
+    else if(type==="prod") upd(setProdItems);
+    else if(type==="post_reels") upd(setPostReels);
+    else if(type==="post_video") upd(setPostVideo);
+    else if(type==="post_carousel") upd(setPostCarousels);
+    else if(type==="pub") upd(setPubItems);
+    api.updateTask(id, {status:newStatus}).catch(e=>console.error("Drop error:",e));
+  }
+
+  function moveToDay(type,id,newDate){
+    const field=type==="prod"?"shoot_date":"planned_date";
+    const upd=setter=>setter(p=>p.map(x=>x.id===id?{...x,[field]:newDate}:x));
+    if(type==="prod") upd(setProdItems);
+    else if(type==="pub") upd(setPubItems);
+    // get current item data and patch
+    const allItems=[...prodItems,...pubItems];
+    const item=allItems.find(x=>x.id===id);
+    if(item){ const {id:_id,project,status,title,chat,...rest}=item; api.updateTask(id,{data:{...rest,[field]:newDate}}).catch(e=>console.error(e)); }
+  }
+
+  function mkCard(item,type){
+    const proj=projOf(item.project,projects);
+    const chatCount=(item.chat||[]).length;
+    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${proj.color}25`,borderLeft:`3px solid ${proj.color}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
+      onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
+      <div style={{fontWeight:700,fontSize:12,marginBottom:4}}>{item.title||"Без названия"}</div>
+      <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:3}}>
+        <Badge color={proj.color}>{proj.label}</Badge>
+        {item.type&&<Badge color="#4b5563">{item.type}</Badge>}
+      </div>
+      {item.deadline&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>📅 {item.deadline}</div>}
+      {item.shoot_date&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>📅 {item.shoot_date.slice(0,10)}</div>}
+      {item.slides&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>📋 {item.slides.length} слайдов</div>}
+      <div style={{display:"flex",gap:6,marginTop:5,alignItems:"center"}}>
+        {chatCount>0&&<span style={{fontSize:9,color:"#4b5563"}}>💬 {chatCount}</span>}
+        {type==="post_reels"&&<button onClick={e=>{e.stopPropagation();setModal({type:"pub",item:defItem("pub",{title:item.title,project:item.project})});}} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
+      </div>
+    </div>;
+  }
+
+  const cnt={pre:preItems.length,prod:prodItems.length,post:postReels.length+postVideo.length+postCarousels.length,pub:pubItems.length,summary:0,projects:activeProjs.length,team:teamMembers.length};
+
+  return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    {/* TOP NAV — no filters, no add button */}
+    <div style={{borderBottom:"1px solid #1a1a2e",background:"#0d0d16",flexShrink:0,padding:"0 16px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:2,height:52}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginRight:12}}>
+          <div style={{width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🍇</div>
+          <div><div style={{fontSize:14,fontWeight:800}}>{APP_NAME}</div><div style={{fontSize:8,color:"#4b5563",fontFamily:"monospace"}}>production system</div></div>
+        </div>
+        {TABS.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,cursor:"pointer",background:tab===t.id?t.color+"15":"transparent",border:tab===t.id?`1px solid ${t.color}40`:"1px solid transparent",color:tab===t.id?t.color:"#6b7280",fontFamily:"inherit",fontWeight:tab===t.id?700:500,fontSize:12}}>
+          <span style={{fontSize:13}}>{t.icon}</span>{t.label}
+          {t.id!=="summary"&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#4b5563",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
+        </button>)}
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:"#111118",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",background:`linear-gradient(135deg,${currentUser.color||"#8b5cf6"},#7c3aed)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff"}}>{(currentUser.name||currentUser.telegram||"?")[0].toUpperCase()}</div>
+            <span style={{fontSize:11,fontWeight:600}}>@{currentUser.telegram}</span>
+          </div>
+          <button onClick={onLogout} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px",color:"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>Выйти</button>
+        </div>
+      </div>
+    </div>
+
+    {/* CONTENT */}
+    <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+
+      {/* PRE */}
+      {tab==="pre"&&<>
+        <FilterBar pf={preFilt.pf} setPf={v=>setPreFilt(p=>({...p,pf:v}))} member={preFilt.member} setMember={v=>setPreFilt(p=>({...p,member:v}))} sortBy={preFilt.sortBy} setSortBy={v=>setPreFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Сценарий" onAdd={()=>openNew("pre")}/>
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {[{id:"kanban",l:"Канбан"},{id:"calendar",l:"Календарь"}].map(v=><button key={v.id} onClick={()=>setViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:viewMode===v.id?"#8b5cf620":"transparent",border:viewMode===v.id?"1px solid #8b5cf640":"1px solid #1e1e2e",color:viewMode===v.id?"#8b5cf6":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
+        </div>
+        {viewMode==="kanban"&&<Kanban statuses={PRE_STATUSES} items={filtPre} renderCard={x=>mkCard(x,"pre")} onDrop={(id,st)=>drop("pre",id,st)} onAddClick={st=>openNew("pre",{status:st})}/>}
+        {viewMode==="calendar"&&<CalView items={filtPre} dateField="deadline" onDayClick={d=>openNew("pre",{deadline:d})} color="#8b5cf6" onMoveToDay={(id,day)=>{ setPreItems(p=>p.map(x=>x.id===id?{...x,deadline:day}:x)); const item=preItems.find(x=>x.id===id); if(item){const{id:_,project,status,title,chat,...rest}=item;api.updateTask(id,{data:{...rest,deadline:day}}).catch(()=>{});}}} renderChip={x=>{const p=projOf(x.project,projects);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pre",x);}} style={{background:p.color+"18",border:`1px solid ${p.color}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:p.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
+      </>}
+
+      {/* PROD */}
+      {tab==="prod"&&<>
+        <FilterBar pf={prodFilt.pf} setPf={v=>setProdFilt(p=>({...p,pf:v}))} member={prodFilt.member} setMember={v=>setProdFilt(p=>({...p,member:v}))} sortBy={prodFilt.sortBy} setSortBy={v=>setProdFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Съёмка" onAdd={()=>openNew("prod")}/>
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {[{id:"kanban",l:"Канбан"},{id:"calendar",l:"Съёмки"}].map(v=><button key={v.id} onClick={()=>setViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:viewMode===v.id?"#3b82f620":"transparent",border:viewMode===v.id?"1px solid #3b82f640":"1px solid #1e1e2e",color:viewMode===v.id?"#3b82f6":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
+        </div>
+        {viewMode==="kanban"&&<Kanban statuses={PROD_STATUSES} items={filtProd} renderCard={x=>mkCard(x,"prod")} onDrop={(id,st)=>drop("prod",id,st)} onAddClick={st=>openNew("prod",{status:st})}/>}
+        {viewMode==="calendar"&&<CalView items={filtProd} dateField="shoot_date" onDayClick={d=>openNew("prod",{shoot_date:d+"T10:00"})} color="#3b82f6" onMoveToDay={(id,day)=>moveToDay("prod",id,day+"T10:00")} renderChip={x=>{const p=projOf(x.project,projects);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("prod",x);}} style={{background:p.color+"18",border:`1px solid ${p.color}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:p.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🎬 {x.title}</div>;}}/>}
+      </>}
+
+      {/* POST */}
+      {tab==="post"&&<>
+        <FilterBar pf={postFilt.pf} setPf={v=>setPostFilt(p=>({...p,pf:v}))} member={postFilt.member} setMember={v=>setPostFilt(p=>({...p,member:v}))} sortBy={postFilt.sortBy} setSortBy={v=>setPostFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers}
+          addLabel={postSubTab==="reels"?"Рилс":postSubTab==="video"?"Видео":"Карусель"}
+          onAdd={()=>openNew(postSubTab==="reels"?"post_reels":postSubTab==="video"?"post_video":"post_carousel")}/>
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {[["reels","🎞️ Рилсы","#ec4899"],["video","🎬 Видео","#3b82f6"],["carousel","🖼 Карусели","#a78bfa"]].map(([id,l,c])=><button key={id} onClick={()=>setPostSubTab(id)} style={{padding:"4px 11px",borderRadius:6,cursor:"pointer",background:postSubTab===id?c+"20":"transparent",border:postSubTab===id?`1px solid ${c}40`:"1px solid #1e1e2e",color:postSubTab===id?c:"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:600}}>{l}</button>)}
+        </div>
+        {postSubTab==="reels"&&<Kanban statuses={POST_STATUSES} items={filtPostReels} renderCard={x=>mkCard(x,"post_reels")} onDrop={(id,st)=>drop("post_reels",id,st)} onAddClick={st=>openNew("post_reels",{status:st})}/>}
+        {postSubTab==="video"&&<Kanban statuses={POST_STATUSES} items={filtPostVideo} renderCard={x=>mkCard(x,"post_video")} onDrop={(id,st)=>drop("post_video",id,st)} onAddClick={st=>openNew("post_video",{status:st})}/>}
+        {postSubTab==="carousel"&&<Kanban statuses={POST_STATUSES} items={filtPostCarousels} renderCard={x=>mkCard(x,"post_carousel")} onDrop={(id,st)=>drop("post_carousel",id,st)} onAddClick={st=>openNew("post_carousel",{status:st})}/>}
+      </>}
+
+      {/* PUB */}
+      {tab==="pub"&&<>
+        <FilterBar pf={pubFilt.pf} setPf={v=>setPubFilt(p=>({...p,pf:v}))} member={pubFilt.member} setMember={v=>setPubFilt(p=>({...p,member:v}))} sortBy={pubFilt.sortBy} setSortBy={v=>setPubFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Публикацию" onAdd={()=>openNew("pub")}/>
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {[{id:"week",l:"Неделя"},{id:"calendar",l:"Месяц"},{id:"status",l:"По статусам"}].map(v=><button key={v.id} onClick={()=>setPubViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:pubViewMode===v.id?"#10b98120":"transparent",border:pubViewMode===v.id?"1px solid #10b98140":"1px solid #1e1e2e",color:pubViewMode===v.id?"#10b981":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
+        </div>
+        {pubViewMode==="week"&&<WeekView items={filtPub} onItemClick={x=>openEdit("pub",x)} onDayClick={dt=>openNew("pub",{planned_date:dt})} projects={projects} onMoveToDay={(id,dt)=>moveToDay("pub",id,dt)}/>}
+        {pubViewMode==="calendar"&&<CalView items={filtPub} dateField="planned_date" onDayClick={d=>openNew("pub",{planned_date:d+"T12:00"})} color="#10b981" onMoveToDay={(id,day)=>moveToDay("pub",id,day+"T12:00")} renderChip={x=>{const sc=stColor(PUB_STATUSES,x.status);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pub",x);}} style={{background:sc+"18",border:`1px solid ${sc}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
+        {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES} items={filtPub} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>{const proj=projOf(x.project,projects);return <div onClick={()=>openEdit("pub",x)} style={{background:"#111118",border:`1px solid ${proj.color}25`,borderLeft:`3px solid ${proj.color}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
+          <div style={{fontWeight:700,fontSize:12,marginBottom:4}}>{x.title||"Без названия"}</div>
+          <div style={{display:"flex",gap:3}}><Badge color={proj.color}>{proj.label}</Badge></div>
+          {x.planned_date&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginTop:3}}>📅 {x.planned_date.slice(0,10)}</div>}
+          {x.file_name&&<div style={{fontSize:9,color:"#a78bfa",marginTop:2}}>📎 {x.file_name}</div>}
+        </div>;}}/>}
+      </>}
+
+      {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers}/>}
+      {tab==="projects"&&<ProjectsView projects={projects} setProjects={setProjects}/>}
+      {tab==="team"&&<TeamView teamMembers={teamMembers} setTeamMembers={setTeamMembers}/>}
+    </div>
+
+    {/* MODALS */}
+    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close}><PreForm          item={modal.item} onSave={d=>save("pre",d)}           onClose={close} projects={projects} team={teamMembers}/></Modal>}
+    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close}><ProdForm         item={modal.item} onSave={d=>save("prod",d)}          onClose={close} projects={projects} team={teamMembers}/></Modal>}
+    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)}    onClose={close} projects={projects} team={teamMembers}/></Modal>}
+    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)}    onClose={close} projects={projects} team={teamMembers}/></Modal>}
+    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onClose={close} projects={projects} team={teamMembers}/></Modal>}
+    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close}><PubForm          item={modal.item} onSave={d=>save("pub",d)}           onClose={close} projects={projects} team={teamMembers}/></Modal>}
+  </div>;
+}
+
