@@ -101,11 +101,6 @@ async function initDb() {
     )
   `);
 
-  // Migration: add missing columns if tasks table already existed without them
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'pre'`);
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'`);
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000`);
-
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
@@ -343,6 +338,152 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 // FALLBACK → React SPA
 // ════════════════════════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════════════════════════
+// AI  (OpenAI Whisper + GPT-4o)
+// ════════════════════════════════════════════════════════════════════════════════
+
+const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
+
+async function openaiJson(body) {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_KEY}` },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) { const e = await r.text(); throw new Error("OpenAI: " + e); }
+  const d = await r.json();
+  return d.choices[0].message.content;
+}
+
+// ── Транскрипция (Whisper) ─────────────────────────────────────────────────────
+app.post("/api/ai/transcribe", upload.single("file"), async (req, res) => {
+  try {
+    if (!OPENAI_KEY) return res.status(503).json({ error: "OPENAI_API_KEY не задан" });
+    if (!req.file)   return res.status(400).json({ error: "Нет файла" });
+
+    const os   = require("os");
+    const path2 = require("path");
+    const { execFile } = require("child_process");
+    const { promisify } = require("util");
+    const execFileAsync = promisify(execFile);
+
+    // Write uploaded video to temp file
+    const tmpIn  = path2.join(os.tmpdir(), `vg_in_${Date.now()}`  + path2.extname(req.file.originalname || ".mp4"));
+    const tmpOut = path2.join(os.tmpdir(), `vg_out_${Date.now()}.mp3`);
+    fs.writeFileSync(tmpIn, req.file.buffer);
+
+    let audioBuffer;
+    let audioName = req.file.originalname;
+
+    try {
+      // Extract & compress audio: mono, 64kbps — keeps file small for Whisper
+      await execFileAsync("ffmpeg", [
+        "-y", "-i", tmpIn,
+        "-vn",               // no video
+        "-ac", "1",          // mono
+        "-ar", "16000",      // 16kHz (Whisper sweet spot)
+        "-b:a", "64k",       // 64kbps → ~0.5MB/min
+        tmpOut
+      ]);
+      audioBuffer = fs.readFileSync(tmpOut);
+      audioName   = "audio.mp3";
+    } catch (ffErr) {
+      // ffmpeg not available or failed — send original file directly
+      console.warn("ffmpeg unavailable, sending raw file:", ffErr.message);
+      audioBuffer = req.file.buffer;
+    } finally {
+      try { fs.unlinkSync(tmpIn);  } catch {}
+      try { fs.unlinkSync(tmpOut); } catch {}
+    }
+
+    // Whisper limit is 25MB
+    if (audioBuffer.length > 24 * 1024 * 1024) {
+      return res.status(413).json({ error: "Файл слишком большой (>24MB после сжатия). Попробуйте обрезать видео." });
+    }
+
+    const FormData = (await import("form-data")).default;
+    const fd = new FormData();
+    fd.append("file", audioBuffer, { filename: audioName, contentType: "audio/mpeg" });
+    fd.append("model", "whisper-1");
+    fd.append("language", "ru");
+
+    const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${OPENAI_KEY}`, ...fd.getHeaders() },
+      body: fd,
+    });
+    if (!r.ok) { const e = await r.text(); throw new Error("Whisper: " + e); }
+    const data = await r.json();
+    res.json({ text: data.text });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// ── Биролы (GPT-4o) ────────────────────────────────────────────────────────────
+app.post("/api/ai/birolls", async (req, res) => {
+  try {
+    if (!OPENAI_KEY) return res.status(503).json({ error: "OPENAI_API_KEY не задан" });
+    const { transcript, title } = req.body;
+    if (!transcript) return res.status(400).json({ error: "Нет транскрипции" });
+
+    const text = await openaiJson({
+      model: "gpt-4o",
+      max_tokens: 600,
+      messages: [{
+        role: "system",
+        content: "Ты SMM-редактор. Твоя задача — предложить биролы (текстовые подписи на кадрах) для короткого видео. Формат: [0:00] текст подписи. Каждый бирол — отдельная строка. Не более 8 биролов. Только сам список без объяснений."
+      }, {
+        role: "user",
+        content: `Видео: "${title || "Контент"}"\n\nТранскрипция:\n${transcript}\n\nПредложи биролы.`
+      }]
+    });
+    res.json({ text });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// ── AI Сценарий (GPT-4o) ───────────────────────────────────────────────────────
+app.post("/api/ai/script", async (req, res) => {
+  try {
+    if (!OPENAI_KEY) return res.status(503).json({ error: "OPENAI_API_KEY не задан" });
+    const { brief, title } = req.body;
+    if (!brief) return res.status(400).json({ error: "Нет брифа" });
+
+    const text = await openaiJson({
+      model: "gpt-4o",
+      max_tokens: 800,
+      messages: [{
+        role: "system",
+        content: "Ты сценарист коротких вертикальных видео для Instagram/TikTok. Пиши сценарии по сценам с таймкодами. Формат: Сцена N (0:00-0:05): [описание действия]\nТекст/монолог: [что говорит автор]. Итого не более 30 секунд видео."
+      }, {
+        role: "user",
+        content: `Тема: "${title || "Видео"}"\n\nБриф:\n${brief}\n\nНапиши сценарий.`
+      }]
+    });
+    res.json({ text });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// ── AI Caption (GPT-4o) ────────────────────────────────────────────────────────
+app.post("/api/ai/caption", async (req, res) => {
+  try {
+    if (!OPENAI_KEY) return res.status(503).json({ error: "OPENAI_API_KEY не задан" });
+    const { title, project_label } = req.body;
+
+    const text = await openaiJson({
+      model: "gpt-4o",
+      max_tokens: 300,
+      messages: [{
+        role: "system",
+        content: "Ты SMM-копирайтер. Пиши живые, короткие подписи для Instagram. Без штампов. Добавь 1-2 эмодзи уместно. В конце — призыв к действию. Не более 150 слов."
+      }, {
+        role: "user",
+        content: `Напиши подпись для публикации.\nНазвание: "${title || "Контент"}"\nБренд: "${project_label || ""}"`
+      }]
+    });
+    res.json({ text });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// ── Fallback → React SPA ──────────────────────────────────────────────────────
 app.get("*", (req, res) => {
   const index = path.join(BUILD_PATH, "index.html");
   if (fs.existsSync(index)) res.sendFile(index);
