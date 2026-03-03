@@ -11,8 +11,7 @@ const TABS = [
   { id:"pub",       label:"Публикация",    icon:"🚀",  color:"#10b981" },
   { id:"summary",   label:"Сводка",        icon:"📊",  color:"#f97316" },
   { id:"analytics", label:"Аналитика",     icon:"📈",  color:"#a78bfa" },
-  { id:"projects",  label:"Проекты",       icon:"📁",  color:"#f59e0b" },
-  { id:"team",      label:"Команда",       icon:"👥",  color:"#06b6d4" },
+  { id:"base",      label:"База",          icon:"🗂",   color:"#06b6d4" },
 ];
 
 const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
@@ -1264,7 +1263,8 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
 
   // Executor fields and customer fields
   function isExecutor(item, uid) {
-    return ["editor","scriptwriter","operator","designer","executor","producer"].some(f => item[f] === uid);
+    // producer = заказчик во всех формах, не исполнитель
+    return ["editor","scriptwriter","operator","designer","executor"].some(f => item[f] === uid);
   }
   function isCustomer(item, uid) {
     return item.customer === uid || item.producer === uid;
@@ -1516,6 +1516,114 @@ function AnalyticsView({pubItems,projects}){
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ── Base View ─────────────────────────────────────────────────────────────────
+function BaseView({projects,setProjects,teamMembers,setTeamMembers,currentUser}){
+  const [subTab,setSubTab]=useState("projects");
+  const tabs=[
+    {id:"projects",label:"📁 Проекты"},
+    {id:"team",label:"👥 Команда"},
+    {id:"training",label:"📚 Обучение"},
+  ];
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <div style={{display:"flex",gap:6,borderBottom:"1px solid #1e1e2e",paddingBottom:0}}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setSubTab(t.id)}
+            style={{padding:"7px 16px",borderRadius:"8px 8px 0 0",cursor:"pointer",background:subTab===t.id?"#111118":"transparent",border:subTab===t.id?"1px solid #2d2d44":"1px solid transparent",borderBottom:subTab===t.id?"1px solid #111118":"none",color:subTab===t.id?"#f0eee8":"#6b7280",fontSize:12,fontFamily:"inherit",fontWeight:subTab===t.id?700:400,marginBottom:-1}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {subTab==="projects"&&<ProjectsView projects={projects} setProjects={setProjects}/>}
+      {subTab==="team"&&<TeamView teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/>}
+      {subTab==="training"&&<TrainingView/>}
+    </div>
+  );
+}
+
+// ── Training View ─────────────────────────────────────────────────────────────
+function TrainingView(){
+  const [items,setItems]=useState([]);
+  const [adding,setAdding]=useState(false);
+  const [form,setForm]=useState({title:"",url:"",description:"",category:""});
+  const u=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const categories=["Монтаж","Съёмка","Сценарий","SMM","Дизайн","Другое"];
+
+  useEffect(()=>{
+    fetch("/api/training").then(r=>r.ok?r.json():[]).then(setItems).catch(()=>{});
+  },[]);
+
+  async function add(){
+    if(!form.title.trim()) return;
+    try{
+      const r=await fetch("/api/training",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(form)});
+      if(r.ok){const item=await r.json();setItems(p=>[...p,item]);}
+      setForm({title:"",url:"",description:"",category:""});setAdding(false);
+    }catch(e){alert("Ошибка: "+e.message);}
+  }
+  async function remove(id){
+    await fetch("/api/training/"+id,{method:"DELETE"}).catch(()=>{});
+    setItems(p=>p.filter(x=>x.id!==id));
+  }
+
+  const grouped={};
+  items.forEach(x=>{const c=x.category||"Другое";(grouped[c]=grouped[c]||[]).push(x);});
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"flex",justifyContent:"flex-end"}}>
+        <button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"7px 14px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>+ Добавить материал</button>
+      </div>
+
+      {adding&&(
+        <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:12,padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#06b6d4",marginBottom:2}}>+ Новый материал</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="НАЗВАНИЕ"><input value={form.title} onChange={e=>u("title",e.target.value)} placeholder="Название материала" style={SI}/></Field>
+            <Field label="КАТЕГОРИЯ"><select value={form.category} onChange={e=>u("category",e.target.value)} style={SI}>
+              <option value="">— выберите —</option>
+              {categories.map(c=><option key={c} value={c}>{c}</option>)}
+            </select></Field>
+          </div>
+          <Field label="ССЫЛКА"><input value={form.url} onChange={e=>u("url",e.target.value)} placeholder="https://..." style={SI}/></Field>
+          <Field label="ОПИСАНИЕ"><textarea value={form.description} onChange={e=>u("description",e.target.value)} placeholder="Краткое описание..." style={{...SI,minHeight:60,resize:"vertical"}}/></Field>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
+            <button onClick={add} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Добавить</button>
+          </div>
+        </div>
+      )}
+
+      {items.length===0&&!adding&&(
+        <div style={{textAlign:"center",padding:"50px 0",color:"#4b5563"}}>
+          <div style={{fontSize:36,marginBottom:8}}>📚</div>
+          <div style={{fontSize:12}}>Добавьте обучающие материалы</div>
+        </div>
+      )}
+
+      {Object.entries(grouped).map(([cat,catItems])=>(
+        <div key={cat}>
+          <div style={{fontSize:10,fontWeight:800,color:"#6b7280",fontFamily:"monospace",marginBottom:8,letterSpacing:"0.05em"}}>{cat.toUpperCase()}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+            {catItems.map(item=>(
+              <div key={item.id} style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:3}}>{item.title}</div>
+                    {item.description&&<div style={{fontSize:11,color:"#6b7280",lineHeight:1.4}}>{item.description}</div>}
+                  </div>
+                  <button onClick={()=>remove(item.id)} style={{background:"transparent",border:"none",color:"#2d2d44",cursor:"pointer",fontSize:14,flexShrink:0,padding:0}} onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#2d2d44"}>×</button>
+                </div>
+                {item.url&&<a href={item.url} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {item.url}</a>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -2150,8 +2258,7 @@ function MainApp({currentUser, onLogout}){
 
       {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects}/>}
-      {tab==="projects"&&<ProjectsView projects={projects} setProjects={setProjects}/>}
-      {tab==="team"&&<TeamView teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/>}
+      {tab==="base"&&<BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/>}
     </div>
 
     {/* MODALS */}
