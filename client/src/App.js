@@ -1540,6 +1540,80 @@ function AnalyticsView({pubItems,projects}){
           </tbody>
         </table>
       </div>
+
+      {/* Залётные рилсы */}
+      <StarredReelsView pubItems={pubItems} projects={projects}/>
+    </div>
+  );
+}
+
+function StarredReelsView({pubItems, projects}){
+  const now = new Date();
+  const [projFilter, setProjFilter] = useState("all");
+  const [selMonth, setSelMonth] = useState(-1); // -1 = all time
+
+  const months = [];
+  for(let i=0;i<12;i++){
+    let m = now.getMonth()-i; let y=now.getFullYear();
+    if(m<0){m+=12;y--;}
+    months.push({m,y,label:["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"][m]+" "+y,key:`${y}-${m}`});
+  }
+
+  const starred = pubItems.filter(x=>{
+    if(!x.starred) return false;
+    if(projFilter!=="all" && x.project!==projFilter) return false;
+    if(selMonth!==-1){
+      const mk = months.find(m=>m.key===String(selMonth));
+      if(mk){
+        const d = new Date(x.planned_date||x.updated_at||"");
+        if(d.getMonth()!==mk.m || d.getFullYear()!==mk.y) return false;
+      }
+    }
+    return true;
+  });
+
+  const activeProjs = projects.filter(p=>!p.archived);
+
+  return(
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,overflow:"hidden"}}>
+      <div style={{padding:"12px 16px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,fontWeight:800,color:"#6b7280",fontFamily:"monospace",letterSpacing:"1px"}}>★ ЗАЛЁТНЫЕ РИЛСЫ</span>
+        <span style={{fontSize:10,color:"#f59e0b",fontFamily:"monospace",fontWeight:700}}>{starred.length} шт.</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <select value={projFilter} onChange={e=>setProjFilter(e.target.value)}
+            style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit"}}>
+            <option value="all">Все проекты</option>
+            {activeProjs.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+          <select value={selMonth} onChange={e=>setSelMonth(e.target.value)}
+            style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit"}}>
+            <option value={-1}>Всё время</option>
+            {months.map(({label,key})=><option key={key} value={key}>{label}</option>)}
+          </select>
+        </div>
+      </div>
+      {starred.length===0?(
+        <div style={{padding:"30px",textAlign:"center",color:"#4b5563",fontSize:11}}>Нет залётных рилсов за выбранный период</div>
+      ):(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:1}}>
+          {starred.map(item=>{
+            const proj = projects.find(p=>p.id===item.project);
+            return(
+              <div key={item.id} style={{padding:"10px 14px",borderBottom:"1px solid #0d0d16",display:"flex",gap:10,alignItems:"flex-start"}}>
+                <span style={{color:"#f59e0b",fontSize:16,flexShrink:0}}>★</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title||"Без названия"}</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {proj&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44",fontFamily:"monospace"}}>{proj.label}</span>}
+                    <span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44",fontFamily:"monospace"}}>{item.pub_type==="carousel"?"🖼 Карусель":"🎬 Видео/Рилс"}</span>
+                    {item.planned_date&&<span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{item.planned_date.slice(0,10)}</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1729,7 +1803,25 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
 
   return <div style={{background:"#111118",border:'1px solid #1e1e2e',borderTop:'3px solid #2d2d44',borderRadius:12,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-            <div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{proj.label[0]}</div>
+            {(()=>{
+              const aRef = React.useRef();
+              async function uploadAvatar(e) {
+                const f = e.target.files[0]; if(!f) return;
+                const fd = new FormData(); fd.append("file", f);
+                const r = await fetch("/api/avatar/project/"+proj.id, {method:"POST",body:fd});
+                if(r.ok){ const {url}=await r.json(); setProjects(p=>p.map(x=>x.id===proj.id?{...x,avatar_url:url}:x)); }
+              }
+              return <>
+                <div onClick={()=>aRef.current?.click()} title="Загрузить логотип"
+                  style={{width:34,height:34,borderRadius:9,background:proj.avatar_url?"transparent":proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,cursor:"pointer",overflow:"hidden",position:"relative"}}
+                  onMouseEnter={e=>e.currentTarget.querySelector(".ov")&&(e.currentTarget.querySelector(".ov").style.opacity=1)}
+                  onMouseLeave={e=>e.currentTarget.querySelector(".ov")&&(e.currentTarget.querySelector(".ov").style.opacity=0)}>
+                  {proj.avatar_url?<img src={proj.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:proj.label[0]}
+                  <div className="ov" style={{position:"absolute",inset:0,background:"#00000080",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,opacity:0,transition:"opacity 0.15s"}}>📷</div>
+                </div>
+                <input ref={aRef} type="file" accept="image/*" style={{display:"none"}} onChange={uploadAvatar}/>
+              </>;
+            })()}
             <input value={proj.label} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,label:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{label:e.target.value}).catch(()=>{})} style={{...SI,flex:1,padding:"4px 8px",fontSize:13,fontWeight:700}}/>
             <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
             <button onClick={async()=>{if(!window.confirm("Удалить проект «"+proj.label+"»? Это действие нельзя отменить.")) return; try{await api.deleteProject(proj.id);setProjects(p=>p.filter(x=>x.id!==proj.id));}catch(e){alert("Ошибка: "+e.message);}}} style={{background:"transparent",border:"1px solid #ef444440",borderRadius:6,padding:"4px 8px",color:"#ef4444",cursor:"pointer",fontSize:11}}>🗑</button>
@@ -1770,7 +1862,7 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
 
 // ── Team View ─────────────────────────────────────────────────────────────────
 function TeamView({teamMembers,setTeamMembers,currentUser}){
-  const isDirector = currentUser?.role==="Директор" || currentUser?.telegram==="evg_vinogradov";
+  const isDirector = currentUser?.role==="Директор";
   const [adding,setAdding]=useState(false);
   const [newM,setNewM]=useState({name:"",role:ROLES_LIST[0],telegram:"",color:"#8b5cf6",note:""});
   async function addMember(){
@@ -1804,7 +1896,25 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
       {teamMembers.map(m=><div key={m.id} style={{background:"#111118",border:`1px solid ${m.color}25`,borderTop:`3px solid ${m.color}`,borderRadius:12,padding:"14px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${m.color},${m.color}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>{(m.name[0]||"?").toUpperCase()}</div>
+          {(()=>{
+            const aRef2 = React.useRef();
+            async function uploadTeamAvatar(e) {
+              const f = e.target.files[0]; if(!f) return;
+              const fd = new FormData(); fd.append("file",f);
+              const r = await fetch("/api/avatar/user/"+m.id,{method:"POST",body:fd});
+              if(r.ok){const {url}=await r.json();setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,avatar_url:url}:x));}
+            }
+            return <>
+              <div onClick={()=>aRef2.current?.click()} title="Загрузить фото"
+                style={{width:40,height:40,borderRadius:"50%",background:m.avatar_url?"transparent":`linear-gradient(135deg,${m.color},${m.color}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0,cursor:"pointer",overflow:"hidden",position:"relative"}}
+                onMouseEnter={e=>e.currentTarget.querySelector(".ov2")&&(e.currentTarget.querySelector(".ov2").style.opacity=1)}
+                onMouseLeave={e=>e.currentTarget.querySelector(".ov2")&&(e.currentTarget.querySelector(".ov2").style.opacity=0)}>
+                {m.avatar_url?<img src={m.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:(m.name[0]||"?").toUpperCase()}
+                <div className="ov2" style={{position:"absolute",inset:0,background:"#00000080",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,opacity:0,transition:"opacity 0.15s"}}>📷</div>
+              </div>
+              <input ref={aRef2} type="file" accept="image/*" style={{display:"none"}} onChange={uploadTeamAvatar}/>
+            </>;
+          })()}
           <div style={{flex:1}}>
             <input value={m.name} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,name:e.target.value}:x))} onBlur={e=>isDirector&&api.updateUser(m.id,{name:e.target.value}).catch(()=>{})} readOnly={!isDirector} style={{...SI,padding:"3px 7px",fontSize:13,fontWeight:700,marginBottom:3,opacity:isDirector?1:0.7}}/>
             <select value={m.role} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,role:e.target.value}:x))} disabled={!isDirector} style={{...SI,padding:"2px 7px",fontSize:10,opacity:isDirector?1:0.7}}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select>
@@ -1889,8 +1999,8 @@ function MainApp({currentUser, onLogout}){
         const expand = t => {
           const d = t.data || {};
           return {
-            id: t.id, project: t.project_id, status: t.status, title: t.title,
-            completed_at: t.completed_at || "", chat: [],
+            id: t.id, project: t.project_id, status: t.status, title: t.title, type: t.type,
+            completed_at: t.completed_at || "", starred: t.starred || false, chat: [],
             // safe array defaults to prevent crashes
             refs:         d.refs         || [],
             equipment:    d.equipment    || [],
