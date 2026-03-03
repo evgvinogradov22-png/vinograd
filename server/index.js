@@ -106,6 +106,7 @@ async function initDb() {
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT ''`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
@@ -284,7 +285,7 @@ app.post("/api/tasks", async (req, res) => {
 
 app.patch("/api/tasks/:id", async (req, res) => {
   try {
-    const { title, project_id, status, data, archived } = req.body;
+    const { title, project_id, status, data, archived, completed_at } = req.body;
     const now = Date.now();
     // Build dynamic update to avoid overwriting fields not passed
     const sets = ["updated_at=$1"];
@@ -294,7 +295,8 @@ app.patch("/api/tasks/:id", async (req, res) => {
     if (project_id !== undefined) { sets.push(`project_id=$${i++}`); vals.push(project_id); }
     if (status     !== undefined) { sets.push(`status=$${i++}`);     vals.push(status); }
     if (data       !== undefined) { sets.push(`data=$${i++}`);       vals.push(JSON.stringify(data)); }
-    if (archived   !== undefined) { sets.push(`archived=$${i++}`);   vals.push(archived); }
+    if (archived      !== undefined) { sets.push(`archived=$${i++}`);      vals.push(archived); }
+    if (completed_at  !== undefined) { sets.push(`completed_at=$${i++}`); vals.push(completed_at); }
     vals.push(req.params.id);
     await q(`UPDATE tasks SET ${sets.join(",")} WHERE id=$${i}`, vals);
     res.json(await q1("SELECT * FROM tasks WHERE id=$1", [req.params.id]));
