@@ -173,7 +173,11 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const { telegram, password } = req.body;
     const clean = telegram.replace(/^@/, "").toLowerCase().trim();
+    console.log("[LOGIN] looking for:", clean);
+    const allUsers = await q("SELECT telegram FROM users");
+    console.log("[LOGIN] all users in DB:", allUsers.map(u => u.telegram));
     const user = await q1("SELECT * FROM users WHERE telegram=$1", [clean]);
+    console.log("[LOGIN] found user:", user ? user.telegram : "NOT FOUND");
     if (!user) return res.status(401).json({ error: "Пользователь не найден" });
     if (password !== user.password_hash) return res.status(401).json({ error: "Неверный пароль" });
     res.json({ id: user.id, telegram: user.telegram, name: user.name, role: user.role, color: user.color });
