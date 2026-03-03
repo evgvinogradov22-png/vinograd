@@ -419,7 +419,8 @@ app.post("/api/chat/:taskId", async (req, res) => {
 
     // ── Chat notifications (7, 8) ─────────────────────────────────────────────
     try {
-      const task = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.taskId]);
+      const taskId = req.params.taskId;
+      const task = await q1("SELECT * FROM tasks WHERE id=$1", [taskId]);
       if (task) {
         const taskData = task.data || {};
         const participants = new Set([
