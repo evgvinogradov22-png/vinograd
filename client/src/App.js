@@ -1390,6 +1390,30 @@ function AnalyticsView({pubItems,projects}){
   const [selMonth, setSelMonth] = useState(now.getMonth());
   const [selYear,  setSelYear]  = useState(now.getFullYear());
   const [kpis, setKpis] = useState({});
+  const [kpiLoaded, setKpiLoaded] = useState(false);
+
+  // Load KPIs from server once
+  useEffect(()=>{
+    fetch("/api/analytics/kpi").then(r=>r.ok?r.json():[]).then(rows=>{
+      const map={};
+      rows.forEach(r=>{ map[`${r.project_id}_${r.year}_${r.month}`]=String(r.kpi); });
+      setKpis(map); setKpiLoaded(true);
+    }).catch(()=>setKpiLoaded(true));
+  },[]);
+
+  function kpiKey(projId) { return `${projId}_${selYear}_${selMonth}`; }
+  function getKpi(projId) { return kpis[kpiKey(projId)]||""; }
+  function setKpi(projId, val) {
+    const key = kpiKey(projId);
+    setKpis(p=>({...p,[key]:val}));
+    // Debounced save
+    clearTimeout(window._kpiTimer);
+    window._kpiTimer = setTimeout(()=>{
+      fetch("/api/analytics/kpi",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({project_id:projId,month:selMonth,year:selYear,kpi:parseInt(val)||0})
+      }).catch(()=>{});
+    }, 800);
+  }
 
   // Build list of months (last 12)
   const months = [];
@@ -1419,7 +1443,7 @@ function AnalyticsView({pubItems,projects}){
   const totalVideo = published.filter(x=>x.pub_type!=="carousel").length;
   const totalCarousel = published.filter(x=>x.pub_type==="carousel").length;
   const totalAll = published.length;
-  const totalKpi = Object.values(kpis).reduce((a,v)=>a+(parseInt(v)||0),0);
+  const totalKpi = projects.filter(p=>!p.archived).reduce((a,p)=>a+(parseInt(getKpi(p.id))||0),0);
 
   const pctColor = p => p>=100?"#10b981":p>=60?"#f59e0b":"#ef4444";
 
@@ -1457,7 +1481,7 @@ function AnalyticsView({pubItems,projects}){
               const v = count(proj.id,"video");
               const c = count(proj.id,"carousel");
               const tot = total(proj.id);
-              const kpi = parseInt(kpis[proj.id])||0;
+              const kpi = parseInt(getKpi(proj.id))||0;
               const pct = kpi>0?Math.min(100,Math.round(tot/kpi*100)):0;
               const pc = pctColor(pct);
               return (
@@ -1475,7 +1499,7 @@ function AnalyticsView({pubItems,projects}){
                     <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:tot>0?"#f0eee8":"#2d2d44"}}>{tot}</span>
                   </td>
                   <td style={{padding:"10px 16px"}}>
-                    <input type="number" min="0" value={kpis[proj.id]||""} onChange={e=>setKpis(p=>({...p,[proj.id]:e.target.value}))}
+                    <input type="number" min="0" value={getKpi(proj.id)} onChange={e=>setKpi(proj.id, e.target.value)}
                       placeholder="—"
                       style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"4px 8px",borderRadius:5,fontSize:12,width:60,textAlign:"center",fontFamily:"monospace",outline:"none"}}/>
                   </td>
@@ -2098,9 +2122,15 @@ function MainApp({currentUser, onLogout}){
     const dateStr=item.deadline||item.shoot_date?.slice(0,10)||item.planned_date?.slice(0,10)||item.post_deadline||"";
     const daysLeft=dateStr?Math.ceil((new Date(dateStr).getTime()-Date.now())/86400000):null;
     const urgent=daysLeft!==null&&daysLeft<=2;
-    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${urgent?"#ef444450":"#1e1e2e"}`,borderLeft:`3px solid ${urgent?"#ef4444":"#374151"}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
+    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${item.starred?"#f59e0b50":urgent?"#ef444450":"#1e1e2e"}`,borderLeft:`3px solid ${item.starred?"#f59e0b":urgent?"#ef4444":"#374151"}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
       onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
-      <div style={{fontWeight:700,fontSize:12,marginBottom:5}}>{item.title||"Без названия"}</div>
+      <div style={{display:"flex",alignItems:"flex-start",gap:5,marginBottom:5}}>
+        <div style={{fontWeight:700,fontSize:12,flex:1}}>{item.title||"Без названия"}</div>
+        {type==="pub"&&<button onClick={e=>{e.stopPropagation();save(type,{...item,starred:!item.starred});}} title="Залётный рилс"
+          style={{background:"transparent",border:"none",cursor:"pointer",fontSize:15,padding:0,flexShrink:0,color:item.starred?"#f59e0b":"#2d2d44",lineHeight:1}}
+          onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#6b7280"}
+          onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#f59e0b":"#2d2d44"}>★</button>}
+      </div>
       <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
         <Badge color="#374151">{proj.label}</Badge>
         {type==="pub"&&<Badge color={item.pub_type==="carousel"?"#a78bfa":"#3b82f6"}>{item.pub_type==="carousel"?"🖼 Карусель":"🎬 Видео/Рилс"}</Badge>}
