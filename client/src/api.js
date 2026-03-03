@@ -1,7 +1,8 @@
 const BASE = "";
 
 async function req(method, url, body) {
-  const opts = { method, headers: { "Content-Type": "application/json" } };
+  const userId = (() => { try { return JSON.parse(localStorage.getItem("vg_user")||"{}").id||""; } catch(e){ return ""; } })();
+  const opts = { method, headers: { "Content-Type": "application/json", ...(userId ? {"x-user-id": userId} : {}) } };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(BASE + url, opts);
   if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || r.statusText); }
