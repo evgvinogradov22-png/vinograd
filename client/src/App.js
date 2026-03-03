@@ -1791,20 +1791,6 @@ function ProjectsView({projects,setProjects}){
   </div>;
 }
 
-function AvatarUpload({url, color, letter, size, radius, onUpload}){
-  const ref = useRef(null);
-  const [hover,setHover] = useState(false);
-  return(
-    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
-      <div onClick={()=>ref.current?.click()} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
-        style={{width:size,height:size,borderRadius:radius,background:url?"transparent":color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.4,fontWeight:800,color:"#fff",cursor:"pointer",overflow:"hidden"}}>
-        {url?<img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:letter}
-        {hover&&<div style={{position:"absolute",inset:0,background:"#00000080",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,borderRadius:radius}}>📷</div>}
-      </div>
-      <input ref={ref} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)onUpload(f);e.target.value="";}}/>
-    </div>
-  );
-}
 
 function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading=false}){
   const [nl,setNl]=useState("");
@@ -1818,7 +1804,7 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
 
   return <div style={{background:"#111118",border:'1px solid #1e1e2e',borderTop:'3px solid #2d2d44',borderRadius:12,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-<AvatarUpload url={proj.avatar_url} color={proj.color} letter={(proj.label||"?")[0]} size={34} radius={9} onUpload={async f=>{const fd=new FormData();fd.append("file",f);const r=await fetch("/api/avatar/project/"+proj.id,{method:"POST",body:fd});if(r.ok){const {url}=await r.json();setProjects(p=>p.map(x=>x.id===proj.id?{...x,avatar_url:url}:x));}}}/>
+<div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{(proj.label||"?")[0]}</div>
             <input value={proj.label} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,label:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{label:e.target.value}).catch(()=>{})} style={{...SI,flex:1,padding:"4px 8px",fontSize:13,fontWeight:700}}/>
             <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
             <button onClick={async()=>{if(!window.confirm("Удалить проект «"+proj.label+"»? Это действие нельзя отменить.")) return; try{await api.deleteProject(proj.id);setProjects(p=>p.filter(x=>x.id!==proj.id));}catch(e){alert("Ошибка: "+e.message);}}} style={{background:"transparent",border:"1px solid #ef444440",borderRadius:6,padding:"4px 8px",color:"#ef4444",cursor:"pointer",fontSize:11}}>🗑</button>
@@ -1893,7 +1879,7 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
       {teamMembers.map(m=><div key={m.id} style={{background:"#111118",border:`1px solid ${m.color}25`,borderTop:`3px solid ${m.color}`,borderRadius:12,padding:"14px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-<AvatarUpload url={m.avatar_url} color={m.color} letter={(m.name||"?")[0].toUpperCase()} size={40} radius="50%" onUpload={async f=>{const fd=new FormData();fd.append("file",f);const r=await fetch("/api/avatar/user/"+m.id,{method:"POST",body:fd});if(r.ok){const {url}=await r.json();setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,avatar_url:url}:x));}}}/>
+<div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${m.color},${m.color}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>{((m.name||"?")[0]).toUpperCase()}</div>
           <div style={{flex:1}}>
             <input value={m.name} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,name:e.target.value}:x))} onBlur={e=>isDirector&&api.updateUser(m.id,{name:e.target.value}).catch(()=>{})} readOnly={!isDirector} style={{...SI,padding:"3px 7px",fontSize:13,fontWeight:700,marginBottom:3,opacity:isDirector?1:0.7}}/>
             <select value={m.role} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,role:e.target.value}:x))} disabled={!isDirector} style={{...SI,padding:"2px 7px",fontSize:10,opacity:isDirector?1:0.7}}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select>
