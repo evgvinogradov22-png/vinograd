@@ -29,8 +29,8 @@ const fd=(y,m)=>{const d=new Date(y,m,1).getDay();return d===0?6:d-1;};
 
 
 const SI={background:"#16161f",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 11px",color:"#f0eee8",fontSize:12,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"};
-const LB={fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:"0.1em",marginBottom:4,display:"block",fontFamily:"monospace"};
-const projOf=(id,projects)=>projects.find(p=>p.id===id)||{label:"?",color:"#6b7280"};
+const LB={fontSize:9,color:"#cbd5e1",fontWeight:700,letterSpacing:"0.1em",marginBottom:4,display:"block",fontFamily:"monospace"};
+const projOf=(id,projects)=>projects.find(p=>p.id===id)||{label:"?",color:"#9ca3af"};
 const teamOf=(id,team)=>team.find(u=>u.id===id);
 const stColor=(sts,id)=>sts.find(s=>s.id===id)?.c||"#6b7280";
 
@@ -49,7 +49,8 @@ function TeamSelect({label,value,onChange,team}){
 }
 
 // ── MiniChat ──────────────────────────────────────────────────────────────────
-function MiniChat({msgs=[],onNewMsg,team,currentUser}){
+function MiniChat({taskId,team,currentUser}){
+  const [msgs,setMsgs]=useState([]);
   const [text,setText]=useState("");
   const [uploadProgress,setUploadProgress]=useState([]);
   const [showMentions,setShowMentions]=useState(false);
@@ -58,10 +59,46 @@ function MiniChat({msgs=[],onNewMsg,team,currentUser}){
   const myId=currentUser?.id||"u1";
   const nm=id=>teamOf(id,team)?.name||"?";
 
+  // Load chat from server
+  useEffect(()=>{
+    if(!taskId) return;
+    fetch(`/api/chat/${taskId}`).then(r=>r.ok?r.json():null).then(data=>{
+      if(data) setMsgs(data.map(m=>({
+        id:m.id, user:m.user_id, text:m.text, ts:m.created_at,
+        files: m.file_url ? [{name:m.file_name||"файл", url:m.file_url}] : []
+      })));
+    }).catch(()=>{});
+  },[taskId]);
+
+  // Real-time via WebSocket (if available)
+  useEffect(()=>{
+    if(!taskId||typeof window.wsSubscribe!=="function") return;
+    return window.wsSubscribe(taskId,(msg)=>{
+      if(msg.type==="message") setMsgs(p=>[...p,{
+        id:msg.msg.id, user:msg.msg.user_id, text:msg.msg.text, ts:msg.msg.created_at,
+        files: msg.msg.file_url?[{name:msg.msg.file_name||"файл",url:msg.msg.file_url}]:[]
+      }]);
+    });
+  },[taskId]);
+
+  async function postMsg(text, fileUrl="", fileName=""){
+    if(!taskId) return;
+    const r=await fetch(`/api/chat/${taskId}`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user_id:myId, text, file_url:fileUrl, file_name:fileName})
+    });
+    if(r.ok){
+      const m=await r.json();
+      setMsgs(p=>[...p,{id:m.id,user:m.user_id,text:m.text,ts:m.created_at,
+        files:m.file_url?[{name:m.file_name||"файл",url:m.file_url}]:[]}]);
+      setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50);
+    }
+  }
+
   async function handleFiles(e){
     const fileList=Array.from(e.target.files); if(!fileList.length) return;
     setUploadProgress(fileList.map(f=>({name:f.name,pct:10})));
-    const uploaded=[];
     for(let i=0;i<fileList.length;i++){
       const f=fileList[i];
       try{
@@ -69,14 +106,14 @@ function MiniChat({msgs=[],onNewMsg,team,currentUser}){
         const fd=new FormData(); fd.append("file",f);
         const r=await fetch("/api/upload",{method:"POST",body:fd});
         setUploadProgress(p=>p.map((x,j)=>j===i?{...x,pct:90}:x));
-        if(r.ok){const d=await r.json();uploaded.push({name:f.name,url:d.url});}
-        else uploaded.push({name:f.name,url:""});
-        setUploadProgress(p=>p.map((x,j)=>j===i?{...x,pct:100}:x));
-      }catch{uploaded.push({name:f.name,url:""});}
+        if(r.ok){
+          const d=await r.json();
+          setUploadProgress(p=>p.map((x,j)=>j===i?{...x,pct:100}:x));
+          await postMsg("",d.url,f.name);
+        }
+      }catch(err){console.error(err);}
     }
-    setTimeout(()=>setUploadProgress([]),1000);
-    onNewMsg({id:genId(),user:myId,text:"",ts:Date.now(),files:uploaded});
-    setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50);
+    setTimeout(()=>setUploadProgress([]),1200);
     e.target.value="";
   }
 
@@ -94,38 +131,37 @@ function MiniChat({msgs=[],onNewMsg,team,currentUser}){
     setShowMentions(false); inputRef.current?.focus();
   }
 
-  function send(){
+  async function send(){
     if(!text.trim()) return;
-    onNewMsg({id:genId(),user:myId,text,ts:Date.now(),files:[]});
-    setText(""); setShowMentions(false);
-    setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50);
+    const t=text; setText(""); setShowMentions(false);
+    await postMsg(t);
   }
 
   const mentionList=(team||[]).filter(m=>m.id!==myId&&m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0,5);
 
   return(
     <div style={{display:"flex",flexDirection:"column",height:280,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,position:"relative"}}>
-      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700}}>{"💬 ЧАТ"}</div>
+      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>{"💬 ЧАТ"}</div>
       <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:5}}>
-        {msgs.length===0&&<div style={{textAlign:"center",color:"#2d2d44",fontSize:10,paddingTop:20}}>{"Начните обсуждение"}</div>}
+        {msgs.length===0&&<div style={{textAlign:"center",color:"#9ca3af",fontSize:10,paddingTop:20}}>{"Начните обсуждение"}</div>}
         {msgs.map(m=>{
           const isMe=m.user===myId;
           const name=nm(m.user);
           return <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end"}}>
             <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{name[0].toUpperCase()}</div>
             <div style={{maxWidth:"80%"}}>
-              {!isMe&&<div style={{fontSize:8,color:"#6b7280",fontFamily:"monospace",marginBottom:1}}>{"@"}{name}</div>}
+              {!isMe&&<div style={{fontSize:8,color:"#cbd5e1",fontFamily:"monospace",marginBottom:1}}>{"@"}{name}</div>}
               <div style={{background:isMe?"#1e1630":"#1a1a2e",border:"1px solid "+(isMe?"#4c1d9530":"#2d2d44"),borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"5px 9px"}}>
                 {m.text&&<div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:700,background:"#a78bfa15",borderRadius:3,padding:"0 2px"}}>{p}</span>:p)}</div>}
                 {(m.files||[]).map((f,i)=>(
                   <div key={i} style={{display:"flex",alignItems:"center",gap:5,marginTop:3,background:"#ffffff08",borderRadius:5,padding:"4px 8px"}}>
                     <span style={{fontSize:11}}>{/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name||"")?"🖼️":"📎"}</span>
-                    <span style={{fontSize:10,color:"#9ca3af",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
-                    {f.url?<a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0,fontWeight:700}}>{"↓"}</a>:<span style={{fontSize:9,color:"#2d2d44"}}>{"..."}</span>}
+                    <span style={{fontSize:10,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
+                    {f.url?<a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0,fontWeight:700}}>{"↓"}</a>:<span style={{fontSize:9,color:"#9ca3af"}}>{"..."}</span>}
                   </div>
                 ))}
               </div>
-              <div style={{fontSize:7,color:"#2d2d44",marginTop:1,textAlign:isMe?"right":"left"}}>{m.ts?new Date(m.ts).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
+              <div style={{fontSize:7,color:"#9ca3af",marginTop:1,textAlign:isMe?"right":"left"}}>{m.ts?new Date(m.ts).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
             </div>
           </div>;
         })}
@@ -135,7 +171,7 @@ function MiniChat({msgs=[],onNewMsg,team,currentUser}){
       {uploadProgress.length>0&&<div style={{padding:"4px 8px",borderTop:"1px solid #1e1e2e",display:"flex",flexDirection:"column",gap:3}}>
         {uploadProgress.map((f,i)=>(
           <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:9,color:"#9ca3af",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{"📎 "}{f.name}</span>
+            <span style={{fontSize:9,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{"📎 "}{f.name}</span>
             <div style={{width:80,height:4,background:"#2d2d44",borderRadius:2,overflow:"hidden"}}>
               <div style={{width:`${f.pct}%`,height:"100%",background:f.pct===100?"#10b981":"#7c3aed",transition:"width 0.3s",borderRadius:2}}/>
             </div>
@@ -150,14 +186,14 @@ function MiniChat({msgs=[],onNewMsg,team,currentUser}){
             onMouseEnter={e=>e.currentTarget.style.background="#2d2d44"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
             <div style={{width:18,height:18,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff"}}>{m.name[0]}</div>
             <span style={{color:"#a78bfa"}}>{"@"}{m.name}</span>
-            <span style={{fontSize:9,color:"#4b5563",marginLeft:"auto"}}>{m.role}</span>
+            <span style={{fontSize:9,color:"#9ca3af",marginLeft:"auto"}}>{m.role}</span>
           </div>
         ))}
       </div>}
 
       <div style={{padding:"5px 6px",borderTop:"1px solid #1e1e2e",display:"flex",gap:4,alignItems:"center"}}>
         <input ref={fileRef} type="file" multiple style={{display:"none"}} onChange={handleFiles}/>
-        <button onClick={()=>fileRef.current?.click()} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#6b7280",cursor:"pointer",fontSize:13,flexShrink:0}}>{"📎"}</button>
+        <button onClick={()=>fileRef.current?.click()} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#9ca3af",cursor:"pointer",fontSize:13,flexShrink:0}}>{"📎"}</button>
         <input ref={inputRef} value={text} onChange={handleTextChange} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}if(e.key==="Escape")setShowMentions(false);}} placeholder={"Сообщение... (@ для упоминания)"} style={{...SI,flex:1,fontSize:11,padding:"4px 8px"}}/>
         <button onClick={send} disabled={!text.trim()} style={{background:"linear-gradient(135deg,#7c3aed,#ec4899)",border:"none",borderRadius:6,padding:"4px 10px",color:"#fff",cursor:text.trim()?"pointer":"not-allowed",fontSize:13,flexShrink:0,opacity:text.trim()?1:0.5}}>{"➤"}</button>
       </div>
@@ -187,7 +223,7 @@ function Kanban({statuses,items,renderCard,onDrop,onAddClick}){
             {col.map(item=>(
               <div key={item.id} draggable onDragStart={()=>setDragId(item.id)} style={{cursor:"grab",userSelect:"none"}}>{renderCard(item)}</div>
             ))}
-            <button onClick={()=>onAddClick(st.id)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#3d3d55",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить</button>
+            <button onClick={()=>onAddClick(st.id)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#6b7280",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить</button>
           </div>
         </div>;
       })}
@@ -209,11 +245,11 @@ function CalView({items,dateField,onDayClick,renderChip,color,onMoveToDay}){
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
         <button onClick={()=>m===0?(setM(11),setY(y=>y-1)):setM(m=>m-1)} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
-        <h3 style={{fontSize:15,fontWeight:800,margin:0}}>{MONTHS[m]} <span style={{color:"#2d2d44"}}>{y}</span></h3>
+        <h3 style={{fontSize:15,fontWeight:800,margin:0}}>{MONTHS[m]} <span style={{color:"#9ca3af"}}>{y}</span></h3>
         <button onClick={()=>m===11?(setM(0),setY(y=>y+1)):setM(m=>m+1)} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
-        {WDAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:"#2d2d44",fontFamily:"monospace",padding:"2px 0",fontWeight:700}}>{d}</div>)}
+        {WDAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:"#9ca3af",fontFamily:"monospace",padding:"2px 0",fontWeight:700}}>{d}</div>)}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
         {Array.from({length:first}).map((_,i)=><div key={"e"+i} style={{minHeight:74}}/>)}
@@ -227,13 +263,13 @@ function CalView({items,dateField,onDayClick,renderChip,color,onMoveToDay}){
             style={{minHeight:74,background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?`1px solid ${color}`:isToday?`1px solid ${color}`:"1px solid #1e1e2e",borderRadius:6,padding:"4px 4px 3px",cursor:"pointer",transition:"all 0.1s"}}
             onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor=color+"50";}}
             onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
-            <div style={{fontSize:9,color:isToday||isOver?color:"#2d2d44",fontWeight:isToday?800:400,marginBottom:2,fontFamily:"monospace"}}>{day}</div>
+            <div style={{fontSize:9,color:isToday||isOver?color:"#9ca3af",fontWeight:isToday?800:400,marginBottom:2,fontFamily:"monospace"}}>{day}</div>
             {its.slice(0,2).map(x=>(
               <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}} style={{cursor:"grab",userSelect:"none"}}>
                 {renderChip(x)}
               </div>
             ))}
-            {its.length>2&&<div style={{fontSize:8,color:"#2d2d44"}}>+{its.length-2}</div>}
+            {its.length>2&&<div style={{fontSize:8,color:"#9ca3af"}}>+{its.length-2}</div>}
           </div>;
         })}
       </div>
@@ -268,7 +304,7 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
             onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#3d3d5c";}}
             onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
             <div style={{textAlign:"center",marginBottom:6}}>
-              <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{WDAYS[days.indexOf(d)]}</div>
+              <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>{WDAYS[days.indexOf(d)]}</div>
               <div style={{fontSize:15,fontWeight:800,color:isToday?"#a78bfa":"#f0eee8"}}>{d.getDate()}</div>
             </div>
             {its.map(x=>{const sc=stColor(PUB_STATUSES,x.status);return(
@@ -291,7 +327,7 @@ function Modal({title,color,onClose,children}){
       <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,width:"min(700px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:"14px 18px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",flexShrink:0}}>
           <div style={{flex:1,fontSize:14,fontWeight:800,color}}>{title}</div>
-          <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#6b7280",fontSize:14}}>×</button>
+          <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#9ca3af",fontSize:14}}>×</button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>{children}</div>
       </div>
@@ -302,7 +338,7 @@ function Modal({title,color,onClose,children}){
 // ── Reusable form pieces ──────────────────────────────────────────────────────
 function SaveRow({onClose,onSave,color}){
   return <div style={{display:"flex",gap:8,marginTop:4}}>
-    <button onClick={onClose} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
+    <button onClick={onClose} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
     <button onClick={onSave} style={{flex:2,background:`linear-gradient(135deg,${color},${color}cc)`,border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Сохранить</button>
   </div>;
 }
@@ -386,7 +422,7 @@ function PreForm({item,onSave,onClose,projects,team,currentUser}){
       <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:5}}>
         {d.refs.map((r,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 9px"}}>
           <a href={r} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {r}</a>
-          <button onClick={()=>u("refs",d.refs.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+          <button onClick={()=>u("refs",d.refs.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
         </div>)}
       </div>
       <div style={{display:"flex",gap:5}}>
@@ -395,13 +431,13 @@ function PreForm({item,onSave,onClose,projects,team,currentUser}){
       </div>
     </Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.scriptwriter} onChange={v=>u("scriptwriter",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
+    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#8b5cf6"/>
   </div>;
 }
@@ -423,7 +459,7 @@ function ProdForm({item,onSave,onClose,projects,team,currentUser}){
     <Field label="ОБОРУДОВАНИЕ">
       {d.equipment.map((eq,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
         <span>🎥</span><span style={{flex:1,fontSize:11,color:"#d1d5db"}}>{eq}</span>
-        <button onClick={()=>u("equipment",d.equipment.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+        <button onClick={()=>u("equipment",d.equipment.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
       </div>)}
       <div style={{display:"flex",gap:5}}>
         <input value={ne} onChange={e=>setNe(e.target.value)} placeholder="Добавить..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&ne){u("equipment",[...d.equipment,ne]);setNe("");}}}/>
@@ -433,7 +469,7 @@ function ProdForm({item,onSave,onClose,projects,team,currentUser}){
     <Field label="АКТЁРЫ / УЧАСТНИКИ">
       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
         {d.actors.map((a,i)=><div key={i} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:20,padding:"3px 10px",fontSize:11,color:"#d1d5db",display:"flex",gap:5}}>
-          👤 {a}<button onClick={()=>u("actors",d.actors.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",lineHeight:1}}>×</button>
+          👤 {a}<button onClick={()=>u("actors",d.actors.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",lineHeight:1}}>×</button>
         </div>)}
       </div>
       <div style={{display:"flex",gap:5}}>
@@ -445,22 +481,22 @@ function ProdForm({item,onSave,onClose,projects,team,currentUser}){
       {d.checklist.map(item=><div key={item.id} onClick={()=>u("checklist",d.checklist.map(c=>c.id===item.id?{...c,done:!c.done}:c))} style={{display:"flex",alignItems:"center",gap:7,background:item.done?"#0a1a0a":"#1a1a2e",border:`1px solid ${item.done?"#10b98130":"#2d2d44"}`,borderRadius:7,padding:"5px 9px",cursor:"pointer",marginBottom:3}}>
         <div style={{width:15,height:15,borderRadius:4,border:`2px solid ${item.done?"#10b981":"#3d3d55"}`,background:item.done?"#10b981":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{item.done&&<span style={{color:"#fff",fontSize:9}}>✓</span>}</div>
         <span style={{fontSize:11,flex:1,color:item.done?"#10b981":"#d1d5db",textDecoration:item.done?"line-through":"none"}}>{item.text}</span>
-        <button onClick={e=>{e.stopPropagation();u("checklist",d.checklist.filter(c=>c.id!==item.id));}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:11}}>×</button>
+        <button onClick={e=>{e.stopPropagation();u("checklist",d.checklist.filter(c=>c.id!==item.id));}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:11}}>×</button>
       </div>)}
       <div style={{display:"flex",gap:5}}>
         <input value={nc} onChange={e=>setNc(e.target.value)} placeholder="Новый пункт..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&nc){u("checklist",[...d.checklist,{id:genId(),text:nc,done:false}]);setNc("");}}}/>
         <button onClick={()=>{if(nc){u("checklist",[...d.checklist,{id:genId(),text:nc,done:false}]);setNc("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
       </div>
-      <div style={{fontSize:9,color:"#3d3d55",fontFamily:"monospace",marginTop:3}}>{d.checklist.filter(c=>c.done).length}/{d.checklist.length} выполнено</div>
+      <div style={{fontSize:9,color:"#6b7280",fontFamily:"monospace",marginTop:3}}>{d.checklist.filter(c=>c.done).length}/{d.checklist.length} выполнено</div>
     </Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.customer} onChange={v=>u("customer",v)} team={team}/></div>
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.operator} onChange={v=>u("operator",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
+    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#3b82f6"/>
   </div>;
 }
@@ -506,9 +542,9 @@ function PostReelsForm({item,onSave,onClose,projects,team,currentUser}){
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>🎬</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.source_name}</span>
             {d.source_url&&<a href={d.source_url} download={d.source_name} target="_blank" rel="noreferrer" style={{fontSize:10,color:"#a78bfa",textDecoration:"none"}}>↓</a>}
-            <button onClick={()=>{setSourceFile(null);u("source_name","");u("source_url","");}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+            <button onClick={()=>{setSourceFile(null);u("source_name","");u("source_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
           </div>
-        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#6b7280",cursor:"pointer",fontSize:12}}>📤 Загрузить исходник (видео или аудио)</button>}
+        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить исходник (видео или аудио)</button>}
       {err&&<div style={{fontSize:11,color:"#ef4444",padding:"6px 10px",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,marginTop:4}}>{err}</div>}
     </Field>
     <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
@@ -529,13 +565,13 @@ function PostReelsForm({item,onSave,onClose,projects,team,currentUser}){
     </div>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
+    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#ec4899"/>
   </div>;
 }
@@ -555,7 +591,7 @@ function PostVideoForm({item,onSave,onClose,projects,team,currentUser}){
     <Field label="ИСХОДНИКИ (ССЫЛКИ)">
       {d.source_links.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
         <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
-        <button onClick={()=>u("source_links",d.source_links.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+        <button onClick={()=>u("source_links",d.source_links.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
       </div>)}
       <div style={{display:"flex",gap:5}}>
         <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&nl){u("source_links",[...d.source_links,nl]);setNl("");}}}/>
@@ -565,13 +601,13 @@ function PostVideoForm({item,onSave,onClose,projects,team,currentUser}){
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Подробное ТЗ..." style={{...SI,minHeight:100,resize:"vertical",lineHeight:1.5}}/></Field>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
+    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#3b82f6"/>
   </div>;
 }
@@ -597,7 +633,7 @@ function SlideImageUpload({slide,idx,onUploaded}){
           <img src={slide.img} alt="" style={{maxWidth:"100%",maxHeight:120,borderRadius:6,border:"1px solid #2d2d44",display:"block"}}/>
           <div style={{display:"flex",gap:4,marginTop:3}}>
             <a href={slide.img} download={slide.img_name||"slide.jpg"} style={{fontSize:9,color:"#06b6d4",textDecoration:"none"}}>⬇ Скачать</a>
-            <button onClick={()=>onUploaded("","")} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:9}}>× Удалить</button>
+            <button onClick={()=>onUploaded("","")} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:9}}>× Удалить</button>
           </div>
         </div>
       :<button onClick={()=>ref.current?.click()} disabled={loading} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:5,padding:"3px 10px",color:loading?"#f59e0b":"#4b5563",cursor:"pointer",fontSize:9,marginTop:3}}>{loading?"⏳ Загрузка...":"🖼 Загрузить изображение"}</button>}
@@ -620,28 +656,28 @@ function PostCarouselForm({item,onSave,onClose,projects,team,currentUser}){
       <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
         {d.slides.map((sl,i)=>(
           <div key={sl.id} style={{display:"flex",gap:6,alignItems:"flex-start",background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 10px"}}>
-            <div style={{width:24,height:24,borderRadius:6,background:"#2d2d44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#6b7280",flexShrink:0}}>{i+1}</div>
+            <div style={{width:24,height:24,borderRadius:6,background:"#2d2d44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#9ca3af",flexShrink:0}}>{i+1}</div>
             <div style={{flex:1}}>
               <textarea value={sl.text} onChange={e=>u("slides",d.slides.map((s,j)=>j===i?{...s,text:e.target.value}:s))} placeholder={`Текст слайда ${i+1}...`} style={{...SI,minHeight:40,resize:"vertical",fontSize:11,lineHeight:1.4}}/>
               
               <SlideImageUpload slide={sl} idx={i} onUploaded={(url,name)=>u("slides",d.slides.map((s,j)=>j===i?{...s,img:url,img_name:name}:s))}/>
             </div>
-            <button onClick={()=>u("slides",d.slides.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:14,marginTop:2}}>×</button>
+            <button onClick={()=>u("slides",d.slides.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14,marginTop:2}}>×</button>
           </div>
         ))}
       </div>
-      <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#6b7280",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
+      <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
     </Field>
     <Field label="ТЗ ДЛЯ ДИЗАЙНЕРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Стиль, цвета, шрифты, особенности оформления..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/></Field>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.designer} onChange={v=>u("designer",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
+    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#a78bfa"/>
   </div>;
 }
@@ -673,7 +709,7 @@ function PubForm({item,onSave,onClose,projects,team,currentUser}){
         <Btn onClick={genCap} disabled={aiCap} color="#10b981">{aiCap?"⏳ Генерирую...":"✨ AI caption"}</Btn>
       </div>
       <textarea value={d.caption} onChange={e=>u("caption",e.target.value)} placeholder="Текст публикации..." style={{...SI,minHeight:90,resize:"vertical",lineHeight:1.5}}/>
-      <div style={{fontSize:9,color:"#3d3d55",marginTop:2,fontFamily:"monospace"}}>{d.caption.length} символов</div>
+      <div style={{fontSize:9,color:"#6b7280",marginTop:2,fontFamily:"monospace"}}>{d.caption.length} символов</div>
     </div>
     <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"monospace",fontSize:11}}/></Field>
     <Field label="ФАЙЛ / МЕДИА">
@@ -682,18 +718,18 @@ function PubForm({item,onSave,onClose,projects,team,currentUser}){
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.file_name}</span>
             {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700}}>↓</a>}
-            <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+            <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
           </div>
-        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#6b7280",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
+        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
     </Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
+    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#10b981"/>
   </div>;
 }
@@ -722,7 +758,7 @@ function UnreadMentions({allChats,projects,team,me,onOpenTask}){
   if(unread.length===0) return (
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
       <div style={{fontSize:10,fontWeight:700,color:"#f97316",fontFamily:"monospace",marginBottom:8}}>💬 УПОМИНАНИЯ</div>
-      <div style={{textAlign:"center",color:"#2d2d44",fontSize:11,padding:"16px 0"}}>Нет непрочитанных упоминаний</div>
+      <div style={{textAlign:"center",color:"#9ca3af",fontSize:11,padding:"16px 0"}}>Нет непрочитанных упоминаний</div>
     </div>
   );
   return(
@@ -737,11 +773,11 @@ function UnreadMentions({allChats,projects,team,me,onOpenTask}){
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
               <div style={{width:16,height:16,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#fff"}}>{(sender?.name||"?")[0]}</div>
               <span style={{fontSize:10,fontWeight:600,color:"#f0eee8"}}>@{sender?.name||"?"}</span>
-              <span style={{fontSize:9,color:"#4b5563",marginLeft:"auto"}}>{proj.label}</span>
-              <button onClick={e=>{e.stopPropagation();setDismissed(p=>[...p,m.id]);}} style={{background:"transparent",border:"none",color:"#2d2d44",cursor:"pointer",fontSize:10,padding:"0 2px"}}>✕</button>
+              <span style={{fontSize:9,color:"#9ca3af",marginLeft:"auto"}}>{proj.label}</span>
+              <button onClick={e=>{e.stopPropagation();setDismissed(p=>[...p,m.id]);}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:10,padding:"0 2px"}}>✕</button>
             </div>
             <div style={{fontSize:11,color:"#d1d5db",lineHeight:1.4}}>{m.text}</div>
-            <div style={{fontSize:8,color:"#4b5563",marginTop:3}}>в задаче «{m.taskTitle}»</div>
+            <div style={{fontSize:8,color:"#8b99a8",marginTop:3}}>в задаче «{m.taskTitle}»</div>
           </div>;
         })}
       </div>
@@ -822,7 +858,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
 
       {/* ── FILTER BAR ── */}
       <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px 16px"}}>
-        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700,marginBottom:10,letterSpacing:"0.1em"}}>ФИЛЬТРЫ СВОДКИ</div>
+        <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700,marginBottom:10,letterSpacing:"0.1em"}}>ФИЛЬТРЫ СВОДКИ</div>
         <div style={{display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-end"}}>
 
           {/* Scope: my / all */}
@@ -841,7 +877,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
               <button onClick={()=>setProjFilter("all")} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:projFilter==="all"?"#f59e0b20":"#111118",border:`1px solid ${projFilter==="all"?"#f59e0b":"#2d2d44"}`,color:projFilter==="all"?"#f59e0b":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:projFilter==="all"?700:400}}>Все</button>
               {activeProjs.map(p=>(
-                <button key={p.id} onClick={()=>setProjFilter(p.id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:projFilter===p.id?p.color+"20":"#111118",border:`1px solid ${projFilter===p.id?p.color:"#2d2d44"}`,color:projFilter===p.id?p.color:"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:projFilter===p.id?700:400}}>{p.label}</button>
+                <button key={p.id} onClick={()=>setProjFilter(p.id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:projFilter===p.id?p.color+"20":"#111118",border:`1px solid ${projFilter===p.id?p.color:"#9ca3af"}`,color:projFilter===p.id?p.color:"#9ca3af",fontSize:11,fontFamily:"inherit",fontWeight:projFilter===p.id?700:400}}>{p.label}</button>
               ))}
             </div>
           </div>
@@ -851,20 +887,20 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
             <span style={{...LB,display:"block"}}>ПЕРИОД</span>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:dateFrom?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",outline:"none"}}/>
-              <span style={{color:"#4b5563",fontSize:11}}>—</span>
+              <span style={{color:"#9ca3af",fontSize:11}}>—</span>
               <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:dateTo?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",outline:"none"}}/>
-              {(dateFrom||dateTo)&&<button onClick={()=>{setDateFrom("");setDateTo("");}} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:"#4b5563",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>✕</button>}
+              {(dateFrom||dateTo)&&<button onClick={()=>{setDateFrom("");setDateTo("");}} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:"#9ca3af",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>✕</button>}
             </div>
           </div>
         </div>
 
         {/* Active filter summary */}
         <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1e1e2e",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>ПОКАЗАНО:</span>
+          <span style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>ПОКАЗАНО:</span>
           <span style={{fontSize:10,background:"#f97316"+"20",color:"#f97316",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{scopeLabel}</span>
           <span style={{fontSize:10,background:"#f59e0b"+"20",color:"#f59e0b",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>📁 {projLabel}</span>
           <span style={{fontSize:10,background:"#06b6d420",color:"#06b6d4",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>⏱ {dateFrom||dateTo?(dateFrom||"…")+" → "+(dateTo||"…"):"Всё время"}</span>
-          <span style={{fontSize:10,background:"#2d2d44",color:"#6b7280",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{all.length} задач</span>
+          <span style={{fontSize:10,background:"#2d2d44",color:"#9ca3af",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{all.length} задач</span>
         </div>
       </div>
 
@@ -874,7 +910,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
           <div key={i} style={{background:"#111118",border:`1px solid ${s.color}25`,borderTop:`3px solid ${s.color}`,borderRadius:10,padding:"14px 12px",textAlign:"center"}}>
             <div style={{fontSize:22,marginBottom:5}}>{s.icon}</div>
             <div style={{fontSize:30,fontWeight:800,color:s.color,fontFamily:"monospace",lineHeight:1}}>{s.count}</div>
-            <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>{s.label}</div>
+            <div style={{fontSize:10,color:"#cbd5e1",marginTop:4}}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -889,7 +925,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
       {/* ── DEADLINES ── */}
       <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
         <div style={{fontSize:10,fontWeight:700,color:"#06b6d4",fontFamily:"monospace",marginBottom:12}}>📅 БЛИЖАЙШИЕ ДЕДЛАЙНЫ</div>
-        {deadlines.length===0&&<div style={{textAlign:"center",color:"#2d2d44",fontSize:11,padding:"16px 0"}}>Нет предстоящих дедлайнов</div>}
+        {deadlines.length===0&&<div style={{textAlign:"center",color:"#9ca3af",fontSize:11,padding:"16px 0"}}>Нет предстоящих дедлайнов</div>}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
           {deadlines.map((x,i)=>{
             const proj=projOf(x.project,projects);
@@ -898,12 +934,12 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
             return <div key={i} onClick={()=>onOpenTask&&onOpenTask(x._type==="Сценарий"?"pre":x._type==="Съёмка"?"prod":"pub",x)} style={{background:"#111118",border:`1px solid ${urgent?"#ef444440":proj.color+"25"}`,borderLeft:`3px solid ${urgent?"#ef4444":proj.color}`,borderRadius:8,padding:"9px 12px",display:"flex",gap:10,alignItems:"center",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
               <div style={{textAlign:"center",minWidth:38}}>
                 <div style={{fontSize:16,fontWeight:800,color:urgent?"#ef4444":"#f59e0b",fontFamily:"monospace",lineHeight:1}}>{daysLeft>0?daysLeft:"—"}</div>
-                <div style={{fontSize:7,color:"#4b5563",fontFamily:"monospace"}}>{daysLeft>0?"дн.":"сегодня"}</div>
+                <div style={{fontSize:7,color:"#9ca3af",fontFamily:"monospace"}}>{daysLeft>0?"дн.":"сегодня"}</div>
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>
-                <div style={{fontSize:9,color:"#4b5563",marginTop:1}}>{x._type} · <span style={{color:proj.color}}>{proj.label}</span></div>
-                <div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace"}}>{x._date}</div>
+                <div style={{fontSize:9,color:"#9ca3af",marginTop:1}}>{x._type} · <span style={{color:proj.color}}>{proj.label}</span></div>
+                <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>{x._date}</div>
               </div>
             </div>;
           })}
@@ -947,16 +983,16 @@ function ProjectsView({projects,setProjects}){
       <Field label="ССЫЛКИ">
         {newP.links.map((l,i)=><div key={i} style={{display:"flex",gap:5,marginBottom:4}}>
           <input value={l} onChange={e=>setNewP(p=>({...p,links:p.links.map((x,j)=>j===i?e.target.value:x)}))} placeholder="https://..." style={{...SI,flex:1}}/>
-          <button onClick={()=>setNewP(p=>({...p,links:p.links.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+          <button onClick={()=>setNewP(p=>({...p,links:p.links.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
         </div>)}
-        <button onClick={()=>setNewP(p=>({...p,links:[...p.links,""]}))} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:6,padding:"4px 12px",color:"#4b5563",cursor:"pointer",fontSize:11}}>+ Ссылка</button>
+        <button onClick={()=>setNewP(p=>({...p,links:[...p.links,""]}))} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:6,padding:"4px 12px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>+ Ссылка</button>
       </Field>
       <div style={{display:"flex",gap:8,marginTop:10}}>
-        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
+        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
         <button onClick={addProject} style={{flex:2,background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Создать</button>
       </div>
     </div>}
-    {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#2d2d44"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#4b5563"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
+    {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#9ca3af"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
       {visible.map(proj=>(
         <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects}/>
@@ -971,13 +1007,13 @@ function ProjectCard({proj, showArchive, setProjects}){
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
             <div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{proj.label[0]}</div>
             <input value={proj.label} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,label:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{label:e.target.value}).catch(()=>{})} style={{...SI,flex:1,padding:"4px 8px",fontSize:13,fontWeight:700}}/>
-            <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#4b5563",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
+            <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
           </div>
           <textarea value={proj.description} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,description:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{description:e.target.value}).catch(()=>{})} placeholder="Описание проекта..." style={{...SI,minHeight:60,resize:"vertical",lineHeight:1.5,marginBottom:8,fontSize:11}}/>
           <span style={LB}>ДОКУМЕНТЫ И ССЫЛКИ</span>
           {proj.links.filter(l=>l).map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
             <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
-            <button onClick={()=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:x.links.filter((_,j)=>j!==i)}:x))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:11}}>×</button>
+            <button onClick={()=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:x.links.filter((_,j)=>j!==i)}:x))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:11}}>×</button>
           </div>)}
           <div style={{display:"flex",gap:5,marginTop:4}}>
             <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1,fontSize:11,padding:"5px 8px"}} onKeyDown={e=>{if(e.key==="Enter"&&nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}}/>
@@ -1014,11 +1050,11 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
       </div>
       <Field label="ЗАМЕТКИ"><textarea value={newM.note} onChange={e=>setNewM(p=>({...p,note:e.target.value}))} placeholder="Специализация, контакты..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
       <div style={{display:"flex",gap:8,marginTop:10}}>
-        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
+        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
         <button onClick={addMember} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Добавить</button>
       </div>
     </div>}
-    {teamMembers.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#2d2d44"}}><div style={{fontSize:36,marginBottom:8}}>👥</div><div style={{fontSize:12,color:"#4b5563"}}>Нет сотрудников</div></div>}
+    {teamMembers.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>👥</div><div style={{fontSize:12,color:"#9ca3af"}}>Нет сотрудников</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
       {teamMembers.map(m=><div key={m.id} style={{background:"#111118",border:`1px solid ${m.color}25`,borderTop:`3px solid ${m.color}`,borderRadius:12,padding:"14px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
@@ -1027,7 +1063,7 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
             <input value={m.name} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,name:e.target.value}:x))} onBlur={e=>isDirector&&api.updateUser(m.id,{name:e.target.value}).catch(()=>{})} readOnly={!isDirector} style={{...SI,padding:"3px 7px",fontSize:13,fontWeight:700,marginBottom:3,opacity:isDirector?1:0.7}}/>
             <select value={m.role} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,role:e.target.value}:x))} disabled={!isDirector} style={{...SI,padding:"2px 7px",fontSize:10,opacity:isDirector?1:0.7}}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select>
           </div>
-          {isDirector&&<button onClick={async()=>{ await api.deleteUser(m.id).catch(()=>{}); setTeamMembers(p=>p.filter(x=>x.id!==m.id)); }} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:14,alignSelf:"flex-start"}}>×</button>}
+          {isDirector&&<button onClick={async()=>{ await api.deleteUser(m.id).catch(()=>{}); setTeamMembers(p=>p.filter(x=>x.id!==m.id)); }} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14,alignSelf:"flex-start"}}>×</button>}
         </div>
         <input value={m.telegram} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,telegram:e.target.value}:x))} placeholder="@telegram" style={{...SI,marginBottom:6,fontSize:11}}/>
         <textarea value={m.note} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,note:e.target.value}:x))} placeholder="Заметки..." style={{...SI,minHeight:50,resize:"vertical",fontSize:11,lineHeight:1.4,marginBottom:8}}/>
@@ -1076,7 +1112,7 @@ function LoginScreen({ onLogin }) {
         <div style={{textAlign:"center",marginBottom:28}}>
           <div style={{fontSize:48,marginBottom:8}}>🍇</div>
           <div style={{fontSize:22,fontWeight:800}}>Виноград</div>
-          <div style={{fontSize:11,color:"#4b5563",fontFamily:"monospace",marginTop:4}}>production system</div>
+          <div style={{fontSize:11,color:"#9ca3af",fontFamily:"monospace",marginTop:4}}>production system</div>
         </div>
         <div style={{display:"flex",marginBottom:20,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:8,padding:3}}>
           {[["login","Войти"],["register","Регистрация"]].map(([m,l])=>(
@@ -1156,7 +1192,7 @@ function MainApp({currentUser, onLogout}){
   if (loading) return (
     <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,background:"#0a0a0f"}}>
       <div style={{fontSize:48}}>🍇</div>
-      <div style={{fontSize:12,color:"#4b5563",fontFamily:"monospace"}}>Загрузка...</div>
+      <div style={{fontSize:12,color:"#9ca3af",fontFamily:"monospace"}}>Загрузка...</div>
     </div>
   );
 
@@ -1269,18 +1305,18 @@ function MainApp({currentUser, onLogout}){
         {item.slides&&<Badge color="#4b5563">📋 {item.slides.length} сл.</Badge>}
       </div>
       {/* Заказчик → Исполнитель */}
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,fontSize:9,color:"#4b5563"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,fontSize:9,color:"#9ca3af"}}>
         <span style={{background:"#1a1a2e",borderRadius:4,padding:"2px 7px",color:cust?"#a0aec0":"#2d2d44",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90}}>{cust?cust.name:"заказчик"}</span>
-        <span style={{color:"#2d2d44",flexShrink:0}}>→</span>
+        <span style={{color:"#9ca3af",flexShrink:0}}>→</span>
         <span style={{background:"#1a1a2e",borderRadius:4,padding:"2px 7px",color:exec?"#a0aec0":"#2d2d44",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90}}>{exec?exec.name:"исполнитель"}</span>
       </div>
       {/* Дедлайн */}
       {dateStr&&<div style={{fontSize:9,fontFamily:"monospace",color:urgent?"#ef4444":"#4b5563"}}>📅 {dateStr}{daysLeft!==null&&` (${daysLeft>0?daysLeft+"д":"сегодня"})`}</div>}
       <div style={{display:"flex",gap:6,marginTop:5,alignItems:"center"}}>
-        {chatCount>0&&<span style={{fontSize:9,color:"#4b5563"}}>💬 {chatCount}</span>}
+        {chatCount>0&&<span style={{fontSize:9,color:"#9ca3af"}}>💬 {chatCount}</span>}
         {(type==="post_reels"||type==="post_video"||type==="post_carousel")&&<button onClick={e=>{e.stopPropagation();setModal({type:"pub",item:defItem("pub",{title:item.title,project:item.project})});}} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
         {item.archived&&<Badge color="#4b5563">📦 архив</Badge>}
-        <button onClick={e=>{e.stopPropagation();archiveTask(type,item.id);}} title={item.archived?"Разархивировать":"Архивировать"} style={{marginLeft:"auto",background:"transparent",border:"none",color:"#2d2d44",cursor:"pointer",fontSize:10,padding:"0 2px"}}>{item.archived?"↩":"📦"}</button>
+        <button onClick={e=>{e.stopPropagation();archiveTask(type,item.id);}} title={item.archived?"Разархивировать":"Архивировать"} style={{marginLeft:"auto",background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:10,padding:"0 2px"}}>{item.archived?"↩":"📦"}</button>
       </div>
     </div>;
   }
@@ -1293,18 +1329,18 @@ function MainApp({currentUser, onLogout}){
       <div style={{display:"flex",alignItems:"center",gap:2,height:52}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginRight:12}}>
           <div style={{width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🍇</div>
-          <div><div style={{fontSize:14,fontWeight:800}}>{APP_NAME}</div><div style={{fontSize:8,color:"#4b5563",fontFamily:"monospace"}}>production system</div></div>
+          <div><div style={{fontSize:14,fontWeight:800}}>{APP_NAME}</div><div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace"}}>production system</div></div>
         </div>
-        {TABS.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,cursor:"pointer",background:tab===t.id?t.color+"15":"transparent",border:tab===t.id?`1px solid ${t.color}40`:"1px solid transparent",color:tab===t.id?t.color:"#6b7280",fontFamily:"inherit",fontWeight:tab===t.id?700:500,fontSize:12}}>
+        {TABS.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,cursor:"pointer",background:tab===t.id?t.color+"15":"transparent",border:tab===t.id?`1px solid ${t.color}40`:"1px solid transparent",color:tab===t.id?t.color:"#9ca3af",fontFamily:"inherit",fontWeight:tab===t.id?700:500,fontSize:12}}>
           <span style={{fontSize:13}}>{t.icon}</span>{t.label}
-          {t.id!=="summary"&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#4b5563",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
+          {t.id!=="summary"&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
         </button>)}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
           <div style={{display:"flex",alignItems:"center",gap:6,background:"#111118",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px"}}>
             <div style={{width:20,height:20,borderRadius:"50%",background:`linear-gradient(135deg,${currentUser.color||"#8b5cf6"},#7c3aed)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff"}}>{(currentUser.name||currentUser.telegram||"?")[0].toUpperCase()}</div>
             <span style={{fontSize:11,fontWeight:600}}>@{currentUser.telegram}</span>
           </div>
-          <button onClick={onLogout} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px",color:"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>Выйти</button>
+          <button onClick={onLogout} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px",color:"#9ca3af",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>Выйти</button>
         </div>
       </div>
     </div>
@@ -1356,7 +1392,7 @@ function MainApp({currentUser, onLogout}){
         {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES} items={filtPub} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>{const proj=projOf(x.project,projects);return <div onClick={()=>openEdit("pub",x)} style={{background:"#111118",border:"1px solid #1e1e2e",borderLeft:"3px solid #374151",borderRadius:8,padding:"10px 11px",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
           <div style={{fontWeight:700,fontSize:12,marginBottom:4}}>{x.title||"Без названия"}</div>
           <div style={{display:"flex",gap:3}}><Badge color={proj.color}>{proj.label}</Badge></div>
-          {x.planned_date&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginTop:3}}>📅 {x.planned_date.slice(0,10)}</div>}
+          {x.planned_date&&<div style={{fontSize:9,color:"#cbd5e1",fontFamily:"monospace",marginTop:3}}>📅 {x.planned_date.slice(0,10)}</div>}
           {x.file_name&&<div style={{fontSize:9,color:"#a78bfa",marginTop:2}}>📎 {x.file_name}</div>}
         </div>;}}/>}
       </>}
