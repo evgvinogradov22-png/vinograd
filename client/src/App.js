@@ -189,25 +189,20 @@ function MiniChat({taskId, team, currentUser}){
         clearInterval(recTimerRef.current); setRecSec(0);
         const blob = new Blob(recChunksRef.current, { type: mimeType });
         const fname = "voice_" + Date.now() + ".webm";
-        setUploading(true); setUploadName("🎙️ Транскрибирую...");
+        setUploading(true); setUploadName("🎙️ Отправляю...");
         try {
           const fd2 = new FormData();
           fd2.append("file", new File([blob], fname, { type: blob.type }));
-          const tr = await fetch("/api/ai/transcribe", { method:"POST", body:fd2 });
-          const trData = await tr.json();
-          if (tr.ok && trData.text) {
-            setText(p => (p ? p + " " : "") + trData.text);
-            inputRef.current?.focus();
-          } else {
-            const fd3 = new FormData();
-            fd3.append("file", new File([blob], fname, { type: blob.type }));
-            const up = await fetch("/api/upload", { method:"POST", body:fd3 });
-            if (up.ok) {
-              const upD = await up.json();
-              const k = upD.key||"";
-              const dlurl = k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(fname)}` : upD.url;
-              const msgR = await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"🎙️ Голосовое сообщение",file_url:dlurl,file_name:fname}) });
-              if (msgR.ok) { const m=await msgR.json(); setMsgs(p=>[...p,{id:m.id||genId(),user:m.user_id||myId,text:"🎙️ Голосовое сообщение",ts:m.created_at||Date.now(),fname,furl:dlurl}]); }
+          const up = await fetch("/api/upload", { method:"POST", body:fd2 });
+          if (up.ok) {
+            const upD = await up.json();
+            const k = upD.key||"";
+            const dlurl = k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(fname)}` : upD.url;
+            const msgR = await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"",file_url:dlurl,file_name:fname}) });
+            if (msgR.ok) {
+              const m=await msgR.json();
+              setMsgs(p=>[...p,{id:m.id||genId(),user:m.user_id||myId,text:"",ts:m.created_at||Date.now(),fname,furl:dlurl,isVoice:true,voiceBlob:blob}]);
+              setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
             }
           }
         } catch(e2) { setErr("Ошибка записи: " + e2.message); }
@@ -220,6 +215,26 @@ function MiniChat({taskId, team, currentUser}){
   }
   function stopRec() {
     if (mediaRecRef.current && recording) { mediaRecRef.current.stop(); setRecording(false); }
+  }
+  async function transcribeMsg(msgId, furl, fname) {
+    setMsgs(p => p.map(m => m.id===msgId ? {...m, transcribing:true} : m));
+    try {
+      const rb = await fetch(furl);
+      const blob = await rb.blob();
+      const fd = new FormData();
+      fd.append("file", new File([blob], fname||"voice.webm", { type: blob.type||"audio/webm" }));
+      const tr = await fetch("/api/ai/transcribe", { method:"POST", body:fd });
+      const trData = await tr.json();
+      if (tr.ok && trData.text) {
+        setMsgs(p => p.map(m => m.id===msgId ? {...m, transcript:trData.text, transcribing:false} : m));
+        // Save transcript to server as reply
+        await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({user_id:myId, text:"📝 "+trData.text}) });
+      } else {
+        setMsgs(p => p.map(m => m.id===msgId ? {...m, transcribing:false} : m));
+        setErr("Не удалось транскрибировать");
+      }
+    } catch(e) { setMsgs(p => p.map(m => m.id===msgId ? {...m, transcribing:false} : m)); setErr(e.message); }
   }
 
   // mentions
@@ -256,18 +271,29 @@ function MiniChat({taskId, team, currentUser}){
                 {!isMe && <div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace",marginBottom:2}}>@{safeName}</div>}
                 <div style={{background:isMe?"#1e1630":"#1a1a2e",border:"1px solid "+(isMe?"#4c1d9530":"#2d2d44"),borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"6px 10px"}}>
                   {m.text && <div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:700}}>{p}</span>:p)}</div>}
-                  {m.furl && (
-                    <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
-                      <span style={{fontSize:14}}>{fileIcon}</span>
-                      <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
-                      <a href={m.furl} target="_blank" rel="noreferrer"
-                        style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>
-                        ↓
-                      </a>
-                    </div>
-                  )}
+                  {m.furl && (()=>{
+                    const isVoiceFile = (m.fname||"").match(/\.webm$|\.ogg$|\.mp3$|\.m4a$/i) || m.isVoice;
+                    if (isVoiceFile) return (
+                      <div style={{marginTop:m.text?5:0}}>
+                        <audio controls src={m.furl} style={{width:"100%",height:32,borderRadius:6,accentColor:"#8b5cf6"}}/>
+                        {m.transcript && <div style={{marginTop:5,fontSize:10,color:"#d1d5db",background:"#ffffff0a",borderRadius:5,padding:"5px 8px",lineHeight:1.4}}>📝 {m.transcript}</div>}
+                        {!m.transcript && <button onClick={()=>transcribeMsg(m.id,m.furl,m.fname)} disabled={m.transcribing}
+                          style={{marginTop:4,background:"transparent",border:"1px solid #4b5563",borderRadius:5,padding:"2px 8px",color:m.transcribing?"#4b5563":"#9ca3af",cursor:m.transcribing?"not-allowed":"pointer",fontSize:9,fontFamily:"monospace"}}>
+                          {m.transcribing?"⏳ Транскрибирую...":"📝 Транскрибировать"}
+                        </button>}
+                      </div>
+                    );
+                    return (
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
+                        <span style={{fontSize:14}}>{fileIcon}</span>
+                        <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
+                        <a href={m.furl} target="_blank" rel="noreferrer"
+                          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>↓</a>
+                      </div>
+                    );
+                  })()}
                 </div>
-                <div style={{fontSize:7,color:"#6b7280",marginTop:2,textAlign:isMe?"right":"left"}}>{(m.ts&&m.ts>0)?new Date(Number(m.ts)).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
+                <div style={{fontSize:7,color:"#6b7280",marginTop:2,textAlign:isMe?"right":"left"}}>{(()=>{const t=Number(m.ts);return t>1000000000?new Date(t).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""})()}</div>
               </div>
             </div>
           );
@@ -1551,7 +1577,7 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
         </div>
         <input value={m.telegram} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,telegram:e.target.value}:x))} placeholder="@telegram" style={{...SI,marginBottom:6,fontSize:11}}/>
         <textarea value={m.note} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,note:e.target.value}:x))} placeholder="Заметки..." style={{...SI,minHeight:50,resize:"vertical",fontSize:11,lineHeight:1.4,marginBottom:8}}/>
-        {(m.last_active&&m.last_active>0)?<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(Number(m.last_active)).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>:<div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 не заходил</div>}
+        {(()=>{const la=Number(m.last_active);return la>1000000000?<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(la).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>:<div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 не заходил</div>;})()}
 
       </div>)}
     </div>
@@ -1915,7 +1941,7 @@ function MainApp({currentUser, onLogout}){
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:11,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.title}</div>
                     {n.text&&<div style={{fontSize:10,color:"#9ca3af",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.text}</div>}
-                    <div style={{fontSize:9,color:"#4b5563",marginTop:3,fontFamily:"monospace"}}>{typeLabel} · {new Date(n.ts).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}</div>
+                    <div style={{fontSize:9,color:"#4b5563",marginTop:3,fontFamily:"monospace"}}>{typeLabel} · {Number(n.ts)>1000000000?new Date(Number(n.ts)).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
                   </div>
                   {!n.read&&<div style={{width:6,height:6,borderRadius:"50%",background:"#8b5cf6",flexShrink:0,marginTop:4}}/>}
                 </div>;
