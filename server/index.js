@@ -12,7 +12,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/cl
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
-const INVITE_PASSWORD = process.env.INVITE_PASSWORD || "2026";
+const INVITE_PASSWORD = process.env.INVITE_PASSWORD || "vinograd2026";
 
 // ── PostgreSQL ────────────────────────────────────────────────────────────────
 const pool = new Pool({
@@ -104,7 +104,7 @@ async function initDb() {
     )
   `);
 
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tg_chat_id TEXT DEFAULT ''`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT DEFAULT ''`); // ensure column exists
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
