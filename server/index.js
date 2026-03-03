@@ -466,6 +466,108 @@ app.get("/api/download", async (req, res) => {
 const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
 
 // ════════════════════════════════════════════════════════════════════════════════
+// POST MY POST INTEGRATION
+// ════════════════════════════════════════════════════════════════════════════════
+
+const PMP_TOKEN = process.env.POSTMYPOST_TOKEN || "";
+const PMP_BASE  = "https://api.postmypost.io/v4.1";
+
+// Helper — authenticated PMP request
+async function pmpFetch(path, method = "GET", body = null) {
+  if (!PMP_TOKEN) throw new Error("POSTMYPOST_TOKEN не задан в переменных окружения Railway");
+  const opts = {
+    method,
+    headers: { "Authorization": `Bearer ${PMP_TOKEN}`, "Content-Type": "application/json" },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(PMP_BASE + path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.message || data?.error || `HTTP ${r.status}`);
+  return data;
+}
+
+// GET /api/pmp/projects — list all PMP projects (to map Виноград project → PMP project)
+app.get("/api/pmp/projects", async (req, res) => {
+  try {
+    const data = await pmpFetch("/projects");
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/pmp/channels?project_id=xxx — channels (accounts) in a PMP project
+app.get("/api/pmp/channels", async (req, res) => {
+  try {
+    const qs = req.query.project_id ? `?project_id=${req.query.project_id}` : "";
+    const data = await pmpFetch(`/channels${qs}`);
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/pmp/upload — upload a file by URL to PMP project, returns file_id
+// PMP file upload: POST /files/init { project_id, url } → { file_id, upload_url }
+// Then: POST /files/complete { file_id }
+app.post("/api/pmp/upload", async (req, res) => {
+  try {
+    const { file_url, file_name, pmp_project_id } = req.body;
+    if (!file_url || !pmp_project_id) return res.status(400).json({ error: "file_url и pmp_project_id обязательны" });
+
+    // Build absolute public URL for PMP to fetch
+    const appUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : (process.env.APP_URL || "");
+    const absoluteUrl = file_url.startsWith("http") ? file_url : appUrl + file_url;
+
+    // Step 1: Init upload
+    const init = await pmpFetch("/files/init", "POST", {
+      project_id: Number(pmp_project_id),
+      url: absoluteUrl,
+    });
+    const fileId = init?.data?.id || init?.id;
+    if (!fileId) throw new Error("PMP не вернул file_id: " + JSON.stringify(init));
+
+    // Step 2: Complete (for URL-based uploads PMP fetches the file itself, just confirm)
+    try {
+      await pmpFetch("/files/complete", "POST", { file_id: fileId });
+    } catch(e) { /* some versions auto-complete */ }
+
+    res.json({ file_id: fileId, raw: init });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/pmp/publish — create publication in PMP
+// Body: { pmp_project_id, channel_ids[], post_at, text, hashtags, file_ids[], pub_type }
+app.post("/api/pmp/publish", async (req, res) => {
+  try {
+    const { pmp_project_id, channel_ids, post_at, text, hashtags, file_ids, pub_type } = req.body;
+    if (!pmp_project_id || !channel_ids?.length) {
+      return res.status(400).json({ error: "pmp_project_id и channel_ids обязательны" });
+    }
+
+    const content = [text, hashtags].filter(Boolean).join("\n\n");
+
+    // Map pub_type → PMP publication_type
+    // 1=post, 2=story, 3=reels, 4=carousel (may vary — use 1 as safe default)
+    const typeMap = { video: 3, carousel: 1, photo: 1, story: 2, reels: 3 };
+    const pubType = typeMap[pub_type] || 1;
+
+    const payload = {
+      project_id: Number(pmp_project_id),
+      post_at: post_at || null,        // null = publish immediately
+      account_ids: channel_ids.map(Number),
+      publication_status: 1,            // 1 = pending/scheduled
+      details: channel_ids.map(id => ({
+        account_id: Number(id),
+        publication_type: pubType,
+        content,
+        ...(file_ids?.length ? { file_ids: file_ids.map(Number) } : {}),
+      })),
+    };
+
+    const result = await pmpFetch("/publications", "POST", payload);
+    res.json({ ok: true, publication_id: result?.data?.id || result?.id, raw: result });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
 // TELEGRAM NOTIFICATIONS
 // ════════════════════════════════════════════════════════════════════════════════
 
