@@ -64,15 +64,16 @@ function MiniChat({taskId, team, currentUser}){
 
   // ── load history ────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!taskId) return;
+    if (!taskId || taskId === "undefined") return;
     fetch(`/api/chat/${taskId}`)
       .then(r => r.ok ? r.json() : [])
       .then(rows => {
+        if (!Array.isArray(rows)) return;
         setMsgs(rows.map(r => ({
-          id:    r.id,
-          user:  r.user_id,
+          id:    r.id    || genId(),
+          user:  r.user_id || "",
           text:  r.text  || "",
-          ts:    r.created_at,
+          ts:    r.created_at || Date.now(),
           fname: r.file_name || "",
           furl:  r.file_url  || "",
         })));
@@ -85,7 +86,7 @@ function MiniChat({taskId, team, currentUser}){
   async function send() {
     const t = text.trim(); if (!t) return;
     setText(""); setShowM(false);
-    if (!taskId) { setErr("Сначала сохраните задачу"); return; }
+    if (!taskId || taskId === "undefined") { setErr("Сначала сохраните задачу чтобы начать чат"); return; }
     try {
       const r = await fetch(`/api/chat/${taskId}`, {
         method: "POST",
@@ -104,7 +105,7 @@ function MiniChat({taskId, team, currentUser}){
     const files = Array.from(e.target.files);
     e.target.value = "";
     if (!files.length) return;
-    if (!taskId) { setErr("Сначала сохраните задачу"); return; }
+    if (!taskId || taskId === "undefined") { setErr("Сначала сохраните задачу, потом загружайте файлы"); return; }
     setErr("");
     for (const f of files) {
       setProgress({ name: f.name, pct: 20 });
@@ -128,7 +129,7 @@ function MiniChat({taskId, team, currentUser}){
         });
         if (!msg.ok) throw new Error("Ошибка отправки сообщения");
         const m = await msg.json();
-        setMsgs(p => [...p, { id:m.id, user:m.user_id, text:"", ts:m.created_at, fname:f.name, furl:url }]);
+        setMsgs(p => [...p, { id:m.id, user:m.user_id, text:"", ts:m.created_at, fname:f.name, furl:dlurl }]);
         setProgress({ name: f.name, pct: 100 });
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
       } catch(e) {
@@ -165,7 +166,7 @@ function MiniChat({taskId, team, currentUser}){
           const name = nm(m.user);
           return (
             <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end"}}>
-              <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{name[0].toUpperCase()}</div>
+              <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(name||"?")[0].toUpperCase()}</div>
               <div style={{maxWidth:"80%"}}>
                 {!isMe && <div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace",marginBottom:2}}>@{name}</div>}
                 <div style={{background:isMe?"#1e1630":"#1a1a2e",border:"1px solid "+(isMe?"#4c1d9530":"#2d2d44"),borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"6px 10px"}}>
@@ -355,12 +356,13 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-function Modal({title,color,onClose,children}){
+function Modal({title,color,onClose,onSave,children}){
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.87)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
       <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,width:"min(700px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
-        <div style={{padding:"14px 18px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",flexShrink:0}}>
-          <div style={{flex:1,fontSize:14,fontWeight:800,color}}>{title}</div>
+        <div style={{padding:"12px 18px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <div style={{flex:1,fontSize:13,fontWeight:800,color}}>{title}</div>
+          {onSave&&<button onClick={onSave} style={{background:`linear-gradient(135deg,${color},${color}bb)`,border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button>}
           <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#9ca3af",fontSize:14}}>×</button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>{children}</div>
@@ -424,9 +426,10 @@ function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,sho
 }
 
 // ── Forms ─────────────────────────────────────────────────────────────────────
-function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
+function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,refs:item.refs||[]}); const [ai,setAi]=useState(false); const [newRef,setNewRef]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   async function genScript(){
     setAi(true);
     try{
@@ -438,6 +441,7 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
     setAi(false);
   }
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#8b5cf6,#8b5cf6bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ТИП КОНТЕНТА"><input value={d.type} onChange={e=>u("type",e.target.value)} placeholder="Рилс, Клип..." style={SI}/></Field>
@@ -479,10 +483,12 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
   </div>;
 }
 
-function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
+function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,checklist:[...(item.checklist||[])],equipment:[...(item.equipment||[])],actors:[...(item.actors||[])]}); const [ne,setNe]=useState(""); const [na,setNa]=useState(""); const [nc,setNc]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#3b82f6,#3b82f6bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ТИП КОНТЕНТА"><input value={d.type} onChange={e=>u("type",e.target.value)} style={SI}/></Field>
@@ -583,10 +589,86 @@ function FinalFileOrLink({d,u,fileRef}){
   </div>;
 }
 
-function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
-  const [d,setD]=useState({...item}); const [tr,setTr]=useState(false); const [gb,setGb]=useState(false);
-  const [sourceFile,setSourceFile]=useState(null); const [err,setErr]=useState("");
-  const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
+// ── SourceInputs — upload files OR paste links ──────────────────────────────
+function SourceInputs({d, u}){
+  const [mode, setMode] = useState(d.source_url||d.source_name ? "file" : d.source_link ? "link" : "file");
+  const [nl, setNl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
+  const fileRef = useRef(null);
+  const sources = d.sources || (d.source_name ? [{name:d.source_name, url:d.source_url||""}] : []);
+
+  async function addFile(e) {
+    const files = Array.from(e.target.files); e.target.value = "";
+    if (!files.length) return;
+    setUploading(true); setUploadErr("");
+    for (const f of files) {
+      try {
+        const fd = new FormData(); fd.append("file", f);
+        const r = await fetch("/api/upload", {method:"POST", body:fd});
+        if (!r.ok) throw new Error(await r.text());
+        const up = await r.json();
+        const k = up.key||"";
+        const dlurl = k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}` : up.url;
+        const newSources = [...sources, {name:f.name, url:dlurl}];
+        u("sources", newSources);
+        // Back-compat: set source_name/source_url to first file
+        if (newSources.length === 1) { u("source_name", f.name); u("source_url", dlurl); }
+      } catch(e) { setUploadErr(e.message); }
+    }
+    setUploading(false);
+  }
+
+  function addLink() {
+    if (!nl.trim()) return;
+    const newSources = [...sources, {name:nl, url:nl}];
+    u("sources", newSources);
+    if (newSources.length === 1) { u("source_link", nl); }
+    setNl("");
+  }
+
+  function removeSource(i) {
+    const newSources = sources.filter((_,j)=>j!==i);
+    u("sources", newSources);
+    if (newSources.length === 0) { u("source_name",""); u("source_url",""); u("source_link",""); }
+    else { u("source_name", newSources[0].name); u("source_url", newSources[0].url||""); }
+  }
+
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+      <span style={LB}>ИСХОДНИК (ВИДЕО)</span>
+      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+        <button onClick={()=>setMode("file")} style={{background:mode==="file"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="file"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>📁 Файл</button>
+        <button onClick={()=>setMode("link")} style={{background:mode==="link"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="link"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>🔗 Ссылка</button>
+      </div>
+    </div>
+    {/* Existing sources */}
+    {sources.map((s,i)=>(
+      <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:7,padding:"6px 10px",marginBottom:5}}>
+        <span>{s.url&&!s.url.startsWith("http")?"📁":"🔗"}</span>
+        <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+        {s.url&&<a href={s.url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none"}}>↓</a>}
+        <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
+      </div>
+    ))}
+    {/* Add new */}
+    {mode==="file"&&<>
+      <input ref={fileRef} type="file" accept="video/*,audio/*" multiple style={{display:"none"}} onChange={addFile}/>
+      <button onClick={()=>fileRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:uploading?"#f59e0b":"#9ca3af",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 "+ (sources.length?"+ Ещё файл":"Загрузить исходник")}</button>
+      {uploadErr&&<div style={{fontSize:10,color:"#ef4444",marginTop:4}}>{uploadErr}</div>}
+    </>}
+    {mode==="link"&&<div style={{display:"flex",gap:6,marginTop:4}}>
+      <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://drive.google.com/..." onKeyDown={e=>e.key==="Enter"&&addLink()} style={{...SI,flex:1,fontSize:11}}/>
+      <button onClick={addLink} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 14px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+    </div>}
+  </div>;
+}
+
+function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
+  const [d,setD]=useState({...item,sources:item.sources||[]}); const [tr,setTr]=useState(false); const [gb,setGb]=useState(false);
+  const [err,setErr]=useState("");
+  const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   async function transcribe(){
     if(!sourceFile&&!d.source_url){setErr("Сначала загрузите исходник");return;}
     setTr(true);setErr("");
@@ -622,6 +704,7 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser})
     setGb(false);
   }
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#ec4899,#ec4899bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
@@ -630,37 +713,13 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser})
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
     </div>
-    <Field label="ИСХОДНИК (ВИДЕО)">
-      <input ref={fileRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={async e=>{
-        const f=e.target.files[0]; if(!f) return;
-        setSourceFile(f); u("source_name",f.name); u("source_url","");
-        setErr("⏳ Загрузка в облако...");
-        try{
-          const fd=new FormData(); fd.append("file",f);
-          const r=await fetch("/api/upload",{method:"POST",body:fd});
-          if(!r.ok) throw new Error(await r.text());
-          const upData=await r.json();
-          const k=upData.key||""; u("source_url", k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upData.url); setErr("");
-        }catch(e){setErr("Ошибка загрузки: "+e.message);}
-      }}/>
-      {d.source_name
-        ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-            <span>🎬</span>
-            <span style={{fontSize:12,color:"#10b981",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.source_name}</span>
-            {d.source_url
-              ?<a href={d.source_url} download={d.source_name} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
-              :<span style={{fontSize:9,color:"#f59e0b"}}>⏳ загрузка...</span>}
-            <button onClick={()=>{setSourceFile(null);u("source_name","");u("source_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
-          </div>
-        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить исходник (видео или аудио)</button>}
-      {err&&<div style={{fontSize:11,color:"#ef4444",padding:"6px 10px",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,marginTop:4}}>{err}</div>}
-    </Field>
+    <SourceInputs d={d} u={u}/>
     
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Описание задачи..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <span style={LB}>ТРАНСКРИПЦИЯ (Whisper AI)</span>
-        <Btn onClick={transcribe} disabled={tr||!d.source_name} color="#7c3aed">{tr?"⏳ Транскрибирую...":"🎙️ Транскрибировать"}</Btn>
+        <Btn onClick={transcribe} disabled={tr||(!d.source_name&&!(d.sources&&d.sources.length))} color="#7c3aed">{tr?"⏳ Транскрибирую...":"🎙️ Транскрибировать"}</Btn>
       </div>
       <textarea value={d.transcript} onChange={e=>u("transcript",e.target.value)} placeholder="Загрузите исходник и нажмите кнопку..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/>
     </div>
@@ -684,10 +743,12 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser})
   </div>;
 }
 
-function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
+function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,source_links:item.source_links||[]}); const [nl,setNl]=useState("");
   const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#3b82f6,#3b82f6bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
@@ -706,6 +767,7 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser})
         <button onClick={()=>{if(nl){u("source_links",[...d.source_links,nl]);setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
       </div>
     </Field>
+    <Field label="КОЛ-ВО ИТОГОВЫХ ВИДЕО"><input type="number" min="1" value={d.video_count||1} onChange={e=>u("video_count",parseInt(e.target.value)||1)} style={{...SI,width:100}}/></Field>
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Подробное ТЗ..." style={{...SI,minHeight:100,resize:"vertical",lineHeight:1.5}}/></Field>
     <FinalFileOrLink d={d} u={u} fileRef={fileRef}/>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
@@ -748,11 +810,13 @@ function SlideImageUpload({slide,idx,onUploaded}){
   </div>;
 }
 
-function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
+function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,slides:[...(item.slides||[{id:genId(),text:"",img:"",img_name:""}])]}); const [newSlide,setNewSlide]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   const fileRef=useRef(null);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#a78bfa,#a78bfabb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
@@ -774,7 +838,11 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
           </div>
         ))}
       </div>
-      <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
+      <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:"",img_name:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
+      {d.slides.some(s=>s.img)&&<div style={{marginTop:8,padding:"8px 10px",background:"#0d1a0d",border:"1px solid #10b98130",borderRadius:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:"#10b981",fontWeight:700}}>📥 Скачать картинки:</span>
+        {d.slides.map((s,i)=>s.img?<a key={i} href={s.img} target="_blank" rel="noreferrer" style={{background:"#1a2e1a",border:"1px solid #10b98140",borderRadius:5,padding:"3px 10px",color:"#10b981",textDecoration:"none",fontSize:10,fontWeight:700}}>↓ {i+1}</a>:null)}
+      </div>}
     </Field>
     <Field label="ТЗ ДЛЯ ДИЗАЙНЕРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Стиль, цвета, шрифты, особенности оформления..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/></Field>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
@@ -790,9 +858,10 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
   </div>;
 }
 
-function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
+function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
   const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
+  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   async function genCap(){
     setAiCap(true);
     try{
@@ -805,9 +874,16 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser}){
     setAiCap(false);
   }
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#10b981,#10b981bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+      <Field label="ТИП ПУБЛИКАЦИИ"><select value={d.pub_type||"video"} onChange={e=>u("pub_type",e.target.value)} style={SI}>
+        <option value="video">🎬 Видео / Рилс</option>
+        <option value="carousel">🖼 Карусель</option>
+        <option value="photo">📸 Фото</option>
+        <option value="story">📱 Сторис</option>
+      </select></Field>
     </div>
     <StatusRow statuses={PUB_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
     <Field label="ДАТА ПУБЛИКАЦИИ"><input type="datetime-local" value={d.planned_date} onChange={e=>u("planned_date",e.target.value)} style={SI}/></Field>
@@ -1261,6 +1337,7 @@ function MainApp({currentUser, onLogout}){
   const [postCarousels,setPostCarousels]=useState([]);
   const [pubItems,setPubItems]=useState([]);
   const [modal,setModal]=useState(null);
+  const saveFnRef = useRef(null);
   const [loading,setLoading]=useState(true);
 
   // ── Load data from API ──────────────────────────────────────────────────────
@@ -1279,7 +1356,7 @@ function MainApp({currentUser, onLogout}){
           const d = t.data || {};
           return {
             id: t.id, project: t.project_id, status: t.status, title: t.title,
-            archived: t.archived || false, completed_at: t.completed_at || "", chat: [],
+            completed_at: t.completed_at || "", chat: [],
             // safe array defaults to prevent crashes
             refs:         d.refs         || [],
             equipment:    d.equipment    || [],
@@ -1288,6 +1365,7 @@ function MainApp({currentUser, onLogout}){
             source_links: d.source_links || [],
             slides:       d.slides       || [],
             ...d,
+            archived: t.archived || false, // column value always wins over data JSON
           };
         };
         setPreItems(tasks.filter(t=>t.type==="pre").map(expand));
@@ -1483,6 +1561,8 @@ function MainApp({currentUser, onLogout}){
             project:item.project,
             file_name:item.final_file_name||item.source_name||"",
             file_url:item.final_file_url||item.source_url||"",
+            pub_type:type==="post_carousel"?"carousel":"video",
+            slides:type==="post_carousel"?(item.slides||[]):[],
           });
           setModal({type:"pub",item:pubItem});
         }} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
@@ -1574,11 +1654,11 @@ function MainApp({currentUser, onLogout}){
     </div>
 
     {/* MODALS */}
-    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
   </div>;
 }
