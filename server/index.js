@@ -130,6 +130,14 @@ async function initDb() {
     read BOOLEAN DEFAULT FALSE
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS training (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    url TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    category TEXT DEFAULT 'Другое',
+    created_at BIGINT DEFAULT 0
+  )`);
 
   console.log("✅ Database ready");
 }
@@ -238,6 +246,34 @@ app.post("/api/notifications/read", async (req, res) => {
     else await q("DELETE FROM notifications WHERE user_id=$1", [uid]);
     res.json({ ok: true });
   } catch(e) { res.json({ ok: false }); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// TRAINING
+// ════════════════════════════════════════════════════════════════════════════════
+
+app.get("/api/training", async (req, res) => {
+  try { res.json(await q("SELECT * FROM training ORDER BY created_at DESC")); }
+  catch(e) { res.json([]); }
+});
+
+app.post("/api/training", async (req, res) => {
+  const { title, url, description, category } = req.body;
+  if (!title) return res.status(400).json({ error: "Нет названия" });
+  const id = "tr_" + uuidv4().replace(/-/g,"").slice(0,10);
+  const now = Date.now();
+  try {
+    await q("INSERT INTO training(id,title,url,description,category,created_at) VALUES($1,$2,$3,$4,$5,$6)",
+      [id, title, url||"", description||"", category||"Другое", now]);
+    res.json({ id, title, url, description, category, created_at: now });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/training/:id", async (req, res) => {
+  try {
+    await q("DELETE FROM training WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
