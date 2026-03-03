@@ -1791,6 +1791,21 @@ function ProjectsView({projects,setProjects}){
   </div>;
 }
 
+function AvatarUpload({url, color, letter, size, radius, onUpload}){
+  const ref = useRef(null);
+  const [hover,setHover] = useState(false);
+  return(
+    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
+      <div onClick={()=>ref.current?.click()} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+        style={{width:size,height:size,borderRadius:radius,background:url?"transparent":color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.4,fontWeight:800,color:"#fff",cursor:"pointer",overflow:"hidden"}}>
+        {url?<img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:letter}
+        {hover&&<div style={{position:"absolute",inset:0,background:"#00000080",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,borderRadius:radius}}>📷</div>}
+      </div>
+      <input ref={ref} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)onUpload(f);e.target.value="";}}/>
+    </div>
+  );
+}
+
 function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading=false}){
   const [nl,setNl]=useState("");
   const loadingPmp=pmpLoading;
@@ -1803,25 +1818,7 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
 
   return <div style={{background:"#111118",border:'1px solid #1e1e2e',borderTop:'3px solid #2d2d44',borderRadius:12,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-            {(()=>{
-              const aRef = React.useRef();
-              async function uploadAvatar(e) {
-                const f = e.target.files[0]; if(!f) return;
-                const fd = new FormData(); fd.append("file", f);
-                const r = await fetch("/api/avatar/project/"+proj.id, {method:"POST",body:fd});
-                if(r.ok){ const {url}=await r.json(); setProjects(p=>p.map(x=>x.id===proj.id?{...x,avatar_url:url}:x)); }
-              }
-              return <>
-                <div onClick={()=>aRef.current?.click()} title="Загрузить логотип"
-                  style={{width:34,height:34,borderRadius:9,background:proj.avatar_url?"transparent":proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,cursor:"pointer",overflow:"hidden",position:"relative"}}
-                  onMouseEnter={e=>e.currentTarget.querySelector(".ov")&&(e.currentTarget.querySelector(".ov").style.opacity=1)}
-                  onMouseLeave={e=>e.currentTarget.querySelector(".ov")&&(e.currentTarget.querySelector(".ov").style.opacity=0)}>
-                  {proj.avatar_url?<img src={proj.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:proj.label[0]}
-                  <div className="ov" style={{position:"absolute",inset:0,background:"#00000080",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,opacity:0,transition:"opacity 0.15s"}}>📷</div>
-                </div>
-                <input ref={aRef} type="file" accept="image/*" style={{display:"none"}} onChange={uploadAvatar}/>
-              </>;
-            })()}
+<AvatarUpload url={proj.avatar_url} color={proj.color} letter={(proj.label||"?")[0]} size={34} radius={9} onUpload={async f=>{const fd=new FormData();fd.append("file",f);const r=await fetch("/api/avatar/project/"+proj.id,{method:"POST",body:fd});if(r.ok){const {url}=await r.json();setProjects(p=>p.map(x=>x.id===proj.id?{...x,avatar_url:url}:x));}}}/>
             <input value={proj.label} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,label:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{label:e.target.value}).catch(()=>{})} style={{...SI,flex:1,padding:"4px 8px",fontSize:13,fontWeight:700}}/>
             <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
             <button onClick={async()=>{if(!window.confirm("Удалить проект «"+proj.label+"»? Это действие нельзя отменить.")) return; try{await api.deleteProject(proj.id);setProjects(p=>p.filter(x=>x.id!==proj.id));}catch(e){alert("Ошибка: "+e.message);}}} style={{background:"transparent",border:"1px solid #ef444440",borderRadius:6,padding:"4px 8px",color:"#ef4444",cursor:"pointer",fontSize:11}}>🗑</button>
@@ -1896,25 +1893,7 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
       {teamMembers.map(m=><div key={m.id} style={{background:"#111118",border:`1px solid ${m.color}25`,borderTop:`3px solid ${m.color}`,borderRadius:12,padding:"14px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          {(()=>{
-            const aRef2 = React.useRef();
-            async function uploadTeamAvatar(e) {
-              const f = e.target.files[0]; if(!f) return;
-              const fd = new FormData(); fd.append("file",f);
-              const r = await fetch("/api/avatar/user/"+m.id,{method:"POST",body:fd});
-              if(r.ok){const {url}=await r.json();setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,avatar_url:url}:x));}
-            }
-            return <>
-              <div onClick={()=>aRef2.current?.click()} title="Загрузить фото"
-                style={{width:40,height:40,borderRadius:"50%",background:m.avatar_url?"transparent":`linear-gradient(135deg,${m.color},${m.color}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0,cursor:"pointer",overflow:"hidden",position:"relative"}}
-                onMouseEnter={e=>e.currentTarget.querySelector(".ov2")&&(e.currentTarget.querySelector(".ov2").style.opacity=1)}
-                onMouseLeave={e=>e.currentTarget.querySelector(".ov2")&&(e.currentTarget.querySelector(".ov2").style.opacity=0)}>
-                {m.avatar_url?<img src={m.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:(m.name[0]||"?").toUpperCase()}
-                <div className="ov2" style={{position:"absolute",inset:0,background:"#00000080",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,opacity:0,transition:"opacity 0.15s"}}>📷</div>
-              </div>
-              <input ref={aRef2} type="file" accept="image/*" style={{display:"none"}} onChange={uploadTeamAvatar}/>
-            </>;
-          })()}
+<AvatarUpload url={m.avatar_url} color={m.color} letter={(m.name||"?")[0].toUpperCase()} size={40} radius="50%" onUpload={async f=>{const fd=new FormData();fd.append("file",f);const r=await fetch("/api/avatar/user/"+m.id,{method:"POST",body:fd});if(r.ok){const {url}=await r.json();setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,avatar_url:url}:x));}}}/>
           <div style={{flex:1}}>
             <input value={m.name} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,name:e.target.value}:x))} onBlur={e=>isDirector&&api.updateUser(m.id,{name:e.target.value}).catch(()=>{})} readOnly={!isDirector} style={{...SI,padding:"3px 7px",fontSize:13,fontWeight:700,marginBottom:3,opacity:isDirector?1:0.7}}/>
             <select value={m.role} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,role:e.target.value}:x))} disabled={!isDirector} style={{...SI,padding:"2px 7px",fontSize:10,opacity:isDirector?1:0.7}}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select>
@@ -1931,6 +1910,25 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
 }
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
+
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  componentDidCatch(e, info) { console.error("[ErrorBoundary]", e, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{padding:40,color:"#ef4444",fontFamily:"monospace"}}>
+          <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>⚠️ Ошибка компонента</div>
+          <div style={{fontSize:12,color:"#9ca3af",marginBottom:12}}>{this.state.error?.message}</div>
+          <button onClick={()=>this.setState({error:null})} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:6,padding:"6px 14px",color:"#f0eee8",cursor:"pointer",fontFamily:"inherit"}}>↩ Назад</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App(){
   // ── Auth ──────────────────────────────────────────────────────────────────
   const [currentUser, setCurrentUser] = useState(() => {
@@ -2166,6 +2164,17 @@ function MainApp({currentUser, onLogout}){
   }
   function close(){ setModal(null); }
 
+  async function toggleStar(type, item){
+    const newVal = !item.starred;
+    // optimistic update
+    const [,setter] = useTaskStore(type, stores);
+    setter(p=>p.map(x=>x.id===item.id?{...x,starred:newVal}:x));
+    try {
+      const { id, project, status, title, chat, archived, ...rest } = {...item, starred:newVal};
+      await api.updateTask(id, { type, title:title||"", project_id:project, status, archived:archived||false, data:{...rest,starred:newVal} });
+    } catch(e){ console.error("toggleStar error:",e); }
+  }
+
   async function save(type,d){
     try {
       const { id, project, status, title, chat, archived, ...rest } = d;
@@ -2236,7 +2245,7 @@ function MainApp({currentUser, onLogout}){
       onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
       <div style={{display:"flex",alignItems:"flex-start",gap:5,marginBottom:5}}>
         <div style={{fontWeight:700,fontSize:12,flex:1}}>{item.title||"Без названия"}</div>
-        {type==="pub"&&<button onClick={e=>{e.stopPropagation();save(type,{...item,starred:!item.starred});}} title="Залётный рилс"
+        {type==="pub"&&<button onClick={e=>{e.stopPropagation();toggleStar(type,item);}} title="Залётный рилс"
           style={{background:"transparent",border:"none",cursor:"pointer",fontSize:15,padding:0,flexShrink:0,color:item.starred?"#f59e0b":"#2d2d44",lineHeight:1}}
           onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#6b7280"}
           onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#f59e0b":"#2d2d44"}>★</button>}
@@ -2282,7 +2291,7 @@ function MainApp({currentUser, onLogout}){
     </div>;
   }
 
-  const cnt={pre:preItems.length,prod:prodItems.length,post:postReels.length+postVideo.length+postCarousels.length,pub:pubItems.length,summary:0,projects:activeProjs.length,team:teamMembers.length};
+  const cnt={pre:preItems.length,prod:prodItems.length,post:postReels.length+postVideo.length+postCarousels.length,pub:pubItems.length,summary:0,analytics:0,base:0};
 
   return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",flexDirection:"column",overflow:"hidden"}}>
     {/* TOP NAV — no filters, no add button */}
@@ -2294,7 +2303,7 @@ function MainApp({currentUser, onLogout}){
         </div>
         {TABS.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,cursor:"pointer",background:tab===t.id?t.color+"15":"transparent",border:tab===t.id?`1px solid ${t.color}40`:"1px solid transparent",color:tab===t.id?t.color:"#9ca3af",fontFamily:"inherit",fontWeight:tab===t.id?700:500,fontSize:12}}>
           <span style={{fontSize:13}}>{t.icon}</span>{t.label}
-          {t.id!=="summary"&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
+          {!["summary","analytics","base"].includes(t.id)&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
         </button>)}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,position:"relative"}}>
           {/* 🔔 Bell */}
@@ -2398,7 +2407,7 @@ function MainApp({currentUser, onLogout}){
 
       {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects}/>}
-      {tab==="base"&&<BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/>}
+      {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
 
     {/* MODALS */}
