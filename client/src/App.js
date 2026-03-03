@@ -116,9 +116,11 @@ function MiniChat({taskId, team, currentUser}){
         if (!up.ok) throw new Error("Ошибка загрузки: " + await up.text());
         const upData = await up.json();
         const url  = upData.url;
-        const dlurl = upData.dlurl || url;
+        const key  = upData.key || "";
         if (!url) throw new Error("Сервер не вернул ссылку");
         setProgress({ name: f.name, pct: 95 });
+        // Store download url as /api/download?key=...&name=...
+        const dlurl = key ? `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(f.name)}` : url;
         const msg = await fetch(`/api/chat/${taskId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -578,7 +580,7 @@ function PostReelsForm({item,onSave,onClose,projects,team,currentUser}){
           const r=await fetch("/api/upload",{method:"POST",body:fd});
           if(!r.ok) throw new Error(await r.text());
           const upData=await r.json();
-          u("source_url", upData.dlurl||upData.url); setErr("");
+          const k=upData.key||""; u("source_url", k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upData.url); setErr("");
         }catch(e){setErr("Ошибка загрузки: "+e.message);}
       }}/>
       {d.source_name
@@ -668,7 +670,7 @@ function SlideImageUpload({slide,idx,onUploaded}){
     try{
       const fd=new FormData(); fd.append("file",f);
       const r=await fetch("/api/upload",{method:"POST",body:fd});
-      if(r.ok){const d=await r.json();onUploaded(d.dlurl||d.url,f.name);}
+      if(r.ok){const upD=await r.json();const k=upD.key||"";onUploaded(k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upD.url,f.name);}
     }catch{}
     setLoading(false); e.target.value="";
   }
@@ -759,7 +761,7 @@ function PubForm({item,onSave,onClose,projects,team,currentUser}){
     </div>
     <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"monospace",fontSize:11}}/></Field>
     <Field label="ФАЙЛ / МЕДИА">
-      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files[0];if(f){u("file_name",f.name);const fd=new FormData();fd.append("file",f);const r=await fetch("/api/upload",{method:"POST",body:fd}).catch(()=>null);if(r?.ok){const d=await r.json();u("file_url",d.dlurl||d.url);}}}}/>
+      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files[0];if(f){u("file_name",f.name);const fd=new FormData();fd.append("file",f);const r=await fetch("/api/upload",{method:"POST",body:fd}).catch(()=>null);if(r?.ok){const upD=await r.json();const k=upD.key||"";u("file_url",k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upD.url);}}}}/>
       {d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.file_name}</span>
@@ -1282,16 +1284,42 @@ function MainApp({currentUser, onLogout}){
     const proj=activeProjs[0]?.id||"brandx";
     const base={pre:{id:genId(),title:"",type:"Сценарий",project:proj,status:"idea",brief:"",script:"",refs:[],deadline:"",scriptwriter:"",producer:"",chat:[]},
       prod:{id:genId(),title:"",type:"Рилс",project:proj,status:"planned",location:"",equipment:[],actors:[],shoot_date:"",checklist:[],producer:"",operator:"",chat:[]},
-      post_reels:{id:genId(),title:"",project:proj,status:"not_started",source_name:"",transcript:"",tz:"",birolls:"",final_link:"",producer:"",editor:"",chat:[]},
-      post_video:{id:genId(),title:"",project:proj,status:"not_started",source_links:[],tz:"",final_link:"",producer:"",editor:"",chat:[]},
-      post_carousel:{id:genId(),title:"",project:proj,status:"not_started",slides:[{id:genId(),text:"",img:""}],cover_text:"",tz:"",final_link:"",producer:"",designer:"",chat:[]},
+      post_reels:{id:genId(),title:"",project:proj,status:"not_started",source_name:"",source_url:"",transcript:"",tz:"",birolls:"",final_link:"",post_deadline:"",producer:"",editor:"",chat:[]},
+      post_video:{id:genId(),title:"",project:proj,status:"not_started",source_links:[],tz:"",final_link:"",post_deadline:"",producer:"",editor:"",chat:[]},
+      post_carousel:{id:genId(),title:"",project:proj,status:"not_started",slides:[{id:genId(),text:"",img:"",img_name:""}],cover_text:"",tz:"",final_link:"",post_deadline:"",producer:"",designer:"",chat:[]},
       pub:{id:genId(),title:"",project:proj,status:"draft",planned_date:"",caption:"",hashtags:"",producer:"",file_name:"",chat:[]},
     };
     return {...base[type],...extra};
   }
 
   function openNew(type,extra={}){ setModal({type,item:defItem(type,extra)}); }
-  function openEdit(type,item){ setModal({type,item:{...item}}); }
+  function openEdit(type,item){
+    const safe={
+      refs:         item.refs         ?? [],
+      equipment:    item.equipment    ?? [],
+      actors:       item.actors       ?? [],
+      checklist:    item.checklist    ?? [],
+      source_links: item.source_links ?? [],
+      slides:       item.slides?.length ? item.slides : [{id:genId(),text:"",img:"",img_name:""}],
+      tz:           item.tz           ?? "",
+      transcript:   item.transcript   ?? "",
+      birolls:      item.birolls      ?? "",
+      final_link:   item.final_link   ?? "",
+      source_name:  item.source_name  ?? "",
+      source_url:   item.source_url   ?? "",
+      cover_text:   item.cover_text   ?? "",
+      caption:      item.caption      ?? "",
+      hashtags:     item.hashtags     ?? "",
+      file_name:    item.file_name    ?? "",
+      file_url:     item.file_url     ?? "",
+      brief:        item.brief        ?? "",
+      script:       item.script       ?? "",
+      location:     item.location     ?? "",
+      post_deadline:item.post_deadline?? "",
+      deadline:     item.deadline     ?? "",
+    };
+    setModal({type, item:{...item,...safe}});
+  }
   function close(){ setModal(null); }
 
   async function save(type,d){
