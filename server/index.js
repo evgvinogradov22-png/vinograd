@@ -12,7 +12,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/cl
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
-const INVITE_PASSWORD = process.env.INVITE_PASSWORD || "vinograd2026";
+const INVITE_PASSWORD = process.env.INVITE_PASSWORD || "2026";
 
 // ── PostgreSQL ────────────────────────────────────────────────────────────────
 const pool = new Pool({
