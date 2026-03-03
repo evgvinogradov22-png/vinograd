@@ -115,8 +115,6 @@ async function initDb() {
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred BOOLEAN DEFAULT FALSE`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''`);
-  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS pmp_project_id TEXT DEFAULT ''`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
@@ -150,13 +148,6 @@ async function initDb() {
     created_at BIGINT DEFAULT 0
   )`);
 
-  // Set director role from env
-  const dirTg = process.env.DIRECTOR_TELEGRAM || "";
-  if (dirTg) {
-    const clean = dirTg.replace(/^@/,"").toLowerCase().trim();
-    await q("UPDATE users SET role='Директор' WHERE LOWER(REPLACE(telegram,'@',''))=$1", [clean]).catch(()=>{});
-    console.log("[DIRECTOR] role set for:", clean);
-  }
   console.log("✅ Database ready");
 }
 
@@ -321,7 +312,7 @@ app.delete("/api/training/:id", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 app.get("/api/users", async (req, res) => {
-  try { res.json(await q("SELECT id,telegram,name,role,color,last_active,avatar_url FROM users ORDER BY created_at")); }
+  try { res.json(await q("SELECT id,telegram,name,role,color,last_active FROM users ORDER BY created_at")); }
   catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
