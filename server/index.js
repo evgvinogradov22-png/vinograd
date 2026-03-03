@@ -7,6 +7,11 @@ const http = require("http");
 const { WebSocketServer } = require("ws");
 const { Pool } = require("pg");
 const multer = require("multer");
+const os = require("os");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+const { Readable } = require("stream");
+const execFileAsync = promisify(execFile);
 const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 
 const app = express();
@@ -104,9 +109,9 @@ async function initDb() {
     )
   `);
 
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT ''`);
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS pmp_project_id TEXT DEFAULT ''`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
@@ -224,25 +229,33 @@ app.post("/api/projects", async (req, res) => {
 
 app.patch("/api/projects/:id", async (req, res) => {
   try {
-    const { label, color, description, links, archived } = req.body;
+    const { label, color, description, links, archived, pmp_project_id } = req.body;
     await q(`UPDATE projects SET
-      label       = COALESCE($1, label),
-      color       = COALESCE($2, color),
-      description = COALESCE($3, description),
-      links       = COALESCE($4, links),
-      archived    = COALESCE($5, archived)
-      WHERE id = $6`,
-      [label, color, description, links ? JSON.stringify(links) : null, archived, req.params.id]);
+      label          = COALESCE($1, label),
+      color          = COALESCE($2, color),
+      description    = COALESCE($3, description),
+      links          = COALESCE($4, links),
+      archived       = COALESCE($5, archived),
+      pmp_project_id = COALESCE($6, pmp_project_id)
+      WHERE id = $7`,
+      [label, color, description, links ? JSON.stringify(links) : null, archived, pmp_project_id ?? null, req.params.id]);
     res.json(await q1("SELECT * FROM projects WHERE id=$1", [req.params.id]));
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
 app.delete("/api/projects/:id", async (req, res) => {
+  const client = await pool.connect();
   try {
-    await q("DELETE FROM tasks WHERE project_id=$1", [req.params.id]);
-    await q("DELETE FROM projects WHERE id=$1", [req.params.id]);
+    await client.query("BEGIN");
+    await client.query("DELETE FROM chat_messages WHERE task_id IN (SELECT id FROM tasks WHERE project_id=$1)", [req.params.id]);
+    await client.query("DELETE FROM tasks WHERE project_id=$1", [req.params.id]);
+    await client.query("DELETE FROM projects WHERE id=$1", [req.params.id]);
+    await client.query("COMMIT");
     res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: "Ошибка" }); }
+  } catch(e) {
+    await client.query("ROLLBACK").catch(()=>{});
+    res.status(500).json({ error: "Ошибка" });
+  } finally { client.release(); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -339,7 +352,7 @@ app.delete("/api/tasks/:id", async (req, res) => {
 
 app.get("/api/chat/:taskId", async (req, res) => {
   try {
-    res.json(await q("SELECT * FROM chat_messages WHERE task_id=$1 ORDER BY created_at", [req.params.taskId]));
+    res.json(await q("SELECT * FROM chat_messages WHERE task_id=$1 ORDER BY created_at LIMIT 200", [req.params.taskId]));
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
@@ -395,21 +408,6 @@ ${preview}${link}`;
       }
     } catch(ne) { console.warn("Chat notify error:", ne.message); }
     broadcast(req.params.taskId, { type: "message", msg });
-    // Notify task assignees about new message
-    const sender = await q1("SELECT name,telegram FROM users WHERE id=$1", [user_id]);
-    const task   = await q1("SELECT title,data FROM tasks WHERE id=$1", [req.params.taskId]);
-    if (task) {
-      const data = task.data || {};
-      const taskTitle = task.title || "задача";
-      const senderName = sender?.name || sender?.telegram || "Кто-то";
-      const notifText = `💬 <b>${senderName}</b> написал в «${taskTitle}»:\n${(text||"(файл)").slice(0,100)}`;
-      // Notify all assignees except sender
-      const assignees = ["producer","editor","scriptwriter","operator","designer","customer","executor"]
-        .map(f => data[f]).filter(id => id && id !== user_id);
-      for (const uid of [...new Set(assignees)]) {
-        await notifyUser(uid, notifText);
-      }
-    }
     res.json(msg);
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
@@ -440,14 +438,12 @@ app.get("/api/download", async (req, res) => {
   const { key, name } = req.query;
   if (!key) return res.status(400).send("key required");
   try {
-    const { GetObjectCommand } = require("@aws-sdk/client-s3");
     const obj = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
     const fname = name || key.split("/").pop() || "file";
     res.setHeader("Content-Type",        obj.ContentType || "application/octet-stream");
     res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
     if (obj.ContentLength) res.setHeader("Content-Length", obj.ContentLength);
     // Stream body directly to client
-    const { Readable } = require("stream");
     Readable.fromWeb(obj.Body.transformToWebStream()).pipe(res);
   } catch(e) {
     console.error("Download error:", e);
@@ -719,15 +715,9 @@ app.post("/api/ai/transcribe", upload.single("file"), async (req, res) => {
     if (!OPENAI_KEY) return res.status(503).json({ error: "OPENAI_API_KEY не задан" });
     if (!req.file)   return res.status(400).json({ error: "Нет файла" });
 
-    const os   = require("os");
-    const path2 = require("path");
-    const { execFile } = require("child_process");
-    const { promisify } = require("util");
-    const execFileAsync = promisify(execFile);
-
     // Write uploaded video to temp file
-    const tmpIn  = path2.join(os.tmpdir(), `vg_in_${Date.now()}`  + path2.extname(req.file.originalname || ".mp4"));
-    const tmpOut = path2.join(os.tmpdir(), `vg_out_${Date.now()}.mp3`);
+    const tmpIn  = path.join(os.tmpdir(), `vg_in_${Date.now()}`  + path.extname(req.file.originalname || ".mp4"));
+    const tmpOut = path.join(os.tmpdir(), `vg_out_${Date.now()}.mp3`);
     fs.writeFileSync(tmpIn, req.file.buffer);
 
     let audioBuffer;
