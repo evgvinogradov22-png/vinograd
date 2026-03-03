@@ -104,7 +104,8 @@ async function initDb() {
     )
   `);
 
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT DEFAULT ''`); // ensure column exists
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT DEFAULT ''`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
@@ -283,18 +284,21 @@ app.post("/api/tasks", async (req, res) => {
 
 app.patch("/api/tasks/:id", async (req, res) => {
   try {
-    const { title, project_id, status, data } = req.body;
+    const { title, project_id, status, data, archived } = req.body;
     const now = Date.now();
-    await q(`UPDATE tasks SET
-      title      = COALESCE($1, title),
-      project_id = COALESCE($2, project_id),
-      status     = COALESCE($3, status),
-      data       = COALESCE($4, data),
-      updated_at = $5
-      WHERE id = $6`,
-      [title, project_id, status, data ? JSON.stringify(data) : null, now, req.params.id]);
+    // Build dynamic update to avoid overwriting fields not passed
+    const sets = ["updated_at=$1"];
+    const vals = [now];
+    let i = 2;
+    if (title      !== undefined) { sets.push(`title=$${i++}`);      vals.push(title); }
+    if (project_id !== undefined) { sets.push(`project_id=$${i++}`); vals.push(project_id); }
+    if (status     !== undefined) { sets.push(`status=$${i++}`);     vals.push(status); }
+    if (data       !== undefined) { sets.push(`data=$${i++}`);       vals.push(JSON.stringify(data)); }
+    if (archived   !== undefined) { sets.push(`archived=$${i++}`);   vals.push(archived); }
+    vals.push(req.params.id);
+    await q(`UPDATE tasks SET ${sets.join(",")} WHERE id=$${i}`, vals);
     res.json(await q1("SELECT * FROM tasks WHERE id=$1", [req.params.id]));
-  } catch(e) { res.status(500).json({ error: "Ошибка" }); }
+  } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка" }); }
 });
 
 app.delete("/api/tasks/:id", async (req, res) => {
@@ -382,52 +386,111 @@ const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 async function tgNotify(chatId, text) {
   if (!TG_TOKEN || !chatId) return;
   try {
-    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
     });
-  } catch(e) { console.warn("TG notify failed:", e.message); }
+    if (!r.ok) {
+      const err = await r.text();
+      console.error("TG sendMessage error:", err);
+    }
+  } catch(e) { console.error("TG notify failed:", e.message); }
 }
 
-// Get user's telegram chat_id by their user id
 async function notifyUser(userId, text) {
   if (!userId) return;
-  const user = await q1("SELECT telegram_chat_id FROM users WHERE id=$1", [userId]);
-  if (user?.telegram_chat_id) await tgNotify(user.telegram_chat_id, text);
+  try {
+    const user = await q1("SELECT telegram_chat_id FROM users WHERE id=$1", [userId]);
+    if (user?.telegram_chat_id) {
+      console.log(`Notifying user ${userId} (chat_id=${user.telegram_chat_id})`);
+      await tgNotify(user.telegram_chat_id, text);
+    } else {
+      console.log(`User ${userId} has no telegram_chat_id — skipping notification`);
+    }
+  } catch(e) { console.error("notifyUser error:", e.message); }
 }
 
-// Register bot endpoint — user sends /start to bot, we save their chat_id
+// Webhook — Telegram sends updates here
+// User just writes /start to the bot — no need to type username manually
 app.post("/api/tg/webhook", async (req, res) => {
   try {
     const { message } = req.body;
     if (!message) return res.json({ ok: true });
-    const chatId = message.chat?.id;
-    const text = message.text || "";
+
+    const chatId  = String(message.chat?.id || message.from?.id);
+    const fromUsername = (message.from?.username || "").toLowerCase();
+    const text    = (message.text || "").trim();
+
+    console.log("TG webhook:", { chatId, fromUsername, text });
+
     if (text.startsWith("/start")) {
-      // /start <telegram_username>
-      const username = text.split(" ")[1]?.toLowerCase().replace("@","");
-      if (username) {
-        await q("UPDATE users SET telegram_chat_id=$1 WHERE LOWER(telegram)=$2", [String(chatId), username]);
-        await tgNotify(chatId, `✅ Виноград подключён! Теперь вы будете получать уведомления.`);
+      // Try to match by Telegram @username stored in users.telegram
+      // users.telegram stored as "evg_vinogradov" (without @)
+      if (fromUsername) {
+        const updated = await q(
+          "UPDATE users SET telegram_chat_id=$1 WHERE LOWER(REPLACE(telegram,'@',''))=LOWER($2) RETURNING name",
+          [chatId, fromUsername]
+        );
+        if (updated.rowCount > 0) {
+          const name = updated.rows[0]?.name || fromUsername;
+          await tgNotify(chatId, `✅ Привет, ${name}! Уведомления подключены.
+
+Теперь ты будешь получать оповещения о новых задачах и сообщениях в чате.`);
+          console.log(`Connected TG for @${fromUsername}, chat_id=${chatId}`);
+        } else {
+          await tgNotify(chatId, `❌ Пользователь @${fromUsername} не найден в системе.
+
+Обратись к администратору — он должен добавить тебя в Виноград с тем же Telegram-ником.`);
+          console.log(`TG user @${fromUsername} not found in DB`);
+        }
       } else {
-        await tgNotify(chatId, `👋 Отправьте: /start ваш_ник\n\nНапример: /start evg_vinogradov`);
+        await tgNotify(chatId, `👋 Привет! Чтобы подключить уведомления, убедись что в Telegram у тебя задан username (Настройки → Имя пользователя).`);
       }
     }
     res.json({ ok: true });
-  } catch(e) { console.error(e); res.json({ ok: true }); }
+  } catch(e) {
+    console.error("TG webhook error:", e);
+    res.json({ ok: true }); // Always 200 to Telegram
+  }
 });
 
-app.get("/api/tg/setup", (req, res) => {
-  if (!TG_TOKEN) return res.json({ error: "TELEGRAM_BOT_TOKEN не задан" });
-  res.json({ 
-    instructions: [
-      "1. Найдите вашего бота в Telegram",
-      "2. Отправьте: /start ваш_telegram_ник",
-      "3. Пример: /start evg_vinogradov"
-    ],
-    bot_url: `https://t.me/${process.env.TELEGRAM_BOT_NAME || "your_bot"}`
+// Register webhook with Telegram (call once after deploy)
+app.get("/api/tg/register-webhook", async (req, res) => {
+  if (!TG_TOKEN) return res.status(503).json({ error: "TELEGRAM_BOT_TOKEN не задан" });
+  const appUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : process.env.APP_URL || "";
+  if (!appUrl) return res.status(400).json({ error: "Задайте APP_URL или деплойте на Railway" });
+
+  const webhookUrl = `${appUrl}/api/tg/webhook`;
+  const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/setWebhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message"] }),
   });
+  const data = await r.json();
+  console.log("setWebhook result:", data);
+  res.json({ webhookUrl, result: data });
+});
+
+// Check webhook + bot status
+app.get("/api/tg/status", async (req, res) => {
+  if (!TG_TOKEN) return res.json({ ok: false, error: "TELEGRAM_BOT_TOKEN не задан" });
+  try {
+    const [me, wh] = await Promise.all([
+      fetch(`https://api.telegram.org/bot${TG_TOKEN}/getMe`).then(r=>r.json()),
+      fetch(`https://api.telegram.org/bot${TG_TOKEN}/getWebhookInfo`).then(r=>r.json()),
+    ]);
+    // Count users with connected TG
+    const connected = await q("SELECT COUNT(*) as cnt FROM users WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id != ''");
+    res.json({
+      bot: me.result,
+      webhook: wh.result,
+      connected_users: parseInt(connected[0]?.cnt || 0),
+      token_set: true,
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 
