@@ -8,7 +8,6 @@ const { WebSocketServer } = require("ws");
 const { Pool } = require("pg");
 const multer = require("multer");
 const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
-const FormData = require("form-data");
 
 const app = express();
 const server = http.createServer(app);
@@ -659,13 +658,13 @@ app.post("/api/ai/transcribe", upload.single("file"), async (req, res) => {
     }
 
     const fd = new FormData();
-    fd.append("file", audioBuffer, { filename: audioName, contentType: "audio/mpeg" });
+    fd.append("file", new Blob([audioBuffer], { type: "audio/mpeg" }), audioName);
     fd.append("model", "whisper-1");
     fd.append("language", "ru");
 
     const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${OPENAI_KEY}`, ...fd.getHeaders() },
+      headers: { "Authorization": `Bearer ${OPENAI_KEY}` },
       body: fd,
     });
     if (!r.ok) { const e = await r.text(); throw new Error("Whisper: " + e); }
