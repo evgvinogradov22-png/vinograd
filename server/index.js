@@ -289,52 +289,6 @@ app.post("/api/analytics/kpi", async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
-// AVATAR UPLOAD
-// ════════════════════════════════════════════════════════════════════════════════
-
-app.post("/api/avatar/user/:id", upload.single("file"), async (req, res) => {
-  const { id } = req.params;
-  const file = req.file;
-  if (!file) return res.status(400).json({ error: "no file" });
-  try {
-    const key = "avatar_user_" + id + "_" + Date.now() + path.extname(file.originalname);
-    let url = "";
-    if (S3) {
-      const cmd = new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: file.buffer, ContentType: file.mimetype });
-      await S3.send(cmd);
-      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
-    } else {
-      const dest = path.join(os.tmpdir(), key);
-      fs.writeFileSync(dest, file.buffer);
-      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
-    }
-    await q("UPDATE users SET avatar_url=$1 WHERE id=$2", [url, id]);
-    res.json({ url });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post("/api/avatar/project/:id", upload.single("file"), async (req, res) => {
-  const { id } = req.params;
-  const file = req.file;
-  if (!file) return res.status(400).json({ error: "no file" });
-  try {
-    const key = "avatar_proj_" + id + "_" + Date.now() + path.extname(file.originalname);
-    let url = "";
-    if (S3) {
-      const cmd = new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: file.buffer, ContentType: file.mimetype });
-      await S3.send(cmd);
-      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
-    } else {
-      const dest = path.join(os.tmpdir(), key);
-      fs.writeFileSync(dest, file.buffer);
-      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
-    }
-    await q("UPDATE projects SET avatar_url=$1 WHERE id=$2", [url, id]);
-    res.json({ url });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ════════════════════════════════════════════════════════════════════════════════
 // TRAINING
 // ════════════════════════════════════════════════════════════════════════════════
 
