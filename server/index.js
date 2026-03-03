@@ -443,7 +443,7 @@ app.post("/api/chat/:taskId", async (req, res) => {
 
 "${preview}"${link}`;
               await notifyUser(mentioned.id, txt);
-              pushNotif(mentioned.id, "chat_message", taskId, taskRow.type||"pre", taskRow.title||"", msgText.slice(0,80));
+              pushNotif(mentioned.id, "chat_message", taskId, task.type||"pre", task.title||"", preview);
               participants.delete(mentioned.id); // don't double-notify
             }
           }
@@ -456,7 +456,7 @@ app.post("/api/chat/:taskId", async (req, res) => {
 
 ${preview}${link}`;
             await notifyUser(pid, txt);
-            pushNotif(pid, "chat_message", taskId, taskRow.type||"pre", taskRow.title||"", msgText.slice(0,80));
+            pushNotif(pid, "chat_message", taskId, task.type||"pre", task.title||"", preview);
           }
         }
       }
