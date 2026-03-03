@@ -50,19 +50,21 @@ function TeamSelect({label,value,onChange,team}){
 
 // ── MiniChat ──────────────────────────────────────────────────────────────────
 function MiniChat({taskId, team, currentUser}){
-  const [msgs,       setMsgs]        = useState([]);
-  const [text,       setText]        = useState("");
-  const [progress,   setProgress]    = useState(null); // {name, pct} | null
-  const [err,        setErr]         = useState("");
-  const [showM,      setShowM]       = useState(false);
-  const [mentionQ,   setMentionQ]    = useState("");
+  const [msgs,     setMsgs]   = useState([]);
+  const [text,     setText]   = useState("");
+  const [uploading,setUploading] = useState(false); // bool
+  const [uploadPct,setUploadPct] = useState(0);     // 0-100
+  const [uploadName,setUploadName] = useState("");
+  const [err,      setErr]    = useState("");
+  const [showM,    setShowM]  = useState(false);
+  const [mentionQ, setMentionQ] = useState("");
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
   const inputRef  = useRef(null);
   const myId = currentUser?.id || "";
-  const nm   = id => teamOf(id, team)?.name || "?";
+  const nm   = id => { try { return teamOf(id, team)?.name || "?"; } catch(e) { return "?"; } };
 
-  // ── load history ────────────────────────────────────────────────────────────
+  // load history
   useEffect(() => {
     if (!taskId || taskId === "undefined") return;
     fetch(`/api/chat/${taskId}`)
@@ -82,11 +84,11 @@ function MiniChat({taskId, team, currentUser}){
       .catch(() => {});
   }, [taskId]);
 
-  // ── post text message ────────────────────────────────────────────────────────
+  // send text
   async function send() {
     const t = text.trim(); if (!t) return;
+    if (!taskId || taskId === "undefined") { setErr("Сначала сохраните задачу"); return; }
     setText(""); setShowM(false);
-    if (!taskId || taskId === "undefined") { setErr("Сначала сохраните задачу чтобы начать чат"); return; }
     try {
       const r = await fetch(`/api/chat/${taskId}`, {
         method: "POST",
@@ -95,52 +97,79 @@ function MiniChat({taskId, team, currentUser}){
       });
       if (!r.ok) throw new Error(await r.text());
       const m = await r.json();
-      setMsgs(p => [...p, { id:m.id, user:m.user_id, text:m.text, ts:m.created_at, fname:"", furl:"" }]);
+      setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: m.text||t, ts: m.created_at||Date.now(), fname: "", furl: "" }]);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
     } catch(e) { setErr("Ошибка: " + e.message); }
   }
 
-  // ── upload file → R2 → post message with url ─────────────────────────────────
-  async function handleFiles(e) {
+  // upload with REAL progress via XMLHttpRequest
+  function handleFiles(e) {
     const files = Array.from(e.target.files);
     e.target.value = "";
     if (!files.length) return;
-    if (!taskId || taskId === "undefined") { setErr("Сначала сохраните задачу, потом загружайте файлы"); return; }
+    if (!taskId || taskId === "undefined") { setErr("Сначала сохраните задачу"); return; }
     setErr("");
-    for (const f of files) {
-      setProgress({ name: f.name, pct: 20 });
+    uploadNext(files, 0);
+  }
+
+  function uploadNext(files, i) {
+    if (i >= files.length) return;
+    const f = files[i];
+    setUploading(true);
+    setUploadPct(0);
+    setUploadName(f.name);
+
+    const fd = new FormData();
+    fd.append("file", f);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload");
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) {
+        setUploadPct(Math.round((ev.loaded / ev.total) * 90));
+      }
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status !== 200) {
+        setErr("Ошибка загрузки: " + xhr.statusText);
+        setUploading(false);
+        uploadNext(files, i + 1);
+        return;
+      }
+      let upData;
+      try { upData = JSON.parse(xhr.responseText); } catch(e) { setErr("Ошибка ответа сервера"); setUploading(false); return; }
+      const key = upData.key || "";
+      const dlurl = key
+        ? `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(f.name)}`
+        : upData.url;
+      setUploadPct(95);
       try {
-        const fd = new FormData(); fd.append("file", f);
-        setProgress({ name: f.name, pct: 50 });
-        const up = await fetch("/api/upload", { method:"POST", body:fd });
-        setProgress({ name: f.name, pct: 85 });
-        if (!up.ok) throw new Error("Ошибка загрузки: " + await up.text());
-        const upData = await up.json();
-        const url  = upData.url;
-        const key  = upData.key || "";
-        if (!url) throw new Error("Сервер не вернул ссылку");
-        setProgress({ name: f.name, pct: 95 });
-        // Store download url as /api/download?key=...&name=...
-        const dlurl = key ? `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(f.name)}` : url;
-        const msg = await fetch(`/api/chat/${taskId}`, {
+        const msgR = await fetch(`/api/chat/${taskId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: myId, text: "", file_url: dlurl, file_name: f.name }),
         });
-        if (!msg.ok) throw new Error("Ошибка отправки сообщения");
-        const m = await msg.json();
-        setMsgs(p => [...p, { id:m.id, user:m.user_id, text:"", ts:m.created_at, fname:f.name, furl:dlurl }]);
-        setProgress({ name: f.name, pct: 100 });
+        if (!msgR.ok) throw new Error(await msgR.text());
+        const m = await msgR.json();
+        setUploadPct(100);
+        setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: "", ts: m.created_at||Date.now(), fname: f.name, furl: dlurl }]);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
-      } catch(e) {
-        setErr(e.message);
-        console.error("File upload error:", e);
-      }
-      setTimeout(() => setProgress(null), 1000);
-    }
+      } catch(e) { setErr(e.message); }
+      setTimeout(() => { setUploading(false); setUploadPct(0); setUploadName(""); uploadNext(files, i + 1); }, 800);
+    };
+
+    xhr.onerror = () => {
+      setErr("Сетевая ошибка при загрузке файла");
+      setUploading(false);
+      uploadNext(files, i + 1);
+    };
+
+    xhr.send(fd);
   }
 
-  // ── mentions ─────────────────────────────────────────────────────────────────
+  // mentions
   function onType(e) {
     const v = e.target.value; setText(v);
     const at = v.lastIndexOf("@");
@@ -156,28 +185,31 @@ function MiniChat({taskId, team, currentUser}){
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:300,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,position:"relative"}}>
-      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>💬 ЧАТ</div>
+      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700,flexShrink:0}}>💬 ЧАТ</div>
 
       {/* messages */}
-      <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,minHeight:0}}>
         {msgs.length===0 && <div style={{textAlign:"center",color:"#6b7280",fontSize:10,paddingTop:20}}>Начните обсуждение</div>}
         {msgs.map(m => {
           const isMe = m.user === myId;
-          const name = nm(m.user);
+          const rawName = nm(m.user);
+          const safeName = rawName && rawName.length > 0 ? rawName : "?";
+          const ext = (m.fname||"").split(".").pop().toLowerCase();
+          const fileIcon = ["jpg","jpeg","png","gif","webp"].includes(ext) ? "🖼️" : ["mp4","mov","avi","mkv","webm"].includes(ext) ? "🎬" : "📎";
           return (
-            <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end"}}>
-              <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(name||"?")[0].toUpperCase()}</div>
+            <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end",flexShrink:0}}>
+              <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{safeName[0].toUpperCase()}</div>
               <div style={{maxWidth:"80%"}}>
-                {!isMe && <div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace",marginBottom:2}}>@{name}</div>}
+                {!isMe && <div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace",marginBottom:2}}>@{safeName}</div>}
                 <div style={{background:isMe?"#1e1630":"#1a1a2e",border:"1px solid "+(isMe?"#4c1d9530":"#2d2d44"),borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"6px 10px"}}>
                   {m.text && <div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:700}}>{p}</span>:p)}</div>}
                   {m.furl && (
                     <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
-                      <span style={{fontSize:14}}>{/\.(jpg|jpeg|png|gif|webp)$/i.test(m.fname)?"🖼️":"/\.(mp4|mov|avi|mkv)$/i".test(m.fname)?"🎬":"📎"}</span>
+                      <span style={{fontSize:14}}>{fileIcon}</span>
                       <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
                       <a href={m.furl} target="_blank" rel="noreferrer"
                         style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>
-                        ↓ Скачать
+                        ↓
                       </a>
                     </div>
                   )}
@@ -190,19 +222,21 @@ function MiniChat({taskId, team, currentUser}){
         <div ref={bottomRef}/>
       </div>
 
-      {/* upload progress */}
-      {progress && (
-        <div style={{padding:"6px 10px",borderTop:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10,color:"#9ca3af",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📎 {progress.name}</span>
-          <div style={{width:100,height:5,background:"#2d2d44",borderRadius:3,overflow:"hidden"}}>
-            <div style={{width:`${progress.pct}%`,height:"100%",background:progress.pct===100?"#10b981":"#7c3aed",transition:"width 0.3s",borderRadius:3}}/>
+      {/* real upload progress bar */}
+      {uploading && (
+        <div style={{padding:"6px 10px",borderTop:"1px solid #1e1e2e",flexShrink:0,background:"#0d0d16"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span style={{fontSize:10,color:"#9ca3af",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📎 {uploadName}</span>
+            <span style={{fontSize:10,fontWeight:700,color:uploadPct===100?"#10b981":"#7c3aed",minWidth:36,textAlign:"right"}}>{uploadPct}%</span>
           </div>
-          <span style={{fontSize:9,color:progress.pct===100?"#10b981":"#9ca3af",minWidth:30}}>{progress.pct}%</span>
+          <div style={{height:4,background:"#2d2d44",borderRadius:3,overflow:"hidden"}}>
+            <div style={{width:`${uploadPct}%`,height:"100%",background:uploadPct===100?"#10b981":"linear-gradient(90deg,#7c3aed,#a78bfa)",transition:"width 0.2s",borderRadius:3}}/>
+          </div>
         </div>
       )}
 
       {/* error */}
-      {err && <div style={{padding:"4px 10px",fontSize:10,color:"#ef4444",background:"#1a0000",borderTop:"1px solid #ef444430"}}>{err} <button onClick={()=>setErr("")} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button></div>}
+      {err && <div style={{padding:"4px 10px",fontSize:10,color:"#ef4444",background:"#1a0000",borderTop:"1px solid #ef444430",flexShrink:0}}>{err} <button onClick={()=>setErr("")} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button></div>}
 
       {/* mention dropdown */}
       {showM && mentionList.length > 0 && (
@@ -212,7 +246,7 @@ function MiniChat({taskId, team, currentUser}){
               style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
               onMouseEnter={e=>e.currentTarget.style.background="#2d2d44"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{width:18,height:18,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff"}}>{m.name[0]}</div>
+              <div style={{width:18,height:18,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff"}}>{(m.name||"?")[0]}</div>
               <span style={{color:"#a78bfa",fontSize:11}}>@{m.name}</span>
               <span style={{fontSize:9,color:"#6b7280",marginLeft:"auto"}}>{m.role}</span>
             </div>
@@ -220,11 +254,11 @@ function MiniChat({taskId, team, currentUser}){
         </div>
       )}
 
-      {/* input row */}
-      <div style={{padding:"6px 8px",borderTop:"1px solid #1e1e2e",display:"flex",gap:6,alignItems:"center"}}>
-        <input ref={fileRef} type="file" multiple style={{display:"none"}} onChange={handleFiles}/>
-        <button onClick={()=>fileRef.current?.click()} title="Прикрепить файл"
-          style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:"#9ca3af",cursor:"pointer",fontSize:14,flexShrink:0}}>📎</button>
+      {/* input */}
+      <div style={{padding:"6px 8px",borderTop:"1px solid #1e1e2e",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        <input ref={fileRef} type="file" multiple accept="*/*" style={{position:"fixed",top:-9999,left:-9999,opacity:0,pointerEvents:"none"}} onChange={handleFiles}/>
+        <button onClick={()=>{ if(!uploading) fileRef.current?.click(); }} title="Прикрепить файл" disabled={uploading}
+          style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:uploading?"#4b5563":"#9ca3af",cursor:uploading?"not-allowed":"pointer",fontSize:14,flexShrink:0}}>📎</button>
         <input ref={inputRef} value={text} onChange={onType}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}if(e.key==="Escape")setShowM(false);}}
           placeholder="Сообщение... (@ для упоминания)"
@@ -356,16 +390,19 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-function Modal({title,color,onClose,onSave,children}){
+function Modal({title,color,onClose,onSave,onDelete,children}){
+  const [confirmDel,setConfirmDel]=useState(false);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.87)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
       <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,width:"min(700px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
-        <div style={{padding:"12px 18px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-          <div style={{flex:1,fontSize:13,fontWeight:800,color}}>{title}</div>
+        <div style={{padding:"10px 16px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <div style={{flex:1,fontSize:13,fontWeight:800,color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
+          {onDelete&&!confirmDel&&<button onClick={()=>setConfirmDel(true)} title="Удалить" style={{background:"transparent",border:"1px solid #ef444450",borderRadius:7,padding:"5px 10px",color:"#ef4444",cursor:"pointer",fontSize:12}}>🗑</button>}
+          {onDelete&&confirmDel&&<><button onClick={()=>{setConfirmDel(false);onDelete();}} style={{background:"#ef4444",border:"none",borderRadius:7,padding:"5px 12px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>Удалить!</button><button onClick={()=>setConfirmDel(false)} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>✕</button></>}
           {onSave&&<button onClick={onSave} style={{background:`linear-gradient(135deg,${color},${color}bb)`,border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button>}
-          <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#9ca3af",fontSize:14}}>×</button>
+          <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#9ca3af",fontSize:14,flexShrink:0}}>×</button>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>{children}</div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 18px",isolation:"isolate"}}>{children}</div>
       </div>
     </div>
   );
@@ -441,7 +478,6 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
     setAi(false);
   }
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#8b5cf6,#8b5cf6bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ТИП КОНТЕНТА"><input value={d.type} onChange={e=>u("type",e.target.value)} placeholder="Рилс, Клип..." style={SI}/></Field>
@@ -479,7 +515,7 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item.id?()=>onDelete(d.id):undefined} color="#8b5cf6"/>
+    
   </div>;
 }
 
@@ -488,7 +524,6 @@ function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFn
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#3b82f6,#3b82f6bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ТИП КОНТЕНТА"><input value={d.type} onChange={e=>u("type",e.target.value)} style={SI}/></Field>
@@ -540,7 +575,7 @@ function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFn
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item.id?()=>onDelete(d.id):undefined} color="#3b82f6"/>
+    
   </div>;
 }
 
@@ -576,13 +611,19 @@ function FinalFileOrLink({d,u,fileRef}){
         setUploading(false); e.target.value="";
       }}/>
       {d.final_file_name
-        ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-            <span>🎬</span>
-            <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
-            {d.final_file_url
-              ?<a href={d.final_file_url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
-              :<span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
-            <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
+        ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,overflow:"hidden"}}>
+            <div style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+              <span>🎬</span>
+              <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
+              {d.final_file_url
+                ?<a href={d.final_file_url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
+                :<span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
+              <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
+            </div>
+            {d.final_file_url&&/\.(mp4|mov|webm|avi|mkv)$/i.test(d.final_file_name)&&
+              <video controls style={{width:"100%",maxHeight:320,display:"block",background:"#000"}} preload="metadata">
+                <source src={d.final_file_url}/>
+              </video>}
           </div>
         :<button onClick={()=>fRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:uploading?"#f59e0b":"#9ca3af",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 Загрузить финальное видео"}</button>}
     </>}
@@ -704,7 +745,6 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
     setGb(false);
   }
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#ec4899,#ec4899bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
@@ -739,7 +779,7 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item.id?()=>onDelete(d.id):undefined} color="#ec4899"/>
+    
   </div>;
 }
 
@@ -748,7 +788,6 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
   const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
   useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#3b82f6,#3b82f6bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
@@ -778,7 +817,7 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item.id?()=>onDelete(d.id):undefined} color="#3b82f6"/>
+    
   </div>;
 }
 
@@ -816,7 +855,6 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
   useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   const fileRef=useRef(null);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#a78bfa,#a78bfabb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
@@ -839,10 +877,7 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
         ))}
       </div>
       <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:"",img_name:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
-      {d.slides.some(s=>s.img)&&<div style={{marginTop:8,padding:"8px 10px",background:"#0d1a0d",border:"1px solid #10b98130",borderRadius:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,color:"#10b981",fontWeight:700}}>📥 Скачать картинки:</span>
-        {d.slides.map((s,i)=>s.img?<a key={i} href={s.img} target="_blank" rel="noreferrer" style={{background:"#1a2e1a",border:"1px solid #10b98140",borderRadius:5,padding:"3px 10px",color:"#10b981",textDecoration:"none",fontSize:10,fontWeight:700}}>↓ {i+1}</a>:null)}
-      </div>}
+      
     </Field>
     <Field label="ТЗ ДЛЯ ДИЗАЙНЕРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Стиль, цвета, шрифты, особенности оформления..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/></Field>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
@@ -854,8 +889,175 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item.id?()=>onDelete(d.id):undefined} color="#a78bfa"/>
+    
   </div>;
+}
+
+// ── PmpPublishPanel ─────────────────────────────────────────────────────────
+function PmpPublishPanel({d, u, projects}){
+  const [open,        setOpen]        = useState(false);
+  const [pmpProjects, setPmpProjects] = useState([]); // [{id,name}]
+  const [channels,    setChannels]    = useState([]); // [{id,name,platform}]
+  const [selChannels, setSelChannels] = useState([]); // selected channel ids
+  const [loading,     setLoading]     = useState(false);
+  const [status,      setStatus]      = useState(""); // status message
+  const [error,       setError]       = useState("");
+
+  // Find PMP project id from current Виноград project
+  const vinProj = projects.find(p => p.id === d.project);
+  const pmpProjId = d.pmp_project_id || vinProj?.pmp_project_id || "";
+
+  // Load PMP projects on first open
+  async function loadProjects(){
+    setLoading(true); setError("");
+    try {
+      const r = await fetch("/api/pmp/projects");
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Ошибка");
+      const list = data?.data || data?.items || data || [];
+      setPmpProjects(Array.isArray(list) ? list : []);
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  // Load channels for selected PMP project
+  async function loadChannels(pid){
+    if (!pid) return;
+    setLoading(true); setError("");
+    try {
+      const r = await fetch("/api/pmp/channels?project_id=" + pid);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Ошибка");
+      const list = data?.data || data?.items || data || [];
+      setChannels(Array.isArray(list) ? list : []);
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  // Toggle channel selection
+  function toggleCh(id){
+    setSelChannels(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
+  }
+
+  // Full publish flow: upload file → create publication
+  async function publish(){
+    const pid = pmpProjId || d.pmp_project_id;
+    if (!pid) { setError("Укажи PMP Project ID в настройках проекта или в поле ниже"); return; }
+    if (!selChannels.length) { setError("Выбери хотя бы один канал"); return; }
+    setLoading(true); setError(""); setStatus("");
+
+    try {
+      let file_ids = [];
+
+      // Step 1: Upload file if we have one
+      const fileUrl = d.file_url || d.final_file_url || "";
+      if (fileUrl) {
+        setStatus("📤 Загружаю файл в Post My Post...");
+        const upR = await fetch("/api/pmp/upload", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ file_url: fileUrl, file_name: d.file_name||d.final_file_name||"media", pmp_project_id: pid }),
+        });
+        const upData = await upR.json();
+        if (!upR.ok) throw new Error("Upload: " + upData.error);
+        file_ids = [upData.file_id];
+        setStatus("✅ Файл загружен (ID: " + upData.file_id + ")");
+      }
+
+      // Step 2: Create publication
+      setStatus("🚀 Создаю публикацию...");
+      const pubR = await fetch("/api/pmp/publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          pmp_project_id: Number(pid),
+          channel_ids: selChannels,
+          post_at: d.planned_date ? new Date(d.planned_date).toISOString() : null,
+          text: d.caption || d.title || "",
+          hashtags: d.hashtags || "",
+          file_ids,
+          pub_type: d.pub_type || "video",
+        }),
+      });
+      const pubData = await pubR.json();
+      if (!pubR.ok) throw new Error("Publish: " + pubData.error);
+
+      setStatus("✅ Опубликовано! ID: " + (pubData.publication_id || "?"));
+      u("pmp_published", true);
+      u("pmp_publication_id", pubData.publication_id);
+    } catch(e) {
+      setError(e.message);
+      setStatus("");
+    }
+    setLoading(false);
+  }
+
+  const PLATFORM_ICONS = { instagram:"📸", tiktok:"🎵", facebook:"📘", vk:"💙", youtube:"▶️", telegram:"✈️", twitter:"🐦", linkedin:"💼" };
+
+  return (
+    <div style={{background:"#0a0f1a",border:"1px solid #1e3a5f",borderRadius:10,overflow:"hidden"}}>
+      <button onClick={()=>{ setOpen(p=>!p); if(!open&&!pmpProjects.length) loadProjects(); }}
+        style={{width:"100%",background:"transparent",border:"none",padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",color:"#f0eee8"}}>
+        <span style={{fontSize:13}}>📡</span>
+        <span style={{fontSize:11,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
+        {d.pmp_published && <span style={{fontSize:9,background:"#10b98120",color:"#10b981",border:"1px solid #10b98140",borderRadius:10,padding:"1px 8px"}}>✅ опубликовано</span>}
+        <span style={{marginLeft:"auto",color:"#4b5563",fontSize:12}}>{open?"▲":"▼"}</span>
+      </button>
+
+      {open && <div style={{padding:"12px 14px",borderTop:"1px solid #1e3a5f",display:"flex",flexDirection:"column",gap:10}}>
+
+        {/* PMP Project ID override */}
+        <Field label="PMP PROJECT ID (из URL проекта в postmypost.io)">
+          <input value={pmpProjId} onChange={e=>u("pmp_project_id",e.target.value)}
+            onBlur={e=>{ if(e.target.value) loadChannels(e.target.value); }}
+            placeholder={pmpProjId||"123456"} style={{...SI,fontFamily:"monospace"}}/>
+        </Field>
+
+        {/* PMP Projects dropdown (optional — auto-fill project id) */}
+        {pmpProjects.length>0 && <Field label="ИЛИ ВЫБЕРИ ПРОЕКТ ИЗ СПИСКА">
+          <select onChange={e=>{ u("pmp_project_id",e.target.value); loadChannels(e.target.value); }} style={SI} value={pmpProjId||""}>
+            <option value="">— выбрать —</option>
+            {pmpProjects.map(p=><option key={p.id} value={p.id}>{p.name||p.title||p.id}</option>)}
+          </select>
+        </Field>}
+
+        {/* Channel selector */}
+        {channels.length>0 && <div>
+          <span style={LB}>КАНАЛЫ (куда публиковать)</span>
+          <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:4}}>
+            {channels.map(ch=>{
+              const icon = PLATFORM_ICONS[ch.platform?.toLowerCase()] || "📲";
+              const sel = selChannels.includes(ch.id);
+              return <div key={ch.id} onClick={()=>toggleCh(ch.id)}
+                style={{display:"flex",alignItems:"center",gap:8,background:sel?"#1e3a5f":"#111118",border:`1px solid ${sel?"#38bdf8":"#2d2d44"}`,borderRadius:7,padding:"7px 10px",cursor:"pointer"}}>
+                <span>{icon}</span>
+                <span style={{fontSize:11,color:sel?"#38bdf8":"#9ca3af",flex:1}}>{ch.name||ch.username||ch.id}</span>
+                <span style={{fontSize:9,color:"#6b7280",fontFamily:"monospace"}}>{ch.platform}</span>
+                <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?"#38bdf8":"#4b5563"}`,background:sel?"#38bdf8":"transparent",flexShrink:0}}/>
+              </div>;
+            })}
+          </div>
+        </div>}
+
+        {!channels.length && pmpProjId && !loading && (
+          <button onClick={()=>loadChannels(pmpProjId)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:7,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>
+            🔄 Загрузить каналы
+          </button>
+        )}
+
+        {/* Status / Error */}
+        {loading && <div style={{fontSize:11,color:"#38bdf8",fontFamily:"monospace"}}>⏳ {status||"Загрузка..."}</div>}
+        {!loading && status && <div style={{fontSize:11,color:"#10b981",fontFamily:"monospace"}}>{status}</div>}
+        {error && <div style={{fontSize:11,color:"#ef4444",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,padding:"6px 10px"}}>{error}</div>}
+
+        {/* Publish button */}
+        <button onClick={publish} disabled={loading||!selChannels.length}
+          style={{background:loading||!selChannels.length?"#1a1a2e":"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:8,padding:"10px",color:loading||!selChannels.length?"#4b5563":"#fff",cursor:loading||!selChannels.length?"not-allowed":"pointer",fontSize:12,fontWeight:700}}>
+          {loading?"⏳ Публикую...":"🚀 Опубликовать в Post My Post"}
+        </button>
+      </div>}
+    </div>
+  );
 }
 
 function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
@@ -874,7 +1076,6 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
     setAiCap(false);
   }
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>onSave(d)} style={{background:"linear-gradient(135deg,#10b981,#10b981bb)",border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
@@ -913,8 +1114,9 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
       </div>
     </div>
+    <PmpPublishPanel d={d} u={u} projects={projects}/>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item.id?()=>onDelete(d.id):undefined} color="#10b981"/>
+    
   </div>;
 }
 
@@ -1187,6 +1389,36 @@ function ProjectsView({projects,setProjects}){
 
 function ProjectCard({proj, showArchive, setProjects}){
   const [nl,setNl]=useState("");
+  const [pmpProjects,setPmpProjects]=useState([]); // [{id,name}]
+  const [loadingPmp,setLoadingPmp]=useState(false);
+  const [pmpErr,setPmpErr]=useState("");
+
+  // Load PMP projects on mount (silently — only if PMP token configured)
+  useEffect(()=>{
+    let cancelled=false;
+    async function load(){
+      setLoadingPmp(true);
+      try{
+        const r=await fetch("/api/pmp/projects");
+        const data=await r.json();
+        if(cancelled) return;
+        if(!r.ok) throw new Error(data.error||"Ошибка");
+        const list=data?.data||data?.items||data||[];
+        setPmpProjects(Array.isArray(list)?list:[]);
+      }catch(e){
+        if(!cancelled) setPmpErr(e.message.includes("не задан")?"POSTMYPOST_TOKEN не настроен":e.message);
+      }
+      if(!cancelled) setLoadingPmp(false);
+    }
+    load();
+    return ()=>{cancelled=true;};
+  },[]);
+
+  function savePmpId(val){
+    setProjects(p=>p.map(x=>x.id===proj.id?{...x,pmp_project_id:val}:x));
+    api.updateProject(proj.id,{pmp_project_id:val}).catch(()=>{});
+  }
+
   return <div style={{background:"#111118",border:'1px solid #1e1e2e',borderTop:'3px solid #2d2d44',borderRadius:12,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
             <div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{proj.label[0]}</div>
@@ -1195,6 +1427,27 @@ function ProjectCard({proj, showArchive, setProjects}){
             <button onClick={async()=>{if(!window.confirm("Удалить проект «"+proj.label+"»? Это действие нельзя отменить.")) return; try{await api.deleteProject(proj.id);setProjects(p=>p.filter(x=>x.id!==proj.id));}catch(e){alert("Ошибка: "+e.message);}}} style={{background:"transparent",border:"1px solid #ef444440",borderRadius:6,padding:"4px 8px",color:"#ef4444",cursor:"pointer",fontSize:11}}>🗑</button>
           </div>
           <textarea value={proj.description} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,description:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{description:e.target.value}).catch(()=>{})} placeholder="Описание проекта..." style={{...SI,minHeight:60,resize:"vertical",lineHeight:1.5,marginBottom:8,fontSize:11}}/>
+
+          {/* ── Post My Post linking ── */}
+          <div style={{background:"#0a0f1a",border:"1px solid #1e3a5f",borderRadius:8,padding:"9px 11px",marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+              <span style={{fontSize:11}}>📡</span>
+              <span style={{fontSize:10,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
+              {proj.pmp_project_id&&<span style={{fontSize:9,background:"#10b98115",color:"#10b981",border:"1px solid #10b98130",borderRadius:10,padding:"1px 7px",fontFamily:"monospace"}}>✅ привязан</span>}
+            </div>
+            {loadingPmp
+              ? <div style={{fontSize:10,color:"#6b7280"}}>⏳ Загружаю проекты PMP...</div>
+              : pmpErr
+                ? <div style={{fontSize:10,color:"#6b7280"}}>{pmpErr}</div>
+                : pmpProjects.length>0
+                  ? <select value={proj.pmp_project_id||""} onChange={e=>savePmpId(e.target.value)} style={{...SI,fontSize:11}}>
+                      <option value="">— не привязан —</option>
+                      {pmpProjects.map(p=><option key={p.id} value={p.id}>{p.name||p.title||("Проект "+p.id)}</option>)}
+                    </select>
+                  : <div style={{fontSize:10,color:"#4b5563"}}>Нет проектов (проверь POSTMYPOST_TOKEN)</div>
+            }
+          </div>
+
           <span style={LB}>ДОКУМЕНТЫ И ССЫЛКИ</span>
           {proj.links.filter(l=>l).map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
             <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
@@ -1654,11 +1907,11 @@ function MainApp({currentUser, onLogout}){
     </div>
 
     {/* MODALS */}
-    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
   </div>;
 }
