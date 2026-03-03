@@ -283,7 +283,7 @@ function Kanban({statuses,items,renderCard,onDrop,onAddClick}){
           onDragOver={e=>{e.preventDefault();setOverSt(st.id);}}
           onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverSt(null);}}
           onDrop={e=>{e.preventDefault();if(dragId){onDrop(dragId,st.id);setDragId(null);setOverSt(null);}}}
-          style={{minWidth:235,width:235,background:overSt===st.id?"#111120":"#0d0d16",border:`1px solid ${overSt===st.id?st.c+"70":"#1e1e2e"}`,borderRadius:12,padding:"10px 8px",flexShrink:0,transition:"all 0.12s"}}>
+          style={{minWidth:280,width:280,background:overSt===st.id?"#111120":"#0d0d16",border:`1px solid ${overSt===st.id?st.c+"70":"#1e1e2e"}`,borderRadius:12,padding:"10px 8px",flexShrink:0,transition:"all 0.12s"}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"0 2px"}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:st.c}}/>
             <span style={{fontSize:10,fontWeight:700,color:st.c,fontFamily:"monospace"}}>{st.l}</span>
@@ -1496,6 +1496,7 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
         </div>
         <input value={m.telegram} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,telegram:e.target.value}:x))} placeholder="@telegram" style={{...SI,marginBottom:6,fontSize:11}}/>
         <textarea value={m.note} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,note:e.target.value}:x))} placeholder="Заметки..." style={{...SI,minHeight:50,resize:"vertical",fontSize:11,lineHeight:1.4,marginBottom:8}}/>
+        {m.last_active?<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(m.last_active).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>:<div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 не заходил</div>}
 
       </div>)}
     </div>
@@ -1742,7 +1743,7 @@ function MainApp({currentUser, onLogout}){
     const DONE_STATUSES=["done","approved","published"];
     const completedAt=DONE_STATUSES.includes(newStatus)?new Date().toISOString().slice(0,10):"";
     const [,setterDrop] = useTaskStore(type, stores);
-    setterDrop(p=>p.map(x=>x.id===id?{...x,status:newStatus,...(completedAt?{completed_at:completedAt}:{})}:x));
+    setterDrop(p=>p.map(x=>x.id===id?{...x,status:newStatus,completed_at:completedAt}:x));
     const patch={status:newStatus};
     if(completedAt) patch.completed_at=completedAt;
     api.updateTask(id, patch).catch(e=>console.error("Drop error:",e));
@@ -1786,11 +1787,11 @@ function MainApp({currentUser, onLogout}){
         <span style={{background:"#1a1a2e",borderRadius:4,padding:"2px 7px",color:exec?"#a0aec0":"#2d2d44",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90}}>{exec?exec.name:"исполнитель"}</span>
       </div>
       {/* Дедлайн */}
-      {item.completed_at&&<div style={{fontSize:9,fontFamily:"monospace",color:"#10b981"}}>✅ Выполнено {item.completed_at}</div>}
+      {item.completed_at&&item.status==="done"&&<div style={{fontSize:9,fontFamily:"monospace",color:"#10b981"}}>✅ Выполнено {item.completed_at}</div>}
       {!item.completed_at&&dateStr&&<div style={{fontSize:9,fontFamily:"monospace",color:urgent?"#ef4444":"#4b5563"}}>📅 {dateStr}{daysLeft!==null&&` (${daysLeft>0?daysLeft+"д":"сегодня"})`}</div>}
       <div style={{display:"flex",gap:6,marginTop:5,alignItems:"center"}}>
         {chatCount>0&&<span style={{fontSize:9,color:"#9ca3af"}}>💬 {chatCount}</span>}
-        {(type==="post_reels"||type==="post_video"||type==="post_carousel")&&<button onClick={e=>{
+        {(type==="post_reels"||type==="post_video"||type==="post_carousel")&&item.status==="done"&&<button onClick={e=>{
           e.stopPropagation();
           // Mark post task as done
           drop(type,item.id,"done");
