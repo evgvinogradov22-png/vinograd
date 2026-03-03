@@ -114,13 +114,15 @@ function MiniChat({taskId, team, currentUser}){
         const up = await fetch("/api/upload", { method:"POST", body:fd });
         setProgress({ name: f.name, pct: 85 });
         if (!up.ok) throw new Error("Ошибка загрузки: " + await up.text());
-        const { url } = await up.json();
+        const upData = await up.json();
+        const url  = upData.url;
+        const dlurl = upData.dlurl || url;
         if (!url) throw new Error("Сервер не вернул ссылку");
         setProgress({ name: f.name, pct: 95 });
         const msg = await fetch(`/api/chat/${taskId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: myId, text: "", file_url: url, file_name: f.name }),
+          body: JSON.stringify({ user_id: myId, text: "", file_url: dlurl, file_name: f.name }),
         });
         if (!msg.ok) throw new Error("Ошибка отправки сообщения");
         const m = await msg.json();
@@ -170,7 +172,7 @@ function MiniChat({taskId, team, currentUser}){
                     <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
                       <span style={{fontSize:14}}>{/\.(jpg|jpeg|png|gif|webp)$/i.test(m.fname)?"🖼️":"/\.(mp4|mov|avi|mkv)$/i".test(m.fname)?"🎬":"📎"}</span>
                       <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
-                      <a href={m.furl} download={m.fname||"file"} target="_blank" rel="noreferrer"
+                      <a href={m.furl} target="_blank" rel="noreferrer"
                         style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>
                         ↓ Скачать
                       </a>
@@ -418,7 +420,7 @@ function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,sho
 
 // ── Forms ─────────────────────────────────────────────────────────────────────
 function PreForm({item,onSave,onClose,projects,team,currentUser}){
-  const [d,setD]=useState({...item}); const [ai,setAi]=useState(false); const [newRef,setNewRef]=useState("");
+  const [d,setD]=useState({...item,refs:item.refs||[]}); const [ai,setAi]=useState(false); const [newRef,setNewRef]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   async function genScript(){
     setAi(true);
@@ -473,7 +475,7 @@ function PreForm({item,onSave,onClose,projects,team,currentUser}){
 }
 
 function ProdForm({item,onSave,onClose,projects,team,currentUser}){
-  const [d,setD]=useState({...item,checklist:[...item.checklist]}); const [ne,setNe]=useState(""); const [na,setNa]=useState(""); const [nc,setNc]=useState("");
+  const [d,setD]=useState({...item,checklist:[...(item.checklist||[])],equipment:[...(item.equipment||[])],actors:[...(item.actors||[])]}); const [ne,setNe]=useState(""); const [na,setNa]=useState(""); const [nc,setNc]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -567,17 +569,31 @@ function PostReelsForm({item,onSave,onClose,projects,team,currentUser}){
       <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
     </div>
     <Field label="ИСХОДНИК (ВИДЕО)">
-      <input ref={fileRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f){setSourceFile(f);u("source_name",f.name);}}}/>
+      <input ref={fileRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={async e=>{
+        const f=e.target.files[0]; if(!f) return;
+        setSourceFile(f); u("source_name",f.name); u("source_url","");
+        setErr("⏳ Загрузка в облако...");
+        try{
+          const fd=new FormData(); fd.append("file",f);
+          const r=await fetch("/api/upload",{method:"POST",body:fd});
+          if(!r.ok) throw new Error(await r.text());
+          const upData=await r.json();
+          u("source_url", upData.dlurl||upData.url); setErr("");
+        }catch(e){setErr("Ошибка загрузки: "+e.message);}
+      }}/>
       {d.source_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-            <span>🎬</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.source_name}</span>
-            {d.source_url&&<a href={d.source_url} download={d.source_name} target="_blank" rel="noreferrer" style={{fontSize:10,color:"#a78bfa",textDecoration:"none"}}>↓</a>}
-            <button onClick={()=>{setSourceFile(null);u("source_name","");u("source_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
+            <span>🎬</span>
+            <span style={{fontSize:12,color:"#10b981",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.source_name}</span>
+            {d.source_url
+              ?<a href={d.source_url} download={d.source_name} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
+              :<span style={{fontSize:9,color:"#f59e0b"}}>⏳ загрузка...</span>}
+            <button onClick={()=>{setSourceFile(null);u("source_name","");u("source_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
           </div>
         :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить исходник (видео или аудио)</button>}
       {err&&<div style={{fontSize:11,color:"#ef4444",padding:"6px 10px",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,marginTop:4}}>{err}</div>}
     </Field>
-    <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
+    
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Описание задачи..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -607,7 +623,7 @@ function PostReelsForm({item,onSave,onClose,projects,team,currentUser}){
 }
 
 function PostVideoForm({item,onSave,onClose,projects,team,currentUser}){
-  const [d,setD]=useState({...item}); const [nl,setNl]=useState("");
+  const [d,setD]=useState({...item,source_links:item.source_links||[]}); const [nl,setNl]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -652,7 +668,7 @@ function SlideImageUpload({slide,idx,onUploaded}){
     try{
       const fd=new FormData(); fd.append("file",f);
       const r=await fetch("/api/upload",{method:"POST",body:fd});
-      if(r.ok){const d=await r.json();onUploaded(d.url,f.name);}
+      if(r.ok){const d=await r.json();onUploaded(d.dlurl||d.url,f.name);}
     }catch{}
     setLoading(false); e.target.value="";
   }
@@ -671,7 +687,7 @@ function SlideImageUpload({slide,idx,onUploaded}){
 }
 
 function PostCarouselForm({item,onSave,onClose,projects,team,currentUser}){
-  const [d,setD]=useState({...item,slides:[...item.slides]}); const [newSlide,setNewSlide]=useState("");
+  const [d,setD]=useState({...item,slides:[...(item.slides||[{id:genId(),text:"",img:"",img_name:""}])]}); const [newSlide,setNewSlide]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   const fileRef=useRef(null);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
@@ -743,7 +759,7 @@ function PubForm({item,onSave,onClose,projects,team,currentUser}){
     </div>
     <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"monospace",fontSize:11}}/></Field>
     <Field label="ФАЙЛ / МЕДИА">
-      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files[0];if(f){u("file_name",f.name);const fd=new FormData();fd.append("file",f);const r=await fetch("/api/upload",{method:"POST",body:fd}).catch(()=>null);if(r?.ok){const d=await r.json();u("file_url",d.url);}}}}/>
+      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files[0];if(f){u("file_name",f.name);const fd=new FormData();fd.append("file",f);const r=await fetch("/api/upload",{method:"POST",body:fd}).catch(()=>null);if(r?.ok){const d=await r.json();u("file_url",d.dlurl||d.url);}}}}/>
       {d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.file_name}</span>
@@ -1196,7 +1212,21 @@ function MainApp({currentUser, onLogout}){
         setProjects(projs.map(p => ({...p, links: p.links || [], archived: p.archived || false})));
         setTeamMembers(users.map(u => ({...u, note: u.note || ""})));
         // Split tasks by type and merge data field
-        const expand = t => ({ id: t.id, project: t.project_id, status: t.status, title: t.title, archived: t.archived || false, chat: [], ...(t.data || {}) });
+        const expand = t => {
+          const d = t.data || {};
+          return {
+            id: t.id, project: t.project_id, status: t.status, title: t.title,
+            archived: t.archived || false, chat: [],
+            // safe array defaults to prevent crashes
+            refs:         d.refs         || [],
+            equipment:    d.equipment    || [],
+            actors:       d.actors       || [],
+            checklist:    d.checklist    || [],
+            source_links: d.source_links || [],
+            slides:       d.slides       || [],
+            ...d,
+          };
+        };
         setPreItems(tasks.filter(t=>t.type==="pre").map(expand));
         setProdItems(tasks.filter(t=>t.type==="prod").map(expand));
         setPostReels(tasks.filter(t=>t.type==="post_reels").map(expand));
@@ -1228,9 +1258,8 @@ function MainApp({currentUser, onLogout}){
 
   const activeProjs=projects.filter(p=>!p.archived);
 
-  function applyFilter(items,filt,memberFields=["producer","editor","scriptwriter","operator","designer"]){
-    // Hide archived by default
-    items=items.filter(x=>!x.archived);
+  function applyFilter(items,filt,memberFields=["producer","editor","scriptwriter","operator","designer"],showArchived=false){
+    items=showArchived ? items.filter(x=>x.archived) : items.filter(x=>!x.archived);
     let r=items;
     if(filt.pf!=="all") r=r.filter(x=>x.project===filt.pf);
     if(filt.member!=="all") r=r.filter(x=>memberFields.some(f=>x[f]===filt.member));
@@ -1240,12 +1269,12 @@ function MainApp({currentUser, onLogout}){
     return r;
   }
 
-  const filtPre=applyFilter(preItems,preFilt);
-  const filtProd=applyFilter(prodItems,prodFilt);
-  const filtPostReels=applyFilter(postReels,postFilt);
-  const filtPostVideo=applyFilter(postVideo,postFilt);
-  const filtPostCarousels=applyFilter(postCarousels,postFilt);
-  const filtPub=applyFilter(pubItems,pubFilt);
+  const filtPre=applyFilter(preItems,preFilt,undefined,showArchivedPre);
+  const filtProd=applyFilter(prodItems,prodFilt,undefined,showArchivedProd);
+  const filtPostReels=applyFilter(postReels,postFilt,undefined,showArchivedPost);
+  const filtPostVideo=applyFilter(postVideo,postFilt,undefined,showArchivedPost);
+  const filtPostCarousels=applyFilter(postCarousels,postFilt,undefined,showArchivedPost);
+  const filtPub=applyFilter(pubItems,pubFilt,undefined,showArchivedPub);
 
   const ct=TABS.find(t=>t.id===tab);
 
