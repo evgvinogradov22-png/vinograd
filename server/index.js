@@ -112,6 +112,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS pmp_project_id TEXT DEFAULT ''`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active BIGINT DEFAULT 0`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
@@ -180,6 +181,7 @@ app.post("/api/auth/login", async (req, res) => {
     const user = await q1("SELECT * FROM users WHERE telegram=$1", [clean]);
     if (!user) return res.status(401).json({ error: "Пользователь не найден" });
     if (hash(password + clean) !== user.password_hash) return res.status(401).json({ error: "Неверный пароль" });
+    await q("UPDATE users SET last_active=$1 WHERE id=$2", [Date.now(), user.id]);
     res.json({ id: user.id, telegram: user.telegram, name: user.name, role: user.role, color: user.color });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
 });
@@ -189,7 +191,7 @@ app.post("/api/auth/login", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 app.get("/api/users", async (req, res) => {
-  try { res.json(await q("SELECT id,telegram,name,role,color FROM users ORDER BY created_at")); }
+  try { res.json(await q("SELECT id,telegram,name,role,color,last_active FROM users ORDER BY created_at")); }
   catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
@@ -313,6 +315,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
     vals.push(req.params.id);
     await q(`UPDATE tasks SET ${sets.join(",")} WHERE id=$${i}`, vals);
     const updated = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.id]);
+    const _ruid = req.headers["x-user-id"]; if (_ruid) q("UPDATE users SET last_active=$1 WHERE id=$2",[Date.now(),_ruid]).catch(()=>{});
     res.json(updated);
 
     // Smart notifications
