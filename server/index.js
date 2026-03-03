@@ -118,6 +118,18 @@ async function initDb() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    task_id TEXT DEFAULT '',
+    task_type TEXT DEFAULT '',
+    title TEXT DEFAULT '',
+    body TEXT DEFAULT '',
+    created_at BIGINT DEFAULT 0,
+    read BOOLEAN DEFAULT FALSE
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id)`);
 
   console.log("✅ Database ready");
 }
@@ -156,6 +168,15 @@ function notifyWS(userId, payload) {
   }
 }
 
+// Save notification to DB + send via WS
+async function pushNotif(userId, kind, taskId, taskType, title, body) {
+  if (!userId) return;
+  const id = "n_" + uuidv4().replace(/-/g,"").slice(0,10);
+  await q("INSERT INTO notifications(id,user_id,kind,task_id,task_type,title,body,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+    [id, userId, kind, taskId||"", taskType||"", title||"", body||"", Date.now()]).catch(()=>{});
+  notifyWS(userId, { kind, taskId, taskType, title, text: body });
+}
+
 // ════════════════════════════════════════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════════════════════════════════════════
@@ -185,6 +206,32 @@ app.post("/api/auth/login", async (req, res) => {
     await q("UPDATE users SET last_active=$1 WHERE id=$2", [Date.now(), user.id]);
     res.json({ id: user.id, telegram: user.telegram, name: user.name, role: user.role, color: user.color });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ════════════════════════════════════════════════════════════════════════════════
+
+// GET /api/notifications — получить непрочитанные для текущего пользователя
+app.get("/api/notifications", async (req, res) => {
+  const uid = req.headers["x-user-id"];
+  if (!uid) return res.json([]);
+  try {
+    const rows = await q("SELECT * FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50", [uid]);
+    res.json(rows);
+  } catch(e) { res.json([]); }
+});
+
+// POST /api/notifications/read — отметить прочитанным
+app.post("/api/notifications/read", async (req, res) => {
+  const uid = req.headers["x-user-id"];
+  const { id } = req.body;
+  if (!uid) return res.json({});
+  try {
+    if (id) await q("DELETE FROM notifications WHERE id=$1 AND user_id=$2", [id, uid]);
+    else await q("DELETE FROM notifications WHERE user_id=$1", [uid]);
+    res.json({ ok: true });
+  } catch(e) { res.json({ ok: false }); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -293,7 +340,7 @@ app.post("/api/tasks", async (req, res) => {
         .map(f => taskData[f]).filter(Boolean);
       for (const uid of [...new Set(assignees)]) {
         await notifyUser(uid, `📋 Новая задача назначена на вас:\n<b>${title||"Без названия"}</b>`);
-        notifyWS(uid, { kind: "task_assigned", taskId: newTask.id, taskType: type, title: title||"Без названия", by: req.headers["x-user-id"]||"" });
+        pushNotif(uid, "task_assigned", newTask.id, type, title||"Без названия", "Новая задача назначена на вас");
       }
     }
     res.json(saved);
@@ -395,7 +442,7 @@ app.post("/api/chat/:taskId", async (req, res) => {
 
 "${preview}"${link}`;
               await notifyUser(mentioned.id, txt);
-              notifyWS(mentioned.id, { kind: "chat_message", taskId, title: taskRow.title||"", text: msgText.slice(0,80), by: req.headers["x-user-id"]||"" });
+              pushNotif(mentioned.id, "chat_message", taskId, taskRow.type||"pre", taskRow.title||"", msgText.slice(0,80));
               participants.delete(mentioned.id); // don't double-notify
             }
           }
@@ -408,7 +455,7 @@ app.post("/api/chat/:taskId", async (req, res) => {
 
 ${preview}${link}`;
             await notifyUser(pid, txt);
-            notifyWS(pid, { kind: "chat_message", taskId, title: taskRow.title||"", text: msgText.slice(0,80), by: req.headers["x-user-id"]||"" });
+            pushNotif(pid, "chat_message", taskId, taskRow.type||"pre", taskRow.title||"", msgText.slice(0,80));
           }
         }
       }
