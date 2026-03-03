@@ -1552,6 +1552,9 @@ function MainApp({currentUser, onLogout}){
   // Stores object for useTaskStore — avoids repeated chains
   const stores = {preItems,setPreItems,prodItems,setProdItems,postReels,setPostReels,postVideo,setPostVideo,postCarousels,setPostCarousels,pubItems,setPubItems};
   const [loading,setLoading]=useState(true);
+  const [notifs,setNotifs]=useState([]);
+  const [showNotifs,setShowNotifs]=useState(false);
+  const globalWsRef=useRef(null);
 
   // ── Load data from API ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -1592,6 +1595,34 @@ function MainApp({currentUser, onLogout}){
     }
     loadAll();
   }, []);
+
+  // ── Global WebSocket for notifications ────────────────────────────────────
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${location.host}`);
+    globalWsRef.current = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ type: "join_user", userId: currentUser.id }));
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type !== "notification") return;
+        if (msg.by === currentUser.id) return; // не уведомлять себя
+        const notif = { id: Date.now()+"_"+Math.random(), kind: msg.kind, taskId: msg.taskId, taskType: msg.taskType, title: msg.title, text: msg.text, ts: Date.now(), read: false };
+        setNotifs(p => [notif, ...p].slice(0, 50));
+        // Browser push notification
+        if (Notification.permission === "granted") {
+          const body = msg.kind === "chat_message" ? (msg.text||"Новое сообщение") : "Новая задача назначена на вас";
+          const n = new Notification("🍇 " + (msg.title||"Виноград"), { body, icon: "/manifest.json" });
+          n.onclick = () => { window.focus(); n.close(); };
+        }
+      } catch {}
+    };
+    ws.onclose = () => { setTimeout(() => {}, 3000); };
+    // Request push permission
+    if (Notification.permission === "default") Notification.requestPermission();
+    return () => ws.close();
+  }, [currentUser?.id]);
 
   // Per-tab filters — must be before any conditional return!
   const [preFilt,setPreFilt]=useState({pf:"all",member:"all",sortBy:"default"});
@@ -1794,7 +1825,47 @@ function MainApp({currentUser, onLogout}){
           <span style={{fontSize:13}}>{t.icon}</span>{t.label}
           {t.id!=="summary"&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
         </button>)}
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,position:"relative"}}>
+          {/* 🔔 Bell */}
+          <div style={{position:"relative"}}>
+            <button onClick={()=>setShowNotifs(p=>!p)} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px",color:"#9ca3af",cursor:"pointer",fontSize:16,position:"relative"}}>
+              🔔
+              {notifs.filter(n=>!n.read).length>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#ef4444",color:"#fff",borderRadius:"50%",fontSize:9,width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{notifs.filter(n=>!n.read).length}</span>}
+            </button>
+            {showNotifs&&<div style={{position:"absolute",top:36,right:0,width:320,background:"#111118",border:"1px solid #2d2d44",borderRadius:12,boxShadow:"0 8px 32px #00000080",zIndex:1000,maxHeight:420,overflowY:"auto"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid #1e1e2e"}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#f0eee8"}}>🔔 Уведомления</span>
+                {notifs.length>0&&<button onClick={()=>setNotifs([])} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:10}}>Очистить все</button>}
+              </div>
+              {notifs.length===0&&<div style={{padding:"24px 14px",textAlign:"center",color:"#4b5563",fontSize:11}}>Нет уведомлений</div>}
+              {notifs.map(n=>{
+                const taskType=n.taskType||"pre";
+                const typeLabel=taskType==="pre"?"Препродакшн":taskType==="prod"?"Продакшн":taskType==="pub"?"Публикация":"Постпродакшн";
+                return <div key={n.id} onClick={()=>{
+                  setNotifs(p=>p.filter(x=>x.id!==n.id));
+                  if(n.taskId){
+                    const type=n.taskType||"pre";
+                    const tabId=type==="pre"?"pre":type==="prod"?"prod":type.startsWith("post")?"post":"pub";
+                    setTab(tabId);
+                    const allIt=[...preItems,...prodItems,...postReels,...postVideo,...postCarousels,...pubItems];
+                    const found=allIt.find(x=>x.id===n.taskId);
+                    if(found) openEdit(type,found);
+                  }
+                  setShowNotifs(false);
+                }} style={{padding:"10px 14px",borderBottom:"1px solid #0d0d16",cursor:"pointer",background:n.read?"transparent":"#0d0d16",display:"flex",gap:10,alignItems:"flex-start"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
+                onMouseLeave={e=>e.currentTarget.style.background=n.read?"transparent":"#0d0d16"}>
+                  <span style={{fontSize:16,flexShrink:0}}>{n.kind==="chat_message"?"💬":"📋"}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.title}</div>
+                    {n.text&&<div style={{fontSize:10,color:"#9ca3af",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.text}</div>}
+                    <div style={{fontSize:9,color:"#4b5563",marginTop:3,fontFamily:"monospace"}}>{typeLabel} · {new Date(n.ts).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}</div>
+                  </div>
+                  {!n.read&&<div style={{width:6,height:6,borderRadius:"50%",background:"#8b5cf6",flexShrink:0,marginTop:4}}/>}
+                </div>;
+              })}
+            </div>}
+          </div>
           <div style={{display:"flex",alignItems:"center",gap:6,background:"#111118",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px"}}>
             <div style={{width:20,height:20,borderRadius:"50%",background:`linear-gradient(135deg,${currentUser.color||"#8b5cf6"},#7c3aed)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff"}}>{(currentUser.name||currentUser.telegram||"?")[0].toUpperCase()}</div>
             <span style={{fontSize:11,fontWeight:600}}>@{currentUser.telegram}</span>
@@ -1804,6 +1875,8 @@ function MainApp({currentUser, onLogout}){
       </div>
     </div>
 
+    {/* Click outside to close notifs */}
+    {showNotifs&&<div onClick={()=>setShowNotifs(false)} style={{position:"fixed",inset:0,zIndex:999}}/>}
     {/* CONTENT */}
     <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
 
