@@ -114,6 +114,7 @@ async function initDb() {
 
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT ''`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS pmp_project_id TEXT DEFAULT ''`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
@@ -130,6 +131,14 @@ async function initDb() {
     read BOOLEAN DEFAULT FALSE
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS analytics_kpi (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    month INT NOT NULL,
+    year INT NOT NULL,
+    kpi INT DEFAULT 0,
+    UNIQUE(project_id, month, year)
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS training (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -246,6 +255,28 @@ app.post("/api/notifications/read", async (req, res) => {
     else await q("DELETE FROM notifications WHERE user_id=$1", [uid]);
     res.json({ ok: true });
   } catch(e) { res.json({ ok: false }); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ANALYTICS KPI
+// ════════════════════════════════════════════════════════════════════════════════
+
+app.get("/api/analytics/kpi", async (req, res) => {
+  try {
+    const rows = await q("SELECT * FROM analytics_kpi");
+    res.json(rows);
+  } catch(e) { res.json([]); }
+});
+
+app.post("/api/analytics/kpi", async (req, res) => {
+  const { project_id, month, year, kpi } = req.body;
+  if (!project_id) return res.status(400).json({ error: "no project_id" });
+  try {
+    await q(`INSERT INTO analytics_kpi(id,project_id,month,year,kpi) VALUES($1,$2,$3,$4,$5)
+      ON CONFLICT(project_id,month,year) DO UPDATE SET kpi=$5`,
+      ["kpi_"+project_id+"_"+year+"_"+month, project_id, month, year, kpi||0]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -692,6 +723,61 @@ async function notifyUser(userId, text) {
     }
   } catch(e) { console.error("notifyUser error:", e.message); }
 }
+
+// ── Morning digest cron (9:00 daily) ─────────────────────────────────────────
+const TG_GROUP_CHAT_ID = process.env.TELEGRAM_GROUP_CHAT_ID || "";
+
+async function sendMorningDigest() {
+  if (!TG_TOKEN || !TG_GROUP_CHAT_ID) {
+    console.log("[DIGEST] Skipped — no TG_TOKEN or TELEGRAM_GROUP_CHAT_ID");
+    return;
+  }
+  try {
+    const allTasks = await q("SELECT * FROM tasks WHERE archived=false");
+    const postTypes = ["post_reels","post_video","post_carousel"];
+    const donePost = allTasks.filter(t => postTypes.includes(t.type) && t.status === "done").length;
+    const inWorkPost = allTasks.filter(t => postTypes.includes(t.type) && ["in_progress","review","corrections"].includes(t.status)).length;
+    const published = allTasks.filter(t => t.type === "pub" && t.status === "published").length;
+    const readyToPub = allTasks.filter(t => t.type === "pub" && t.status !== "published").length;
+
+    const today = new Date().toLocaleDateString("ru", { weekday:"long", day:"numeric", month:"long" });
+    const text = `🍇 <b>Доброе утро! Сводка на ${today}</b>
+
+`
+      + `🎞 <b>Постпродакшн</b>
+`
+      + `  ✅ Смонтировано: <b>${donePost}</b>
+`
+      + `  🔄 В работе: <b>${inWorkPost}</b>
+
+`
+      + `🚀 <b>Публикации</b>
+`
+      + `  ✅ Опубликовано: <b>${published}</b>
+`
+      + `  📅 Готово к публикации: <b>${readyToPub}</b>`;
+
+    await tgNotify(TG_GROUP_CHAT_ID, text);
+    console.log("[DIGEST] Sent morning digest");
+  } catch(e) {
+    console.error("[DIGEST] Error:", e.message);
+  }
+}
+
+// Schedule at 9:00 Moscow time (UTC+3) = 06:00 UTC
+function scheduleMorningDigest() {
+  const now = new Date();
+  const next = new Date();
+  next.setUTCHours(6, 0, 0, 0);
+  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+  const msUntil = next - now;
+  console.log(`[DIGEST] Next digest in ${Math.round(msUntil/60000)} min`);
+  setTimeout(() => {
+    sendMorningDigest();
+    setInterval(sendMorningDigest, 24 * 60 * 60 * 1000);
+  }, msUntil);
+}
+scheduleMorningDigest();
 
 // Build rich task notification text
 async function taskNotifyText(taskId, action, fromUserId) {
