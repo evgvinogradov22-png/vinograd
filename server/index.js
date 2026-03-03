@@ -7,7 +7,8 @@ const http = require("http");
 const { WebSocketServer } = require("ws");
 const { Pool } = require("pg");
 const multer = require("multer");
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const FormData = require("form-data");
 
 const app = express();
 const server = http.createServer(app);
@@ -299,7 +300,29 @@ app.patch("/api/tasks/:id", async (req, res) => {
     if (completed_at  !== undefined) { sets.push(`completed_at=$${i++}`); vals.push(completed_at); }
     vals.push(req.params.id);
     await q(`UPDATE tasks SET ${sets.join(",")} WHERE id=$${i}`, vals);
-    res.json(await q1("SELECT * FROM tasks WHERE id=$1", [req.params.id]));
+    const updated = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.id]);
+    res.json(updated);
+
+    // Smart notifications
+    const reqUser = req.headers["x-user-id"] || "";
+    try {
+      const taskData = updated?.data || {};
+      const custId = taskData.producer || taskData.customer || "";
+      const execId = taskData.editor || taskData.scriptwriter || taskData.operator || taskData.designer || taskData.executor || "";
+      if (reqUser && custId && execId) {
+        if (reqUser === custId) {
+          const txt = await taskNotifyText(req.params.id, "✏️ Заказчик внёс изменения в задачу", reqUser);
+          await notifyUser(execId, txt);
+        } else if (reqUser === execId) {
+          const txt = await taskNotifyText(req.params.id, "🔧 Исполнитель обновил задачу", reqUser);
+          await notifyUser(custId, txt);
+        }
+      }
+      if (status !== undefined && execId && execId !== reqUser) {
+        const txt = await taskNotifyText(req.params.id, "📋 Тебя назначили исполнителем задачи", reqUser);
+        await notifyUser(execId, txt);
+      }
+    } catch(ne) { console.warn("Notification error:", ne.message); }
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка" }); }
 });
 
@@ -330,6 +353,48 @@ app.post("/api/chat/:taskId", async (req, res) => {
     await q("INSERT INTO chat_messages(id,task_id,user_id,text,file_url,file_name,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)",
       [id, req.params.taskId, user_id, text || "", file_url || "", file_name || "", now]);
     const msg = { id, task_id: req.params.taskId, user_id, text, file_url, file_name, created_at: now };
+
+    // ── Chat notifications (7, 8) ─────────────────────────────────────────────
+    try {
+      const task = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.taskId]);
+      if (task) {
+        const taskData = task.data || {};
+        const participants = new Set([
+          taskData.producer, taskData.customer, taskData.editor,
+          taskData.scriptwriter, taskData.operator, taskData.designer, taskData.executor
+        ].filter(Boolean));
+        const appUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : (process.env.APP_URL || "");
+        const link = appUrl ? ` <a href="${appUrl}">→ Открыть</a>` : "";
+        const sender = await q1("SELECT name FROM users WHERE id=$1", [user_id]);
+        const senderName = sender?.name || "Кто-то";
+        const preview = text ? (text.length > 80 ? text.slice(0, 80) + "…" : text) : "📎 файл";
+
+        // Notify @mentioned users (7)
+        if (text) {
+          const mentions = [...text.matchAll(/@([\wа-яёА-ЯЁ]+)/gi)].map(m => m[1].toLowerCase());
+          for (const mention of mentions) {
+            const mentioned = await q1("SELECT id FROM users WHERE LOWER(name)=LOWER($1)", [mention]);
+            if (mentioned && mentioned.id !== user_id) {
+              const txt = `🔔 <b>@${senderName}</b> упомянул тебя в «${task.title||"задаче"}»:
+
+"${preview}"${link}`;
+              await notifyUser(mentioned.id, txt);
+              participants.delete(mentioned.id); // don't double-notify
+            }
+          }
+        }
+
+        // Notify all other participants (8)
+        for (const pid of participants) {
+          if (pid !== user_id) {
+            const txt = `💬 <b>${senderName}</b> написал в «${task.title||"задаче"}»:
+
+${preview}${link}`;
+            await notifyUser(pid, txt);
+          }
+        }
+      }
+    } catch(ne) { console.warn("Chat notify error:", ne.message); }
     broadcast(req.params.taskId, { type: "message", msg });
     // Notify task assignees about new message
     const sender = await q1("SELECT name,telegram FROM users WHERE id=$1", [user_id]);
@@ -430,9 +495,27 @@ async function notifyUser(userId, text) {
       console.log(`Notifying user ${userId} (chat_id=${user.telegram_chat_id})`);
       await tgNotify(user.telegram_chat_id, text);
     } else {
-      console.log(`User ${userId} has no telegram_chat_id — skipping notification`);
+      console.log(`User ${userId} has no telegram_chat_id`);
     }
   } catch(e) { console.error("notifyUser error:", e.message); }
+}
+
+// Build rich task notification text
+async function taskNotifyText(taskId, action, fromUserId) {
+  try {
+    const task = await q1("SELECT * FROM tasks WHERE id=$1", [taskId]);
+    const from = fromUserId ? await q1("SELECT name FROM users WHERE id=$1", [fromUserId]) : null;
+    if (!task) return action;
+    const proj = await q1("SELECT label FROM projects WHERE id=$1", [task.project_id]);
+    const data = task.data || {};
+    const deadline = data.deadline || data.post_deadline || data.shoot_date || data.planned_date || "";
+    const appUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : (process.env.APP_URL || "");
+    const link = appUrl ? ("\n\n🔗 <a href=\"" + appUrl + "\">Открыть Виноград</a>") : "";
+    const parts = [action, "", "📋 <b>" + (task.title||"Без названия") + "</b>", "📁 Проект: " + (proj?.label||"?")];
+    if (deadline) parts.push("📅 Дедлайн: " + deadline);
+    if (from) parts.push("👤 От: " + from.name);
+    return parts.join("\n") + link;
+  } catch(e) { return action; }
 }
 
 // Webhook — Telegram sends updates here
@@ -575,7 +658,6 @@ app.post("/api/ai/transcribe", upload.single("file"), async (req, res) => {
       return res.status(413).json({ error: "Файл слишком большой (>24MB после сжатия). Попробуйте обрезать видео." });
     }
 
-    const FormData = require("form-data");
     const fd = new FormData();
     fd.append("file", audioBuffer, { filename: audioName, contentType: "audio/mpeg" });
     fd.append("model", "whisper-1");
