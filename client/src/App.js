@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { api, createWS } from "./api";
 import LoginScreen from "./LoginScreen";
 
@@ -59,9 +59,14 @@ function MiniChat({taskId, team, currentUser}){
   const [err,      setErr]    = useState("");
   const [showM,    setShowM]  = useState(false);
   const [mentionQ, setMentionQ] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [recSec,    setRecSec]    = useState(0);
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
   const inputRef  = useRef(null);
+  const mediaRecRef  = useRef(null);
+  const recChunksRef = useRef([]);
+  const recTimerRef  = useRef(null);
   const myId = currentUser?.id || "";
   const nm   = id => { try { return teamOf(id, team)?.name || "?"; } catch(e) { return "?"; } };
 
@@ -170,6 +175,53 @@ function MiniChat({taskId, team, currentUser}){
     xhr.send(fd);
   }
 
+  // ── Voice recording ──────────────────────────────────────────────────────────
+  async function startRec() {
+    if (recording || !taskId || taskId === "undefined") return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+      const mr = new MediaRecorder(stream, { mimeType });
+      recChunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        clearInterval(recTimerRef.current); setRecSec(0);
+        const blob = new Blob(recChunksRef.current, { type: mimeType });
+        const fname = "voice_" + Date.now() + ".webm";
+        setUploading(true); setUploadName("🎙️ Транскрибирую...");
+        try {
+          const fd2 = new FormData();
+          fd2.append("file", new File([blob], fname, { type: blob.type }));
+          const tr = await fetch("/api/ai/transcribe", { method:"POST", body:fd2 });
+          const trData = await tr.json();
+          if (tr.ok && trData.text) {
+            setText(p => (p ? p + " " : "") + trData.text);
+            inputRef.current?.focus();
+          } else {
+            const fd3 = new FormData();
+            fd3.append("file", new File([blob], fname, { type: blob.type }));
+            const up = await fetch("/api/upload", { method:"POST", body:fd3 });
+            if (up.ok) {
+              const upD = await up.json();
+              const k = upD.key||"";
+              const dlurl = k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(fname)}` : upD.url;
+              const msgR = await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"🎙️ Голосовое сообщение",file_url:dlurl,file_name:fname}) });
+              if (msgR.ok) { const m=await msgR.json(); setMsgs(p=>[...p,{id:m.id||genId(),user:m.user_id||myId,text:"🎙️ Голосовое сообщение",ts:m.created_at||Date.now(),fname,furl:dlurl}]); }
+            }
+          }
+        } catch(e2) { setErr("Ошибка записи: " + e2.message); }
+        setUploading(false); setUploadName("");
+      };
+      mr.start();
+      mediaRecRef.current = mr; setRecording(true); setRecSec(0);
+      recTimerRef.current = setInterval(() => setRecSec(s => s+1), 1000);
+    } catch(e) { setErr("Микрофон недоступен: " + e.message); }
+  }
+  function stopRec() {
+    if (mediaRecRef.current && recording) { mediaRecRef.current.stop(); setRecording(false); }
+  }
+
   // mentions
   function onType(e) {
     const v = e.target.value; setText(v);
@@ -215,7 +267,7 @@ function MiniChat({taskId, team, currentUser}){
                     </div>
                   )}
                 </div>
-                <div style={{fontSize:7,color:"#6b7280",marginTop:2,textAlign:isMe?"right":"left"}}>{m.ts?new Date(m.ts).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
+                <div style={{fontSize:7,color:"#6b7280",marginTop:2,textAlign:isMe?"right":"left"}}>{(m.ts&&m.ts>0)?new Date(Number(m.ts)).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
               </div>
             </div>
           );
@@ -258,8 +310,11 @@ function MiniChat({taskId, team, currentUser}){
       {/* input */}
       <div style={{padding:"6px 8px",borderTop:"1px solid #1e1e2e",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
         <input ref={fileRef} type="file" multiple accept="*/*" style={{position:"fixed",top:-9999,left:-9999,opacity:0,pointerEvents:"none"}} onChange={handleFiles}/>
-        <button onClick={()=>{ if(!uploading) fileRef.current?.click(); }} title="Прикрепить файл" disabled={uploading}
-          style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:uploading?"#4b5563":"#9ca3af",cursor:uploading?"not-allowed":"pointer",fontSize:14,flexShrink:0}}>📎</button>
+        <button onClick={()=>{ if(!uploading&&!recording) fileRef.current?.click(); }} title="Прикрепить файл" disabled={uploading||recording}
+          style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:(uploading||recording)?"#4b5563":"#9ca3af",cursor:(uploading||recording)?"not-allowed":"pointer",fontSize:14,flexShrink:0}}>📎</button>
+        <button onClick={recording?stopRec:startRec} disabled={uploading} title={recording?"Остановить":"Голосовое + транскрипция"}
+          style={{background:recording?"#ef4444":"#1a1a2e",border:"1px solid "+(recording?"#ef4444":"#2d2d44"),borderRadius:7,padding:"5px 9px",color:recording?"#fff":"#9ca3af",cursor:uploading?"not-allowed":"pointer",fontSize:recording?10:14,fontWeight:700,flexShrink:0,minWidth:34,transition:"all 0.15s"}}>
+          {recording?"⏹ "+recSec+"с":"🎙️"}</button>
         <input ref={inputRef} value={text} onChange={onType}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}if(e.key==="Escape")setShowM(false);}}
           placeholder="Сообщение... (@ для упоминания)"
@@ -1496,7 +1551,7 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
         </div>
         <input value={m.telegram} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,telegram:e.target.value}:x))} placeholder="@telegram" style={{...SI,marginBottom:6,fontSize:11}}/>
         <textarea value={m.note} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,note:e.target.value}:x))} placeholder="Заметки..." style={{...SI,minHeight:50,resize:"vertical",fontSize:11,lineHeight:1.4,marginBottom:8}}/>
-        {m.last_active?<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(m.last_active).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>:<div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 не заходил</div>}
+        {(m.last_active&&m.last_active>0)?<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(Number(m.last_active)).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>:<div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 не заходил</div>}
 
       </div>)}
     </div>
