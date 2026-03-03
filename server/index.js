@@ -35,7 +35,7 @@ const R2_BUCKET = process.env.R2_BUCKET || "contentflow-files";
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || "";
 
 // ── Multer (memory) ───────────────────────────────────────────────────────────
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -60,9 +60,12 @@ async function initDb() {
       role TEXT NOT NULL DEFAULT 'Оператор',
       color TEXT NOT NULL DEFAULT '#8b5cf6',
       password_hash TEXT NOT NULL,
+      telegram_chat_id TEXT DEFAULT '',
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
     )
   `);
+
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT DEFAULT ''`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS projects (
@@ -101,6 +104,7 @@ async function initDb() {
     )
   `);
 
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tg_chat_id TEXT DEFAULT ''`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
@@ -263,7 +267,17 @@ app.post("/api/tasks", async (req, res) => {
     const now = Date.now();
     await q("INSERT INTO tasks(id,type,title,project_id,status,data,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
       [id, type, title || "", project_id, status || "idea", JSON.stringify(data || {}), now, now]);
-    res.json(await q1("SELECT * FROM tasks WHERE id=$1", [id]));
+    const saved = await q1("SELECT * FROM tasks WHERE id=$1", [id]);
+    // Notify assignees about new task
+    if (saved) {
+      const taskData = data || {};
+      const assignees = ["producer","editor","scriptwriter","operator","designer","customer","executor"]
+        .map(f => taskData[f]).filter(Boolean);
+      for (const uid of [...new Set(assignees)]) {
+        await notifyUser(uid, `📋 Новая задача назначена на вас:\n<b>${title||"Без названия"}</b>`);
+      }
+    }
+    res.json(saved);
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка" }); }
 });
 
@@ -311,6 +325,21 @@ app.post("/api/chat/:taskId", async (req, res) => {
       [id, req.params.taskId, user_id, text || "", file_url || "", file_name || "", now]);
     const msg = { id, task_id: req.params.taskId, user_id, text, file_url, file_name, created_at: now };
     broadcast(req.params.taskId, { type: "message", msg });
+    // Notify task assignees about new message
+    const sender = await q1("SELECT name,telegram FROM users WHERE id=$1", [user_id]);
+    const task   = await q1("SELECT title,data FROM tasks WHERE id=$1", [req.params.taskId]);
+    if (task) {
+      const data = task.data || {};
+      const taskTitle = task.title || "задача";
+      const senderName = sender?.name || sender?.telegram || "Кто-то";
+      const notifText = `💬 <b>${senderName}</b> написал в «${taskTitle}»:\n${(text||"(файл)").slice(0,100)}`;
+      // Notify all assignees except sender
+      const assignees = ["producer","editor","scriptwriter","operator","designer","customer","executor"]
+        .map(f => data[f]).filter(id => id && id !== user_id);
+      for (const uid of [...new Set(assignees)]) {
+        await notifyUser(uid, notifText);
+      }
+    }
     res.json(msg);
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
@@ -343,6 +372,64 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
+
+// ════════════════════════════════════════════════════════════════════════════════
+// TELEGRAM NOTIFICATIONS
+// ════════════════════════════════════════════════════════════════════════════════
+
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+
+async function tgNotify(chatId, text) {
+  if (!TG_TOKEN || !chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+    });
+  } catch(e) { console.warn("TG notify failed:", e.message); }
+}
+
+// Get user's telegram chat_id by their user id
+async function notifyUser(userId, text) {
+  if (!userId) return;
+  const user = await q1("SELECT telegram_chat_id FROM users WHERE id=$1", [userId]);
+  if (user?.telegram_chat_id) await tgNotify(user.telegram_chat_id, text);
+}
+
+// Register bot endpoint — user sends /start to bot, we save their chat_id
+app.post("/api/tg/webhook", async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.json({ ok: true });
+    const chatId = message.chat?.id;
+    const text = message.text || "";
+    if (text.startsWith("/start")) {
+      // /start <telegram_username>
+      const username = text.split(" ")[1]?.toLowerCase().replace("@","");
+      if (username) {
+        await q("UPDATE users SET telegram_chat_id=$1 WHERE LOWER(telegram)=$2", [String(chatId), username]);
+        await tgNotify(chatId, `✅ Виноград подключён! Теперь вы будете получать уведомления.`);
+      } else {
+        await tgNotify(chatId, `👋 Отправьте: /start ваш_ник\n\nНапример: /start evg_vinogradov`);
+      }
+    }
+    res.json({ ok: true });
+  } catch(e) { console.error(e); res.json({ ok: true }); }
+});
+
+app.get("/api/tg/setup", (req, res) => {
+  if (!TG_TOKEN) return res.json({ error: "TELEGRAM_BOT_TOKEN не задан" });
+  res.json({ 
+    instructions: [
+      "1. Найдите вашего бота в Telegram",
+      "2. Отправьте: /start ваш_telegram_ник",
+      "3. Пример: /start evg_vinogradov"
+    ],
+    bot_url: `https://t.me/${process.env.TELEGRAM_BOT_NAME || "your_bot"}`
+  });
+});
+
 
 async function openaiJson(body) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -401,7 +488,7 @@ app.post("/api/ai/transcribe", upload.single("file"), async (req, res) => {
       return res.status(413).json({ error: "Файл слишком большой (>24MB после сжатия). Попробуйте обрезать видео." });
     }
 
-    const FormData = (await import("form-data")).default;
+    const FormData = require("form-data");
     const fd = new FormData();
     fd.append("file", audioBuffer, { filename: audioName, contentType: "audio/mpeg" });
     fd.append("model", "whisper-1");
