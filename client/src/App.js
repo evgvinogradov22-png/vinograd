@@ -278,7 +278,7 @@ function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,sho
 }
 
 // ── Forms ─────────────────────────────────────────────────────────────────────
-function PreForm({item,onSave,onClose,projects,team}){
+function PreForm({item,onSave,onClose,projects,team,currentUser}){
   const [d,setD]=useState({...item}); const [ai,setAi]=useState(false); const [newRef,setNewRef]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   async function genScript(){
@@ -321,16 +321,19 @@ function PreForm({item,onSave,onClose,projects,team}){
         <button onClick={()=>{if(newRef){u("refs",[...d.refs,newRef]);setNewRef("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
       </div>
     </Field>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <TeamSelect label="СЦЕНАРИСТ" value={d.scriptwriter} onChange={v=>u("scriptwriter",v)} team={team}/>
-      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.scriptwriter} onChange={v=>u("scriptwriter",v)} team={team}/></div>
+      </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#8b5cf6"/>
   </div>;
 }
 
-function ProdForm({item,onSave,onClose,projects,team}){
+function ProdForm({item,onSave,onClose,projects,team,currentUser}){
   const [d,setD]=useState({...item,checklist:[...item.checklist]}); const [ne,setNe]=useState(""); const [na,setNa]=useState(""); const [nc,setNc]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
@@ -377,16 +380,19 @@ function ProdForm({item,onSave,onClose,projects,team}){
       </div>
       <div style={{fontSize:9,color:"#3d3d55",fontFamily:"monospace",marginTop:3}}>{d.checklist.filter(c=>c.done).length}/{d.checklist.length} выполнено</div>
     </Field>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
-      <TeamSelect label="ОПЕРАТОР" value={d.operator} onChange={v=>u("operator",v)} team={team}/>
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.customer} onChange={v=>u("customer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.operator} onChange={v=>u("operator",v)} team={team}/></div>
+      </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#3b82f6"/>
   </div>;
 }
 
-function PostReelsForm({item,onSave,onClose,projects,team}){
+function PostReelsForm({item,onSave,onClose,projects,team,currentUser}){
   const [d,setD]=useState({...item}); const [tr,setTr]=useState(false); const [gb,setGb]=useState(false);
   const [sourceFile,setSourceFile]=useState(null); const [err,setErr]=useState("");
   const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
@@ -418,16 +424,21 @@ function PostReelsForm({item,onSave,onClose,projects,team}){
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
     </div>
     <StatusRow statuses={POST_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
+    </div>
     <Field label="ИСХОДНИК (ВИДЕО)">
       <input ref={fileRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f){setSourceFile(f);u("source_name",f.name);}}}/>
       {d.source_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>🎬</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.source_name}</span>
-            <button onClick={()=>{setSourceFile(null);u("source_name","");}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
+            {d.source_url&&<a href={d.source_url} download={d.source_name} target="_blank" rel="noreferrer" style={{fontSize:10,color:"#a78bfa",textDecoration:"none"}}>↓</a>}
+            <button onClick={()=>{setSourceFile(null);u("source_name","");u("source_url","");}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer"}}>×</button>
           </div>
         :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#6b7280",cursor:"pointer",fontSize:12}}>📤 Загрузить исходник (видео или аудио)</button>}
       {err&&<div style={{fontSize:11,color:"#ef4444",padding:"6px 10px",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,marginTop:4}}>{err}</div>}
     </Field>
+    <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Описание задачи..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -444,16 +455,19 @@ function PostReelsForm({item,onSave,onClose,projects,team}){
       <textarea value={d.birolls} onChange={e=>u("birolls",e.target.value)} placeholder="Появятся после транскрипции..." style={{...SI,minHeight:90,resize:"vertical",fontFamily:"monospace",fontSize:11}}/>
     </div>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={SI}/></Field>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
-      <TeamSelect label="МОНТАЖЁР" value={d.editor} onChange={v=>u("editor",v)} team={team}/>
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
+      </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#ec4899"/>
   </div>;
 }
 
-function PostVideoForm({item,onSave,onClose,projects,team}){
+function PostVideoForm({item,onSave,onClose,projects,team,currentUser}){
   const [d,setD]=useState({...item}); const [nl,setNl]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
@@ -462,6 +476,9 @@ function PostVideoForm({item,onSave,onClose,projects,team}){
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
     </div>
     <StatusRow statuses={POST_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
+    </div>
     <Field label="ИСХОДНИКИ (ССЫЛКИ)">
       {d.source_links.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
         <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
@@ -474,16 +491,47 @@ function PostVideoForm({item,onSave,onClose,projects,team}){
     </Field>
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Подробное ТЗ..." style={{...SI,minHeight:100,resize:"vertical",lineHeight:1.5}}/></Field>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={SI}/></Field>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
-      <TeamSelect label="МОНТАЖЁР" value={d.editor} onChange={v=>u("editor",v)} team={team}/>
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
+      </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#3b82f6"/>
   </div>;
 }
 
-function PostCarouselForm({item,onSave,onClose,projects,team}){
+// ── Slide image uploader ──────────────────────────────────────────────────────
+function SlideImageUpload({slide,idx,onUploaded}){
+  const [loading,setLoading]=useState(false);
+  const ref=useRef(null);
+  async function handle(e){
+    const f=e.target.files[0]; if(!f) return;
+    setLoading(true);
+    try{
+      const fd=new FormData(); fd.append("file",f);
+      const r=await fetch("/api/upload",{method:"POST",body:fd});
+      if(r.ok){const d=await r.json();onUploaded(d.url,f.name);}
+    }catch{}
+    setLoading(false); e.target.value="";
+  }
+  return <div style={{marginTop:4}}>
+    <input ref={ref} type="file" accept="image/*" style={{display:"none"}} onChange={handle}/>
+    {slide.img
+      ?<div style={{position:"relative",display:"inline-block",marginTop:4}}>
+          <img src={slide.img} alt="" style={{maxWidth:"100%",maxHeight:120,borderRadius:6,border:"1px solid #2d2d44",display:"block"}}/>
+          <div style={{display:"flex",gap:4,marginTop:3}}>
+            <a href={slide.img} download={slide.img_name||"slide.jpg"} style={{fontSize:9,color:"#06b6d4",textDecoration:"none"}}>⬇ Скачать</a>
+            <button onClick={()=>onUploaded("","")} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:9}}>× Удалить</button>
+          </div>
+        </div>
+      :<button onClick={()=>ref.current?.click()} disabled={loading} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:5,padding:"3px 10px",color:loading?"#f59e0b":"#4b5563",cursor:"pointer",fontSize:9,marginTop:3}}>{loading?"⏳ Загрузка...":"🖼 Загрузить изображение"}</button>}
+  </div>;
+}
+
+function PostCarouselForm({item,onSave,onClose,projects,team,currentUser}){
   const [d,setD]=useState({...item,slides:[...item.slides]}); const [newSlide,setNewSlide]=useState("");
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   const fileRef=useRef(null);
@@ -493,6 +541,7 @@ function PostCarouselForm({item,onSave,onClose,projects,team}){
       <Field label="ПРОЕКТ"><select value={d.project} onChange={e=>u("project",e.target.value)} style={SI}>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
     </div>
     <StatusRow statuses={POST_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
     <Field label="ТЕКСТ НА ОБЛОЖКЕ (слайд 1)"><input value={d.cover_text} onChange={e=>u("cover_text",e.target.value)} placeholder="Заголовок карусели..." style={SI}/></Field>
     <Field label="СЛАЙДЫ КАРУСЕЛИ">
       <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
@@ -501,8 +550,8 @@ function PostCarouselForm({item,onSave,onClose,projects,team}){
             <div style={{width:24,height:24,borderRadius:6,background:"#2d2d44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#6b7280",flexShrink:0}}>{i+1}</div>
             <div style={{flex:1}}>
               <textarea value={sl.text} onChange={e=>u("slides",d.slides.map((s,j)=>j===i?{...s,text:e.target.value}:s))} placeholder={`Текст слайда ${i+1}...`} style={{...SI,minHeight:40,resize:"vertical",fontSize:11,lineHeight:1.4}}/>
-              {sl.img&&<div style={{fontSize:9,color:"#a78bfa",marginTop:3}}>🖼 {sl.img}</div>}
-              <button onClick={()=>{const fi=document.createElement("input");fi.type="file";fi.accept="image/*";fi.onchange=e=>{const f=e.target.files[0];if(f)u("slides",d.slides.map((s,j)=>j===i?{...s,img:f.name}:s));};fi.click();}} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:5,padding:"2px 8px",color:"#4b5563",cursor:"pointer",fontSize:9,marginTop:3}}>🖼 Загрузить изображение</button>
+              
+              <SlideImageUpload slide={sl} idx={i} onUploaded={(url,name)=>u("slides",d.slides.map((s,j)=>j===i?{...s,img:url,img_name:name}:s))}/>
             </div>
             <button onClick={()=>u("slides",d.slides.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:14,marginTop:2}}>×</button>
           </div>
@@ -512,16 +561,19 @@ function PostCarouselForm({item,onSave,onClose,projects,team}){
     </Field>
     <Field label="ТЗ ДЛЯ ДИЗАЙНЕРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Стиль, цвета, шрифты, особенности оформления..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/></Field>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={SI}/></Field>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
-      <TeamSelect label="ДИЗАЙНЕР" value={d.designer} onChange={v=>u("designer",v)} team={team}/>
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.designer} onChange={v=>u("designer",v)} team={team}/></div>
+      </div>
     </div>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#a78bfa"/>
   </div>;
 }
 
-function PubForm({item,onSave,onClose,projects,team}){
+function PubForm({item,onSave,onClose,projects,team,currentUser}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
   const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
   async function genCap(){
@@ -560,41 +612,55 @@ function PubForm({item,onSave,onClose,projects,team}){
           </div>
         :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#6b7280",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
     </Field>
-    <TeamSelect label="ПРОДЮСЕР" value={d.producer} onChange={v=>u("producer",v)} team={team}/>
-    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team}/>
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
+      </div>
+    </div>
+    <MiniChat msgs={d.chat} onNewMsg={m=>u("chat",[...d.chat,m])} team={team} currentUser={currentUser}/>
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} color="#10b981"/>
   </div>;
 }
 
 // ── Summary View ──────────────────────────────────────────────────────────────
-function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,currentUser}){
+function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,currentUser,onOpenTask}){
   const ME = currentUser?.id || "";
-  const [scope,setScope]=useState("all"); // "all" | "my"
+  const [scope,setScope]=useState("all"); // "all"|"my_customer"|"my_executor"
+  // scope aliases used in filter
   const [projFilter,setProjFilter]=useState("all");
-  const [period,setPeriod]=useState("all"); // "all"|"week"|"month"|"quarter"
+  const [dateFrom,setDateFrom]=useState("");
+  const [dateTo,setDateTo]=useState("");
   const activeProjs=projects.filter(p=>!p.archived);
   const nm=id=>teamOf(id,team)?.name||"?";
   const rc=id=>teamOf(id,team)?.color||"#6b7280";
 
   // Period cutoff
-  const now=Date.now();
-  const periodMs={week:7*86400000,month:30*86400000,quarter:90*86400000};
   function inPeriod(item){
-    if(period==="all") return true;
-    const cutoff=now-periodMs[period];
-    const dates=[item.deadline,item.shoot_date,item.planned_date].filter(Boolean);
-    if(dates.length===0) return true; // no date — include always
-    return dates.some(d=>new Date(d).getTime()>=cutoff);
+    if(!dateFrom&&!dateTo) return true;
+    const dates=[item.deadline,item.shoot_date,item.planned_date,item.post_deadline].filter(Boolean);
+    if(dates.length===0) return true;
+    return dates.some(d=>{
+      const t=new Date(d).getTime();
+      const from=dateFrom?new Date(dateFrom).getTime():0;
+      const to=dateTo?new Date(dateTo).getTime()+86400000:Infinity;
+      return t>=from&&t<=to;
+    });
   }
   // Member fields
   const MF=["producer","editor","scriptwriter","operator","designer"];
-  function isMyTask(item){ return MF.some(f=>item[f]===ME); }
+  function isMyTask(item){
+    if(scope==="my_customer") return item.customer===ME||item.producer===ME;
+    if(scope==="my_executor") return ["editor","scriptwriter","operator","designer","executor"].some(f=>item[f]===ME);
+    return MF.some(f=>item[f]===ME);
+  }
 
   // Apply all filters
   function applyAll(items){
     let r=items;
     if(projFilter!=="all") r=r.filter(x=>x.project===projFilter);
-    if(scope==="my") r=r.filter(isMyTask);
+    if(scope!=="all") r=r.filter(isMyTask);
     r=r.filter(inPeriod);
     return r;
   }
@@ -619,6 +685,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
     const done=items.filter(x=>["done","published","approved"].includes(x.status)).length;
     return {...proj,total:items.length,done};
   }).filter(p=>p.total>0);
+  const allRaw=[...fPre.map(x=>({...x,_type:"pre"})),...fProd.map(x=>({...x,_type:"prod"})),...fReels.map(x=>({...x,_type:"post_reels"})),...fVideo.map(x=>({...x,_type:"post_video"})),...fCarousels.map(x=>({...x,_type:"post_carousel"})),...fPub.map(x=>({...x,_type:"pub"}))];
   const recentChats=allChats.slice(-10).reverse();
   // Deadlines from filtered items
   const deadlines=[
@@ -627,9 +694,8 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
     ...fPub.filter(x=>x.planned_date&&x.status!=="published").map(x=>({...x,_type:"Публикация",_date:x.planned_date.slice(0,10)})),
   ].sort((a,b)=>a._date>b._date?1:-1).slice(0,8);
 
-  const scopeLabel = scope==="my" ? `Мои задачи (@evg)` : "Вся компания";
+  const scopeLabel = scope==="my_customer"?"📋 Я заказчик":scope==="my_executor"?"🔧 Я исполнитель":"🏢 Все задачи";
   const projLabel  = projFilter==="all" ? "Все проекты" : (activeProjs.find(p=>p.id===projFilter)?.label||"?");
-  const periodLabel= {all:"Всё время",week:"Неделя",month:"Месяц",quarter:"Квартал"}[period];
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -643,7 +709,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
           <div>
             <span style={{...LB,display:"block"}}>ОБЛАСТЬ</span>
             <div style={{display:"flex",gap:4}}>
-              {[["all","🏢 Вся компания"],["my","👤 Мои задачи"]].map(([id,l])=>(
+              {[["all","🏢 Все"],["my_customer","📋 Я заказчик"],["my_executor","🔧 Я исполнитель"]].map(([id,l])=>(
                 <button key={id} onClick={()=>setScope(id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:scope===id?"#f97316"+"20":"#111118",border:`1px solid ${scope===id?"#f97316":"#2d2d44"}`,color:scope===id?"#f97316":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:scope===id?700:400,whiteSpace:"nowrap"}}>{l}</button>
               ))}
             </div>
@@ -663,10 +729,11 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
           {/* Period filter */}
           <div>
             <span style={{...LB,display:"block"}}>ПЕРИОД</span>
-            <div style={{display:"flex",gap:4}}>
-              {[["all","Всё время"],["week","Неделя"],["month","Месяц"],["quarter","Квартал"]].map(([id,l])=>(
-                <button key={id} onClick={()=>setPeriod(id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:period===id?"#06b6d420":"#111118",border:`1px solid ${period===id?"#06b6d4":"#2d2d44"}`,color:period===id?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:period===id?700:400,whiteSpace:"nowrap"}}>{l}</button>
-              ))}
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:dateFrom?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",outline:"none"}}/>
+              <span style={{color:"#4b5563",fontSize:11}}>—</span>
+              <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:dateTo?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",outline:"none"}}/>
+              {(dateFrom||dateTo)&&<button onClick={()=>{setDateFrom("");setDateTo("");}} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:"#4b5563",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>✕</button>}
             </div>
           </div>
         </div>
@@ -676,7 +743,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
           <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>ПОКАЗАНО:</span>
           <span style={{fontSize:10,background:"#f97316"+"20",color:"#f97316",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{scopeLabel}</span>
           <span style={{fontSize:10,background:"#f59e0b"+"20",color:"#f59e0b",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>📁 {projLabel}</span>
-          <span style={{fontSize:10,background:"#06b6d4"+"20",color:"#06b6d4",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>⏱ {periodLabel}</span>
+          <span style={{fontSize:10,background:"#06b6d420",color:"#06b6d4",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>⏱ {dateFrom||dateTo?(dateFrom||"…")+" → "+(dateTo||"…"):"Всё время"}</span>
           <span style={{fontSize:10,background:"#2d2d44",color:"#6b7280",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{all.length} задач</span>
         </div>
       </div>
@@ -744,7 +811,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
             const proj=projOf(x.project,projects);
             const daysLeft=Math.ceil((new Date(x._date).getTime()-Date.now())/(86400000));
             const urgent=daysLeft<=3;
-            return <div key={i} style={{background:"#111118",border:`1px solid ${urgent?"#ef444440":proj.color+"25"}`,borderLeft:`3px solid ${urgent?"#ef4444":proj.color}`,borderRadius:8,padding:"9px 12px",display:"flex",gap:10,alignItems:"center"}}>
+            return <div key={i} onClick={()=>onOpenTask&&onOpenTask(x._type==="Сценарий"?"pre":x._type==="Съёмка"?"prod":"pub",x)} style={{background:"#111118",border:`1px solid ${urgent?"#ef444440":proj.color+"25"}`,borderLeft:`3px solid ${urgent?"#ef4444":proj.color}`,borderRadius:8,padding:"9px 12px",display:"flex",gap:10,alignItems:"center",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
               <div style={{textAlign:"center",minWidth:38}}>
                 <div style={{fontSize:16,fontWeight:800,color:urgent?"#ef4444":"#f59e0b",fontFamily:"monospace",lineHeight:1}}>{daysLeft>0?daysLeft:"—"}</div>
                 <div style={{fontSize:7,color:"#4b5563",fontFamily:"monospace"}}>{daysLeft>0?"дн.":"сегодня"}</div>
@@ -1008,6 +1075,8 @@ function MainApp({currentUser, onLogout}){
   const activeProjs=projects.filter(p=>!p.archived);
 
   function applyFilter(items,filt,memberFields=["producer","editor","scriptwriter","operator","designer"]){
+    // Hide archived by default
+    items=items.filter(x=>!x.archived);
     let r=items;
     if(filt.pf!=="all") r=r.filter(x=>x.project===filt.pf);
     if(filt.member!=="all") r=r.filter(x=>memberFields.some(f=>x[f]===filt.member));
@@ -1062,6 +1131,15 @@ function MainApp({currentUser, onLogout}){
     close();
   }
 
+  function archiveTask(type,id){
+    const upd=setter=>setter(p=>p.map(x=>x.id===id?{...x,archived:!x.archived}:x));
+    if(type==="pre") upd(setPreItems); else if(type==="prod") upd(setProdItems);
+    else if(type==="post_reels") upd(setPostReels); else if(type==="post_video") upd(setPostVideo);
+    else if(type==="post_carousel") upd(setPostCarousels); else if(type==="pub") upd(setPubItems);
+    const getter=type==="pre"?preItems:type==="prod"?prodItems:type==="post_reels"?postReels:type==="post_video"?postVideo:type==="post_carousel"?postCarousels:pubItems;
+    const item=getter.find(x=>x.id===id);
+    if(item){ const{id:_id,project,status,title,chat,...rest}=item; api.updateTask(id,{data:{...rest,archived:!item.archived}}).catch(()=>{}); }
+  }
   function drop(type,id,newStatus){
     const upd=setter=>setter(p=>p.map(x=>x.id===id?{...x,status:newStatus}:x));
     if(type==="pre") upd(setPreItems);
@@ -1087,19 +1165,38 @@ function MainApp({currentUser, onLogout}){
   function mkCard(item,type){
     const proj=projOf(item.project,projects);
     const chatCount=(item.chat||[]).length;
-    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${proj.color}25`,borderLeft:`3px solid ${proj.color}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
+    const custId=item.customer||item.producer||"";
+    const execId=item.executor||item.editor||item.scriptwriter||item.operator||item.designer||"";
+    const cust=teamOf(custId,teamMembers);
+    const exec=teamOf(execId,teamMembers);
+    const dateStr=item.deadline||item.shoot_date?.slice(0,10)||item.planned_date?.slice(0,10)||item.post_deadline||"";
+    const daysLeft=dateStr?Math.ceil((new Date(dateStr).getTime()-Date.now())/86400000):null;
+    const urgent=daysLeft!==null&&daysLeft<=2;
+    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${urgent?"#ef444450":proj.color+"25"}`,borderLeft:`3px solid ${urgent?"#ef4444":proj.color}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
       onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
-      <div style={{fontWeight:700,fontSize:12,marginBottom:4}}>{item.title||"Без названия"}</div>
-      <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:3}}>
+      <div style={{fontWeight:700,fontSize:12,marginBottom:5}}>{item.title||"Без названия"}</div>
+      <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
         <Badge color={proj.color}>{proj.label}</Badge>
         {item.type&&<Badge color="#4b5563">{item.type}</Badge>}
+        {item.slides&&<Badge color="#4b5563">📋 {item.slides.length} сл.</Badge>}
       </div>
-      {item.deadline&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>📅 {item.deadline}</div>}
-      {item.shoot_date&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>📅 {item.shoot_date.slice(0,10)}</div>}
-      {item.slides&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>📋 {item.slides.length} слайдов</div>}
+      {/* Заказчик — исполнитель */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,gap:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,flex:1}}>
+          {cust?<><div style={{width:16,height:16,borderRadius:"50%",background:cust.color||"#8b5cf6",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#fff"}}>{cust.name[0]}</div><span style={{fontSize:9,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cust.name}</span></>:<span style={{fontSize:9,color:"#2d2d44"}}>— заказчик</span>}
+        </div>
+        <span style={{fontSize:9,color:"#2d2d44",flexShrink:0}}>→</span>
+        <div style={{display:"flex",alignItems:"center",gap:4,flex:1,justifyContent:"flex-end"}}>
+          {exec?<><span style={{fontSize:9,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{exec.name}</span><div style={{width:16,height:16,borderRadius:"50%",background:exec.color||"#10b981",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#fff"}}>{exec.name[0]}</div></>:<span style={{fontSize:9,color:"#2d2d44"}}>исполнитель —</span>}
+        </div>
+      </div>
+      {/* Дедлайн */}
+      {dateStr&&<div style={{fontSize:9,fontFamily:"monospace",color:urgent?"#ef4444":"#4b5563"}}>📅 {dateStr}{daysLeft!==null&&` (${daysLeft>0?daysLeft+"д":"сегодня"})`}</div>}
       <div style={{display:"flex",gap:6,marginTop:5,alignItems:"center"}}>
         {chatCount>0&&<span style={{fontSize:9,color:"#4b5563"}}>💬 {chatCount}</span>}
-        {type==="post_reels"&&<button onClick={e=>{e.stopPropagation();setModal({type:"pub",item:defItem("pub",{title:item.title,project:item.project})});}} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
+        {(type==="post_reels"||type==="post_video"||type==="post_carousel")&&<button onClick={e=>{e.stopPropagation();setModal({type:"pub",item:defItem("pub",{title:item.title,project:item.project})});}} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
+        {item.archived&&<Badge color="#4b5563">📦 архив</Badge>}
+        <button onClick={e=>{e.stopPropagation();archiveTask(type,item.id);}} title={item.archived?"Разархивировать":"Архивировать"} style={{marginLeft:"auto",background:"transparent",border:"none",color:"#2d2d44",cursor:"pointer",fontSize:10,padding:"0 2px"}}>{item.archived?"↩":"📦"}</button>
       </div>
     </div>;
   }
@@ -1180,17 +1277,17 @@ function MainApp({currentUser, onLogout}){
         </div>;}}/>}
       </>}
 
-      {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser}/>}
+      {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="projects"&&<ProjectsView projects={projects} setProjects={setProjects}/>}
       {tab==="team"&&<TeamView teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/>}
     </div>
 
     {/* MODALS */}
-    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close}><PreForm          item={modal.item} onSave={d=>save("pre",d)}           onClose={close} projects={projects} team={teamMembers}/></Modal>}
-    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close}><ProdForm         item={modal.item} onSave={d=>save("prod",d)}          onClose={close} projects={projects} team={teamMembers}/></Modal>}
-    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)}    onClose={close} projects={projects} team={teamMembers}/></Modal>}
-    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)}    onClose={close} projects={projects} team={teamMembers}/></Modal>}
-    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onClose={close} projects={projects} team={teamMembers}/></Modal>}
-    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close}><PubForm          item={modal.item} onSave={d=>save("pub",d)}           onClose={close} projects={projects} team={teamMembers}/></Modal>}
+    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close}><PreForm          item={modal.item} onSave={d=>save("pre",d)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close}><ProdForm         item={modal.item} onSave={d=>save("prod",d)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close}><PubForm          item={modal.item} onSave={d=>save("pub",d)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
   </div>;
 }
