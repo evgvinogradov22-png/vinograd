@@ -172,8 +172,13 @@ function notifyWS(userId, payload) {
 async function pushNotif(userId, kind, taskId, taskType, title, body) {
   if (!userId) return;
   const id = "n_" + uuidv4().replace(/-/g,"").slice(0,10);
-  await q("INSERT INTO notifications(id,user_id,kind,task_id,task_type,title,body,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-    [id, userId, kind, taskId||"", taskType||"", title||"", body||"", Date.now()]).catch(()=>{});
+  try {
+    await q("INSERT INTO notifications(id,user_id,kind,task_id,task_type,title,body,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+      [id, userId, kind, taskId||"", taskType||"", title||"", body||"", Date.now()]);
+    console.log("[NOTIF] saved:", kind, "for", userId, "task:", taskId);
+  } catch(e) {
+    console.error("[NOTIF ERROR]", e.message);
+  }
   notifyWS(userId, { kind, taskId, taskType, title, text: body });
 }
 
@@ -218,6 +223,7 @@ app.get("/api/notifications", async (req, res) => {
   if (!uid) return res.json([]);
   try {
     const rows = await q("SELECT * FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50", [uid]);
+    console.log("[NOTIF GET] user:", uid, "count:", rows.length);
     res.json(rows);
   } catch(e) { res.json([]); }
 });
