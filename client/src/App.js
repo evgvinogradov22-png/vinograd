@@ -582,7 +582,8 @@ function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFn
 // ── FinalFileOrLink — upload file or paste link ──────────────────────────────
 function FinalFileOrLink({d,u,fileRef}){
   const [mode,setMode]=useState(d.final_file_url?"file":d.final_link?"link":"link");
-  const fRef=fileRef||useRef(null);
+  const _ownRef=useRef(null);
+  const fRef=fileRef||_ownRef;
   const [uploading,setUploading]=useState(false);
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
@@ -1339,6 +1340,19 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
 // ── Projects View ─────────────────────────────────────────────────────────────
 function ProjectsView({projects,setProjects}){
   const [showArchive,setShowArchive]=useState(false);
+  const [pmpProjects,setPmpProjects]=useState([]);
+  const [pmpLoading,setPmpLoading]=useState(false);
+  // Load PMP projects ONCE for all cards
+  useEffect(()=>{
+    let cancelled=false;
+    setPmpLoading(true);
+    fetch("/api/pmp/projects")
+      .then(r=>r.ok?r.json():[])
+      .then(data=>{ if(!cancelled){ const list=data?.data||data?.items||data||[]; setPmpProjects(Array.isArray(list)?list:[]); } })
+      .catch(()=>{})
+      .finally(()=>{ if(!cancelled) setPmpLoading(false); });
+    return ()=>{cancelled=true;};
+  },[]);
   const [adding,setAdding]=useState(false);
   const [newP,setNewP]=useState({label:"",color:"#8b5cf6",description:"",links:[""]});
   const visible=projects.filter(p=>showArchive?p.archived:!p.archived);
@@ -1381,38 +1395,16 @@ function ProjectsView({projects,setProjects}){
     {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#9ca3af"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
       {visible.map(proj=>(
-        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects}/>
+        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects} pmpProjects={pmpProjects} pmpLoading={pmpLoading}/>
       ))}
     </div>
   </div>;
 }
 
-function ProjectCard({proj, showArchive, setProjects}){
+function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading=false}){
   const [nl,setNl]=useState("");
-  const [pmpProjects,setPmpProjects]=useState([]); // [{id,name}]
-  const [loadingPmp,setLoadingPmp]=useState(false);
-  const [pmpErr,setPmpErr]=useState("");
-
-  // Load PMP projects on mount (silently — only if PMP token configured)
-  useEffect(()=>{
-    let cancelled=false;
-    async function load(){
-      setLoadingPmp(true);
-      try{
-        const r=await fetch("/api/pmp/projects");
-        const data=await r.json();
-        if(cancelled) return;
-        if(!r.ok) throw new Error(data.error||"Ошибка");
-        const list=data?.data||data?.items||data||[];
-        setPmpProjects(Array.isArray(list)?list:[]);
-      }catch(e){
-        if(!cancelled) setPmpErr(e.message.includes("не задан")?"POSTMYPOST_TOKEN не настроен":e.message);
-      }
-      if(!cancelled) setLoadingPmp(false);
-    }
-    load();
-    return ()=>{cancelled=true;};
-  },[]);
+  const loadingPmp=pmpLoading;
+  const pmpErr="";
 
   function savePmpId(val){
     setProjects(p=>p.map(x=>x.id===proj.id?{...x,pmp_project_id:val}:x));
@@ -1530,52 +1522,6 @@ export default function App(){
   return <MainApp currentUser={currentUser} onLogout={handleLogout}/>;
 }
 
-// ── LoginScreen lazy import ────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
-  const SI2 = {background:"#16161f",border:"1px solid #2d2d44",borderRadius:8,padding:"10px 14px",color:"#f0eee8",fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"};
-  const ROLES2 = ["Менеджер проекта","Сценарист","Оператор","Монтажёр","Продюсер","Таргетолог","Дизайнер"];
-  const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({telegram:"",password:"",name:"",role:"Продюсер",color:"#8b5cf6",invite_password:""});
-  const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
-  const u=(k,v)=>setForm(p=>({...p,[k]:v}));
-  async function submit(){
-    setErr(""); setLoading(true);
-    try { const user = mode==="login" ? await api.login({telegram:form.telegram,password:form.password}) : await api.register(form); onLogin(user); }
-    catch(e){ setErr(e.message); }
-    setLoading(false);
-  }
-  return (
-    <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0f"}}>
-      <div style={{width:360,background:"#111118",border:"1px solid #2d2d44",borderRadius:16,padding:32}}>
-        <div style={{textAlign:"center",marginBottom:28}}>
-          <div style={{fontSize:48,marginBottom:8}}>🍇</div>
-          <div style={{fontSize:22,fontWeight:800}}>Виноград</div>
-          <div style={{fontSize:11,color:"#9ca3af",fontFamily:"monospace",marginTop:4}}>production system</div>
-        </div>
-        <div style={{display:"flex",marginBottom:20,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:8,padding:3}}>
-          {[["login","Войти"],["register","Регистрация"]].map(([m,l])=>(
-            <button key={m} onClick={()=>setMode(m)} style={{flex:1,padding:"7px",borderRadius:6,cursor:"pointer",background:mode===m?"#8b5cf6":"transparent",border:"none",color:mode===m?"#fff":"#6b7280",fontFamily:"inherit",fontSize:12,fontWeight:mode===m?700:400}}>{l}</button>
-          ))}
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {mode==="register"&&<input value={form.name} onChange={e=>u("name",e.target.value)} placeholder="Имя Фамилия" style={SI2}/>}
-          <input value={form.telegram} onChange={e=>u("telegram",e.target.value)} placeholder="@telegram" style={SI2}/>
-          <input type="password" value={form.password} onChange={e=>u("password",e.target.value)} placeholder="Пароль" style={SI2} onKeyDown={e=>e.key==="Enter"&&submit()}/>
-          {mode==="register"&&<>
-            <select value={form.role} onChange={e=>u("role",e.target.value)} style={SI2}>{ROLES2.map(r=><option key={r} value={r}>{r}</option>)}</select>
-
-            <input value={form.invite_password} onChange={e=>u("invite_password",e.target.value)} placeholder="Код приглашения" style={SI2}/>
-          </>}
-          {err&&<div style={{fontSize:11,color:"#ef4444",background:"#1a0000",border:"1px solid #ef444430",borderRadius:7,padding:"8px 12px"}}>{err}</div>}
-          <button onClick={submit} disabled={loading} style={{background:"linear-gradient(135deg,#8b5cf6,#ec4899)",border:"none",borderRadius:8,padding:"11px",color:"#fff",cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,marginTop:4}}>
-            {loading?"⏳ Загрузка...":mode==="login"?"Войти":"Зарегистрироваться"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function MainApp({currentUser, onLogout}){
   const [tab,setTab]=useState("pre");
   const [viewMode,setViewMode]=useState("kanban");
@@ -1591,6 +1537,8 @@ function MainApp({currentUser, onLogout}){
   const [pubItems,setPubItems]=useState([]);
   const [modal,setModal]=useState(null);
   const saveFnRef = useRef(null);
+  // Stores object for useTaskStore — avoids repeated chains
+  const stores = {preItems,setPreItems,prodItems,setProdItems,postReels,setPostReels,postVideo,setPostVideo,postCarousels,setPostCarousels,pubItems,setPubItems};
   const [loading,setLoading]=useState(true);
 
   // ── Load data from API ──────────────────────────────────────────────────────
@@ -1719,8 +1667,7 @@ function MainApp({currentUser, onLogout}){
       const { id, project, status, title, chat, archived, ...rest } = d;
       const payload = { type, title: title||"", project_id: project, status, archived: archived||false, data: rest };
       // Check if item exists already
-      const setter = type==="pre"?setPreItems:type==="prod"?setProdItems:type==="post_reels"?setPostReels:type==="post_video"?setPostVideo:type==="post_carousel"?setPostCarousels:setPubItems;
-      const getter = type==="pre"?preItems:type==="prod"?prodItems:type==="post_reels"?postReels:type==="post_video"?postVideo:type==="post_carousel"?postCarousels:pubItems;
+      const [getter, setter] = useTaskStore(type, stores);
       const exists = getter.find(x=>x.id===id);
       if (exists) {
         await api.updateTask(id, payload);
@@ -1735,14 +1682,13 @@ function MainApp({currentUser, onLogout}){
   }
 
   async function deleteTask(type,id){
-    const setter=type==="pre"?setPreItems:type==="prod"?setProdItems:type==="post_reels"?setPostReels:type==="post_video"?setPostVideo:type==="post_carousel"?setPostCarousels:setPubItems;
+    const [,setter] = useTaskStore(type, stores);
     try{ await api.deleteTask(id); setter(p=>p.filter(x=>x.id!==id)); close(); }
     catch(e){ alert("Ошибка удаления: "+e.message); }
   }
 
   function archiveTask(type,id){
-    const setter=type==="pre"?setPreItems:type==="prod"?setProdItems:type==="post_reels"?setPostReels:type==="post_video"?setPostVideo:type==="post_carousel"?setPostCarousels:setPubItems;
-    const getter=type==="pre"?preItems:type==="prod"?prodItems:type==="post_reels"?postReels:type==="post_video"?postVideo:type==="post_carousel"?postCarousels:pubItems;
+    const [getter,setter] = useTaskStore(type, stores);
     const item=getter.find(x=>x.id===id);
     if(!item) return;
     const newVal=!item.archived;
@@ -1752,13 +1698,8 @@ function MainApp({currentUser, onLogout}){
   function drop(type,id,newStatus){
     const DONE_STATUSES=["done","approved","published"];
     const completedAt=DONE_STATUSES.includes(newStatus)?new Date().toISOString().slice(0,10):"";
-    const upd=setter=>setter(p=>p.map(x=>x.id===id?{...x,status:newStatus,...(completedAt?{completed_at:completedAt}:{})}:x));
-    if(type==="pre") upd(setPreItems);
-    else if(type==="prod") upd(setProdItems);
-    else if(type==="post_reels") upd(setPostReels);
-    else if(type==="post_video") upd(setPostVideo);
-    else if(type==="post_carousel") upd(setPostCarousels);
-    else if(type==="pub") upd(setPubItems);
+    const [,setterDrop] = useTaskStore(type, stores);
+    setterDrop(p=>p.map(x=>x.id===id?{...x,status:newStatus,...(completedAt?{completed_at:completedAt}:{})}:x));
     const patch={status:newStatus};
     if(completedAt) patch.completed_at=completedAt;
     api.updateTask(id, patch).catch(e=>console.error("Drop error:",e));
@@ -1770,8 +1711,10 @@ function MainApp({currentUser, onLogout}){
     if(type==="prod") upd(setProdItems);
     else if(type==="pub") upd(setPubItems);
     // get current item data and patch
-    const allItems=[...prodItems,...pubItems];
-    const item=allItems.find(x=>x.id===id);
+    const [getter2] = useTaskStore(type, stores);
+    const item=getter2.find(x=>x.id===id);
+    const [,setter2] = useTaskStore(type, stores);
+    setter2(p=>p.map(x=>x.id===id?{...x,[field]:newDate}:x));
     if(item){ const {id:_id,project,status,title,chat,...rest}=item; api.updateTask(id,{data:{...rest,[field]:newDate}}).catch(e=>console.error(e)); }
   }
 
@@ -1893,12 +1836,7 @@ function MainApp({currentUser, onLogout}){
         </div>
         {pubViewMode==="week"&&<WeekView items={filtPub} onItemClick={x=>openEdit("pub",x)} onDayClick={dt=>openNew("pub",{planned_date:dt})} projects={projects} onMoveToDay={(id,dt)=>moveToDay("pub",id,dt)}/>}
         {pubViewMode==="calendar"&&<CalView items={filtPub} dateField="planned_date" onDayClick={d=>openNew("pub",{planned_date:d+"T12:00"})} color="#10b981" onMoveToDay={(id,day)=>moveToDay("pub",id,day+"T12:00")} renderChip={x=>{const sc=stColor(PUB_STATUSES,x.status);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pub",x);}} style={{background:sc+"18",border:`1px solid ${sc}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
-        {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES} items={filtPub} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>{const proj=projOf(x.project,projects);return <div onClick={()=>openEdit("pub",x)} style={{background:"#111118",border:"1px solid #1e1e2e",borderLeft:"3px solid #374151",borderRadius:8,padding:"10px 11px",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
-          <div style={{fontWeight:700,fontSize:12,marginBottom:4}}>{x.title||"Без названия"}</div>
-          <div style={{display:"flex",gap:3}}><Badge color={proj.color}>{proj.label}</Badge></div>
-          {x.planned_date&&<div style={{fontSize:9,color:"#cbd5e1",fontFamily:"monospace",marginTop:3}}>📅 {x.planned_date.slice(0,10)}</div>}
-          {x.file_name&&<div style={{fontSize:9,color:"#a78bfa",marginTop:2}}>📎 {x.file_name}</div>}
-        </div>;}}/>}
+        {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES} items={filtPub} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>mkCard(x,"pub")}/>}
       </>}
 
       {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
