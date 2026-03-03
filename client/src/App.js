@@ -1163,8 +1163,6 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       <Field label="ТИП ПУБЛИКАЦИИ"><select value={d.pub_type||"video"} onChange={e=>u("pub_type",e.target.value)} style={SI}>
         <option value="video">🎬 Видео / Рилс</option>
         <option value="carousel">🖼 Карусель</option>
-        <option value="photo">📸 Фото</option>
-        <option value="story">📱 Сторис</option>
       </select></Field>
     </div>
     <StatusRow statuses={PUB_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
@@ -1678,32 +1676,65 @@ function MainApp({currentUser, onLogout}){
     loadAll();
   }, []);
 
-  // ── Global WebSocket for notifications ────────────────────────────────────
+  // ── Notifications: polling + WS ────────────────────────────────────────────
   useEffect(() => {
     if (!currentUser?.id) return;
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}`);
-    globalWsRef.current = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ type: "join_user", userId: currentUser.id }));
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type !== "notification") return;
-        if (msg.by === currentUser.id) return; // не уведомлять себя
-        const notif = { id: Date.now()+"_"+Math.random(), kind: msg.kind, taskId: msg.taskId, taskType: msg.taskType, title: msg.title, text: msg.text, ts: Date.now(), read: false };
-        setNotifs(p => [notif, ...p].slice(0, 50));
-        // Browser push notification
+    if (Notification.permission === "default") Notification.requestPermission();
+
+    const seenIds = new Set();
+
+    function applyNotifs(rows) {
+      const fresh = rows.filter(r => !seenIds.has(r.id));
+      if (!fresh.length) return;
+      fresh.forEach(r => seenIds.add(r.id));
+      setNotifs(p => {
+        const merged = [...fresh.map(r=>({id:r.id,kind:r.kind,taskId:r.task_id,taskType:r.task_type,title:r.title,text:r.body,ts:Number(r.created_at),read:r.read})), ...p].slice(0,50);
+        return merged;
+      });
+      // Browser push for each new notif
+      fresh.forEach(r => {
         if (Notification.permission === "granted") {
-          const body = msg.kind === "chat_message" ? (msg.text||"Новое сообщение") : "Новая задача назначена на вас";
-          const n = new Notification("🍇 " + (msg.title||"Виноград"), { body, icon: "/manifest.json" });
+          const body = r.kind === "chat_message" ? (r.body||"Новое сообщение") : "Новая задача назначена на вас";
+          const n = new Notification("🍇 " + (r.title||"Виноград"), { body });
           n.onclick = () => { window.focus(); n.close(); };
         }
-      } catch {}
+      });
+    }
+
+    // Initial load
+    fetch("/api/notifications", { headers: { "x-user-id": currentUser.id } })
+      .then(r => r.ok ? r.json() : []).then(applyNotifs).catch(()=>{});
+
+    // Poll every 5 seconds
+    const pollTimer = setInterval(() => {
+      fetch("/api/notifications", { headers: { "x-user-id": currentUser.id } })
+        .then(r => r.ok ? r.json() : []).then(applyNotifs).catch(()=>{});
+    }, 5000);
+
+    // WS as bonus (instant delivery when possible)
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    let ws;
+    function connectWS() {
+      ws = new WebSocket(`${proto}://${location.host}`);
+      globalWsRef.current = ws;
+      ws.onopen = () => ws.send(JSON.stringify({ type: "join_user", userId: currentUser.id }));
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type !== "notification") return;
+          // Polling will pick it up, just trigger early fetch
+          fetch("/api/notifications", { headers: { "x-user-id": currentUser.id } })
+            .then(r => r.ok ? r.json() : []).then(applyNotifs).catch(()=>{});
+        } catch {}
+      };
+      ws.onclose = () => { setTimeout(connectWS, 4000); };
+    }
+    connectWS();
+
+    return () => {
+      clearInterval(pollTimer);
+      if (ws) ws.close();
     };
-    ws.onclose = () => { setTimeout(() => {}, 3000); };
-    // Request push permission
-    if (Notification.permission === "default") Notification.requestPermission();
-    return () => ws.close();
   }, [currentUser?.id]);
 
   // Per-tab filters — must be before any conditional return!
@@ -1858,8 +1889,11 @@ function MainApp({currentUser, onLogout}){
       <div style={{fontWeight:700,fontSize:12,marginBottom:5}}>{item.title||"Без названия"}</div>
       <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
         <Badge color="#374151">{proj.label}</Badge>
-        {item.type&&<Badge color="#4b5563">{item.type}</Badge>}
-        {item.slides&&<Badge color="#4b5563">📋 {item.slides.length} сл.</Badge>}
+        {type==="pub"&&<Badge color={item.pub_type==="carousel"?"#a78bfa":"#3b82f6"}>{item.pub_type==="carousel"?"🖼 Карусель":"🎬 Видео/Рилс"}</Badge>}
+        {type==="post_reels"&&<Badge color="#ec4899">🎞 Рилс</Badge>}
+        {type==="post_video"&&<Badge color="#3b82f6">🎬 Видео</Badge>}
+        {type==="post_carousel"&&<Badge color="#a78bfa">🖼 Карусель</Badge>}
+        {type==="post_carousel"&&item.slides&&item.slides.length>0&&<Badge color="#4b5563">📋 {item.slides.length} сл.</Badge>}
       </div>
       {/* Заказчик → Исполнитель */}
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,fontSize:9,color:"#9ca3af"}}>
@@ -1877,13 +1911,14 @@ function MainApp({currentUser, onLogout}){
           // Mark post task as done
           drop(type,item.id,"done");
           // Create new pub task carrying over final file/link
+          const isCarousel = type==="post_carousel";
           const pubItem=defItem("pub",{
             title:item.title,
             project:item.project,
-            file_name:item.final_file_name||item.source_name||"",
-            file_url:item.final_file_url||item.source_url||"",
-            pub_type:type==="post_carousel"?"carousel":"video",
-            slides:type==="post_carousel"?(item.slides||[]):[],
+            pub_type:isCarousel?"carousel":"video",
+            file_name:item.final_file_name||(isCarousel?"":item.source_name)||"",
+            file_url:item.final_file_url||(isCarousel?"":item.source_url)||"",
+            slides:isCarousel?(item.slides||[]):[],
           });
           setModal({type:"pub",item:pubItem});
         }} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
@@ -1917,7 +1952,7 @@ function MainApp({currentUser, onLogout}){
             {showNotifs&&<div style={{position:"absolute",top:36,right:0,width:320,background:"#111118",border:"1px solid #2d2d44",borderRadius:12,boxShadow:"0 8px 32px #00000080",zIndex:1000,maxHeight:420,overflowY:"auto"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid #1e1e2e"}}>
                 <span style={{fontSize:11,fontWeight:700,color:"#f0eee8"}}>🔔 Уведомления</span>
-                {notifs.length>0&&<button onClick={()=>setNotifs([])} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:10}}>Очистить все</button>}
+                {notifs.length>0&&<button onClick={()=>{setNotifs([]);fetch("/api/notifications/read",{method:"POST",headers:{"Content-Type":"application/json","x-user-id":currentUser.id},body:JSON.stringify({})}).catch(()=>{});}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:10}}>Очистить все</button>}
               </div>
               {notifs.length===0&&<div style={{padding:"24px 14px",textAlign:"center",color:"#4b5563",fontSize:11}}>Нет уведомлений</div>}
               {notifs.map(n=>{
@@ -1925,6 +1960,7 @@ function MainApp({currentUser, onLogout}){
                 const typeLabel=taskType==="pre"?"Препродакшн":taskType==="prod"?"Продакшн":taskType==="pub"?"Публикация":"Постпродакшн";
                 return <div key={n.id} onClick={()=>{
                   setNotifs(p=>p.filter(x=>x.id!==n.id));
+                  fetch("/api/notifications/read",{method:"POST",headers:{"Content-Type":"application/json","x-user-id":currentUser.id},body:JSON.stringify({id:n.id})}).catch(()=>{});
                   if(n.taskId){
                     const type=n.taskType||"pre";
                     const tabId=type==="pre"?"pre":type==="prod"?"prod":type.startsWith("post")?"post":"pub";
