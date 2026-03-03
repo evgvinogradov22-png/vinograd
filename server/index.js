@@ -355,16 +355,44 @@ app.post("/api/chat/:taskId", async (req, res) => {
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Нет файла" });
-    const key = `vinogradov/${Date.now()}_${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const origName = req.file.originalname;
+    const safeKey  = `vinogradov/${Date.now()}_${origName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     await r2.send(new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
+      Bucket:             R2_BUCKET,
+      Key:                safeKey,
+      Body:               req.file.buffer,
+      ContentType:        req.file.mimetype,
+      // Tell R2 to serve the file with the original filename
+      ContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(origName)}`,
     }));
-    const url = `${R2_PUBLIC_URL}/${key}`;
-    res.json({ url, key, name: req.file.originalname, size: req.file.size });
+    const r2url = `${R2_PUBLIC_URL}/${safeKey}`;
+    // Return both the R2 url and a proxy download url
+    const dlurl = `/api/download?url=${encodeURIComponent(r2url)}&name=${encodeURIComponent(origName)}`;
+    res.json({ url: r2url, dlurl, key: safeKey, name: origName, size: req.file.size });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка загрузки" }); }
+});
+
+// Proxy download — streams file from R2 with correct filename
+app.get("/api/download", async (req, res) => {
+  const { url, name } = req.query;
+  if (!url) return res.status(400).send("url required");
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return res.status(502).send("Файл недоступен");
+    const ct  = r.headers.get("content-type")  || "application/octet-stream";
+    const len = r.headers.get("content-length");
+    const fname = name || "file";
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
+    if (len) res.setHeader("Content-Length", len);
+    res.setHeader("Cache-Control", "no-store");
+    // Stream directly — never buffer in memory
+    const { Readable } = require("stream");
+    Readable.fromWeb(r.body).pipe(res);
+  } catch(e) {
+    console.error("Download proxy error:", e);
+    if (!res.headersSent) res.status(500).send("Ошибка загрузки файла");
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
