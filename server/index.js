@@ -45,6 +45,13 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
+// ── Update last_active on every authenticated request ─────────────────────────
+app.use((req, res, next) => {
+  const uid = req.headers["x-user-id"];
+  if (uid) q("UPDATE users SET last_active=$1 WHERE id=$2", [Date.now(), uid]).catch(() => {});
+  next();
+});
+
 const BUILD_PATH = path.join(__dirname, "..", "client", "build");
 if (fs.existsSync(BUILD_PATH)) app.use(express.static(BUILD_PATH));
 
@@ -112,16 +119,6 @@ async function initDb() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id)`);
 
-  // Seed projects
-  await pool.query(`
-    INSERT INTO projects (id, label, color, description) VALUES
-      ('brandx',  'Brand X',     '#ef4444', 'Бренд зимней одежды. ЦА: женщины 25-35.'),
-      ('techco',  'TechCo',      '#3b82f6', 'IT-компания. Офисный контент.'),
-      ('fashion', 'Fashion Lab', '#ec4899', 'Мода и стиль, сезонные коллекции.'),
-      ('eco',     'EcoStore',    '#10b981', 'Экотовары. Тон: вдохновляющий.')
-    ON CONFLICT (id) DO NOTHING;
-  `);
-
   console.log("✅ Database ready");
 }
 
@@ -182,13 +179,10 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const { telegram, password } = req.body;
     const clean = telegram.replace(/^@/, "").toLowerCase().trim();
-    console.log("[LOGIN] looking for:", clean);
-    const allUsers = await q("SELECT telegram FROM users");
-    console.log("[LOGIN] all users in DB:", allUsers.map(u => u.telegram));
-    const user = await q1("SELECT * FROM users WHERE telegram=$1 OR telegram=$2", [clean, "@"+clean]);
-    console.log("[LOGIN] found user:", user ? user.telegram : "NOT FOUND");
+        const user = await q1("SELECT * FROM users WHERE telegram=$1 OR telegram=$2", [clean, "@"+clean]);
     if (!user) return res.status(401).json({ error: "Пользователь не найден" });
     if (password !== user.password_hash) return res.status(401).json({ error: "Неверный пароль" });
+    await q("UPDATE users SET last_active=$1 WHERE id=$2", [Date.now(), user.id]);
     res.json({ id: user.id, telegram: user.telegram, name: user.name, role: user.role, color: user.color });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
 });
