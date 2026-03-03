@@ -5,13 +5,14 @@ import LoginScreen from "./LoginScreen";
 const APP_NAME = "Виноград";
 
 const TABS = [
-  { id:"pre",      label:"Препродакшн",  icon:"✍️",  color:"#8b5cf6" },
-  { id:"prod",     label:"Продакшн",      icon:"🎬",  color:"#3b82f6" },
-  { id:"post",     label:"Постпродакшн",  icon:"🎞️", color:"#ec4899" },
-  { id:"pub",      label:"Публикация",    icon:"🚀",  color:"#10b981" },
-  { id:"summary",  label:"Сводка",        icon:"📊",  color:"#f97316" },
-  { id:"projects", label:"Проекты",       icon:"📁",  color:"#f59e0b" },
-  { id:"team",     label:"Команда",       icon:"👥",  color:"#06b6d4" },
+  { id:"pre",       label:"Препродакшн",  icon:"✍️",  color:"#8b5cf6" },
+  { id:"prod",      label:"Продакшн",      icon:"🎬",  color:"#3b82f6" },
+  { id:"post",      label:"Постпродакшн",  icon:"🎞️", color:"#ec4899" },
+  { id:"pub",       label:"Публикация",    icon:"🚀",  color:"#10b981" },
+  { id:"summary",   label:"Сводка",        icon:"📊",  color:"#f97316" },
+  { id:"analytics", label:"Аналитика",     icon:"📈",  color:"#a78bfa" },
+  { id:"projects",  label:"Проекты",       icon:"📁",  color:"#f59e0b" },
+  { id:"team",      label:"Команда",       icon:"👥",  color:"#06b6d4" },
 ];
 
 const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
@@ -1257,169 +1258,269 @@ function UnreadMentions({allChats,projects,team,me,onOpenTask}){
 
 function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,currentUser,onOpenTask}){
   const ME = currentUser?.id || "";
-  const [scope,setScope]=useState("all"); // "all"|"my_customer"|"my_executor"
-  // scope aliases used in filter
-  const [projFilter,setProjFilter]=useState("all");
-  const [dateFrom,setDateFrom]=useState("");
-  const [dateTo,setDateTo]=useState("");
-  const activeProjs=projects.filter(p=>!p.archived);
-  const nm=id=>teamOf(id,team)?.name||"?";
-  const rc=id=>teamOf(id,team)?.color||"#6b7280";
+  const [memberFilter, setMemberFilter] = useState("all");
 
-  // Period cutoff
-  function inPeriod(item){
-    if(!dateFrom&&!dateTo) return true;
-    const dates=[item.deadline,item.shoot_date,item.planned_date,item.post_deadline].filter(Boolean);
-    if(dates.length===0) return true;
-    return dates.some(d=>{
-      const t=new Date(d).getTime();
-      const from=dateFrom?new Date(dateFrom).getTime():0;
-      const to=dateTo?new Date(dateTo).getTime()+86400000:Infinity;
-      return t>=from&&t<=to;
-    });
+  const allItems = [...preItems,...prodItems,...postReels,...postVideo,...postCarousels,...pubItems];
+
+  // Executor fields and customer fields
+  function isExecutor(item, uid) {
+    return ["editor","scriptwriter","operator","designer","executor","producer"].some(f => item[f] === uid);
   }
-  // Member fields
-  const MF=["producer","editor","scriptwriter","operator","designer"];
-  function isMyTask(item){
-    if(scope==="my_customer") return item.customer===ME||item.producer===ME;
-    if(scope==="my_executor") return ["editor","scriptwriter","operator","designer","executor"].some(f=>item[f]===ME);
-    return MF.some(f=>item[f]===ME);
+  function isCustomer(item, uid) {
+    return item.customer === uid || item.producer === uid;
   }
 
-  // Apply all filters
-  function applyAll(items){
-    let r=items;
-    if(projFilter!=="all") r=r.filter(x=>x.project===projFilter);
-    if(scope!=="all") r=r.filter(isMyTask);
-    r=r.filter(inPeriod);
-    return r;
+  // Apply member filter
+  function filtered(items) {
+    if (memberFilter === "all") return items.filter(x=>!x.archived);
+    return items.filter(x=>!x.archived && (isExecutor(x, memberFilter) || isCustomer(x, memberFilter)));
   }
-  const fPre=applyAll(preItems);
-  const fProd=applyAll(prodItems);
-  const fReels=applyAll(postReels);
-  const fVideo=applyAll(postVideo);
-  const fCarousels=applyAll(postCarousels);
-  const fPub=applyAll(pubItems);
-  const all=[...fPre,...fProd,...fReels,...fVideo,...fCarousels,...fPub];
-  const allChats=all.flatMap(x=>{ const type=x._type||(fPre.includes(x)?"pre":fProd.includes(x)?"prod":"pub"); return (x.chat||[]).map(m=>({...m,taskTitle:x.title,taskProject:x.project,taskType:type,taskItem:x})); });
-  const statCards=[
-    {label:"Сценариев",count:fPre.length,color:"#8b5cf6",icon:"✍️"},
-    {label:"Съёмок",count:fProd.length,color:"#3b82f6",icon:"🎬"},
-    {label:"Постпродакшн",count:fReels.length+fVideo.length+fCarousels.length,color:"#ec4899",icon:"🎞️"},
-    {label:"К публикации",count:fPub.filter(x=>x.status!=="published").length,color:"#10b981",icon:"🚀"},
-    {label:"Опубликовано",count:fPub.filter(x=>x.status==="published").length,color:"#34d399",icon:"✅"},
-    {label:"Сообщений",count:allChats.length,color:"#f97316",icon:"💬"},
-  ];
-  // byProject removed per request
-  const allRaw=[...fPre.map(x=>({...x,_type:"pre"})),...fProd.map(x=>({...x,_type:"prod"})),...fReels.map(x=>({...x,_type:"post_reels"})),...fVideo.map(x=>({...x,_type:"post_video"})),...fCarousels.map(x=>({...x,_type:"post_carousel"})),...fPub.map(x=>({...x,_type:"pub"}))];
-  const recentChats=allChats.slice(-10).reverse();
-  // Deadlines from filtered items
-  const deadlines=[
-    ...fPre.filter(x=>x.deadline).map(x=>({...x,_type:"Сценарий",_date:x.deadline})),
-    ...fProd.filter(x=>x.shoot_date).map(x=>({...x,_type:"Съёмка",_date:x.shoot_date.slice(0,10)})),
-    ...fPub.filter(x=>x.planned_date&&x.status!=="published").map(x=>({...x,_type:"Публикация",_date:x.planned_date.slice(0,10)})),
-  ].sort((a,b)=>a._date>b._date?1:-1).slice(0,8);
 
-  const scopeLabel = scope==="my_customer"?"📋 Я заказчик":scope==="my_executor"?"🔧 Я исполнитель":"🏢 Все задачи";
-  const projLabel  = projFilter==="all" ? "Все проекты" : (activeProjs.find(p=>p.id===projFilter)?.label||"?");
+  const myExec = allItems.filter(x => !x.archived && isExecutor(x, ME));
+  const myCust = allItems.filter(x => !x.archived && isCustomer(x, ME) && !isExecutor(x, ME));
 
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+  // If member filter selected — show their tasks split by role
+  const showMember = memberFilter !== "all" ? team.find(t=>t.id===memberFilter) : null;
+  const memberExec = showMember ? allItems.filter(x=>!x.archived && isExecutor(x, showMember.id)) : [];
+  const memberCust = showMember ? allItems.filter(x=>!x.archived && isCustomer(x, showMember.id) && !isExecutor(x, showMember.id)) : [];
 
-      {/* ── FILTER BAR ── */}
-      <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px 16px"}}>
-        <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700,marginBottom:10,letterSpacing:"0.1em"}}>ФИЛЬТРЫ СВОДКИ</div>
-        <div style={{display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-end"}}>
+  const execList = showMember ? memberExec : myExec;
+  const custList = showMember ? memberCust : myCust;
 
-          {/* Scope: my / all */}
-          <div>
-            <span style={{...LB,display:"block"}}>ОБЛАСТЬ</span>
-            <div style={{display:"flex",gap:4}}>
-              {[["all","🏢 Все"],["my_customer","📋 Я заказчик"],["my_executor","🔧 Я исполнитель"]].map(([id,l])=>(
-                <button key={id} onClick={()=>setScope(id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:scope===id?"#f97316"+"20":"#111118",border:`1px solid ${scope===id?"#f97316":"#2d2d44"}`,color:scope===id?"#f97316":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:scope===id?700:400,whiteSpace:"nowrap"}}>{l}</button>
-              ))}
-            </div>
-          </div>
+  const typeLabel = t => {
+    if(t.type==="pre") return "Препродакшн";
+    if(t.type==="prod") return "Продакшн";
+    if(t.type==="post_reels") return "Рилс";
+    if(t.type==="post_video") return "Видео";
+    if(t.type==="post_carousel") return "Карусель";
+    if(t.type==="pub") return "Публикация";
+    return t.type||"";
+  };
+  const statusColor = t => {
+    const allS = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
+    return allS.find(s=>s.id===t.status)?.c || "#6b7280";
+  };
+  const statusLabel = t => {
+    const allS = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
+    return allS.find(s=>s.id===t.status)?.l || t.status||"";
+  };
+  const typeOf = t => {
+    if(preItems.includes(t)) return "pre";
+    if(prodItems.includes(t)) return "prod";
+    if(postReels.includes(t)) return "post_reels";
+    if(postVideo.includes(t)) return "post_video";
+    if(postCarousels.includes(t)) return "post_carousel";
+    if(pubItems.includes(t)) return "pub";
+    return t.type||"pre";
+  };
+  const dateOf = t => t.deadline||t.shoot_date?.slice(0,10)||t.planned_date?.slice(0,10)||t.post_deadline||"";
 
-          {/* Project filter */}
-          <div>
-            <span style={{...LB,display:"block"}}>ПРОЕКТ</span>
-            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-              <button onClick={()=>setProjFilter("all")} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:projFilter==="all"?"#f59e0b20":"#111118",border:`1px solid ${projFilter==="all"?"#f59e0b":"#2d2d44"}`,color:projFilter==="all"?"#f59e0b":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:projFilter==="all"?700:400}}>Все</button>
-              {activeProjs.map(p=>(
-                <button key={p.id} onClick={()=>setProjFilter(p.id)} style={{padding:"6px 12px",borderRadius:7,cursor:"pointer",background:projFilter===p.id?p.color+"20":"#111118",border:`1px solid ${projFilter===p.id?p.color:"#9ca3af"}`,color:projFilter===p.id?p.color:"#9ca3af",fontSize:11,fontFamily:"inherit",fontWeight:projFilter===p.id?700:400}}>{p.label}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Period filter */}
-          <div>
-            <span style={{...LB,display:"block"}}>ПЕРИОД</span>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
-              <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:dateFrom?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",outline:"none"}}/>
-              <span style={{color:"#9ca3af",fontSize:11}}>—</span>
-              <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:dateTo?"#06b6d4":"#6b7280",fontSize:11,fontFamily:"inherit",outline:"none"}}/>
-              {(dateFrom||dateTo)&&<button onClick={()=>{setDateFrom("");setDateTo("");}} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:"#9ca3af",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>✕</button>}
-            </div>
-          </div>
+  function TaskCard({item}) {
+    const proj = projOf(item.project, projects);
+    const sc = statusColor(item);
+    const sl = statusLabel(item);
+    const tl = typeLabel(item);
+    const date = dateOf(item);
+    const execId = item.executor||item.editor||item.scriptwriter||item.operator||item.designer||"";
+    const custId = item.customer||item.producer||"";
+    const exec = execId ? team.find(t=>t.id===execId) : null;
+    const cust = custId ? team.find(t=>t.id===custId) : null;
+    return (
+      <div onClick={()=>onOpenTask&&onOpenTask(typeOf(item),item)}
+        style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:8,padding:"9px 11px",marginBottom:6,cursor:"pointer"}}
+        onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
+        onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
+        <div style={{fontWeight:700,fontSize:12,marginBottom:5,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
+          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"monospace",background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44"}}>{tl}</span>
+          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"monospace",background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44"}}>{proj.label}</span>
+          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"monospace",background:sc+"20",color:sc,border:`1px solid ${sc}40`}}>{sl}</span>
         </div>
-
-        {/* Active filter summary */}
-        <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1e1e2e",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          <span style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>ПОКАЗАНО:</span>
-          <span style={{fontSize:10,background:"#f97316"+"20",color:"#f97316",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{scopeLabel}</span>
-          <span style={{fontSize:10,background:"#f59e0b"+"20",color:"#f59e0b",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>📁 {projLabel}</span>
-          <span style={{fontSize:10,background:"#06b6d420",color:"#06b6d4",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>⏱ {dateFrom||dateTo?(dateFrom||"…")+" → "+(dateTo||"…"):"Всё время"}</span>
-          <span style={{fontSize:10,background:"#2d2d44",color:"#9ca3af",borderRadius:20,padding:"2px 10px",fontFamily:"monospace"}}>{all.length} задач</span>
+        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",display:"flex",gap:10,flexWrap:"wrap"}}>
+          {cust&&<span>заказчик: {cust.name}</span>}
+          {exec&&exec.id!==cust?.id&&<span>исполнитель: {exec.name}</span>}
+          {date&&<span>📅 {date}</span>}
         </div>
       </div>
+    );
+  }
 
-      {/* ── STAT CARDS ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
-        {statCards.map((s,i)=>(
-          <div key={i} style={{background:"#111118",border:`1px solid ${s.color}25`,borderTop:`3px solid ${s.color}`,borderRadius:10,padding:"14px 12px",textAlign:"center"}}>
-            <div style={{fontSize:22,marginBottom:5}}>{s.icon}</div>
-            <div style={{fontSize:30,fontWeight:800,color:s.color,fontFamily:"monospace",lineHeight:1}}>{s.count}</div>
-            <div style={{fontSize:10,color:"#cbd5e1",marginTop:4}}>{s.label}</div>
-          </div>
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* Фильтр по сотруднику */}
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:"#6b7280",fontFamily:"monospace",fontWeight:700}}>СОТРУДНИК</span>
+        <button onClick={()=>setMemberFilter("all")}
+          style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",background:memberFilter==="all"?"#1a1a2e":"transparent",border:`1px solid ${memberFilter==="all"?"#4b5563":"#2d2d44"}`,color:memberFilter==="all"?"#f0eee8":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:memberFilter==="all"?700:400}}>
+          Все
+        </button>
+        {team.map(m=>(
+          <button key={m.id} onClick={()=>setMemberFilter(m.id)}
+            style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",background:memberFilter===m.id?"#1a1a2e":"transparent",border:`1px solid ${memberFilter===m.id?"#4b5563":"#2d2d44"}`,color:memberFilter===m.id?"#f0eee8":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:memberFilter===m.id?700:400}}>
+            {m.name}
+          </button>
         ))}
       </div>
 
-      {/* ── BOTTOM GRID ── */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr",gap:14}}>
-
-        {/* Chats — unread @mentions of me */}
-        <UnreadMentions allChats={allChats} projects={projects} team={team} me={ME} onOpenTask={onOpenTask}/>
-      </div>
-
-      {/* ── DEADLINES ── */}
-      <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
-        <div style={{fontSize:10,fontWeight:700,color:"#06b6d4",fontFamily:"monospace",marginBottom:12}}>📅 БЛИЖАЙШИЕ ДЕДЛАЙНЫ</div>
-        {deadlines.length===0&&<div style={{textAlign:"center",color:"#9ca3af",fontSize:11,padding:"16px 0"}}>Нет предстоящих дедлайнов</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-          {deadlines.map((x,i)=>{
-            const proj=projOf(x.project,projects);
-            const daysLeft=Math.ceil((new Date(x._date).getTime()-Date.now())/(86400000));
-            const urgent=daysLeft<=3;
-            return <div key={i} onClick={()=>onOpenTask&&onOpenTask(x._type==="Сценарий"?"pre":x._type==="Съёмка"?"prod":"pub",x)} style={{background:"#111118",border:`1px solid ${urgent?"#ef444440":proj.color+"25"}`,borderLeft:`3px solid ${urgent?"#ef4444":proj.color}`,borderRadius:8,padding:"9px 12px",display:"flex",gap:10,alignItems:"center",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
-              <div style={{textAlign:"center",minWidth:38}}>
-                <div style={{fontSize:16,fontWeight:800,color:urgent?"#ef4444":"#f59e0b",fontFamily:"monospace",lineHeight:1}}>{daysLeft>0?daysLeft:"—"}</div>
-                <div style={{fontSize:7,color:"#9ca3af",fontFamily:"monospace"}}>{daysLeft>0?"дн.":"сегодня"}</div>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>
-                <div style={{fontSize:9,color:"#9ca3af",marginTop:1}}>{x._type} · <span style={{color:proj.color}}>{proj.label}</span></div>
-                <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>{x._date}</div>
-              </div>
-            </div>;
-          })}
+      {/* Две колонки */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:800,fontFamily:"monospace",color:"#9ca3af",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #1e1e2e"}}>
+            ИСПОЛНИТЕЛЬ — {execList.length} задач{execList.length===1?"а":execList.length<5?"и":""}
+          </div>
+          {execList.length===0&&<div style={{fontSize:11,color:"#4b5563",textAlign:"center",padding:"20px 0"}}>Нет задач</div>}
+          {execList.map(item=><TaskCard key={item.id} item={item}/>)}
+        </div>
+        <div>
+          <div style={{fontSize:10,fontWeight:800,fontFamily:"monospace",color:"#9ca3af",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #1e1e2e"}}>
+            ЗАКАЗЧИК — {custList.length} задач{custList.length===1?"а":custList.length<5?"и":""}
+          </div>
+          {custList.length===0&&<div style={{fontSize:11,color:"#4b5563",textAlign:"center",padding:"20px 0"}}>Нет задач</div>}
+          {custList.map(item=><TaskCard key={item.id} item={item}/>)}
         </div>
       </div>
-
     </div>
   );
 }
 
+// ── Analytics View ────────────────────────────────────────────────────────────
+function AnalyticsView({pubItems,projects}){
+  const now = new Date();
+  const [selMonth, setSelMonth] = useState(now.getMonth());
+  const [selYear,  setSelYear]  = useState(now.getFullYear());
+  const [kpis, setKpis] = useState({});
+
+  // Build list of months (last 12)
+  const months = [];
+  for(let i=0;i<12;i++){
+    let m = now.getMonth()-i; let y=now.getFullYear();
+    if(m<0){m+=12;y--;}
+    months.push({m,y,label:["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"][m]+" "+y});
+  }
+
+  // Filter published items (including archived) for selected month
+  const published = pubItems.filter(x=>{
+    if(x.status!=="published") return false;
+    const d = x.planned_date||x.updated_at||"";
+    if(!d) return false;
+    const dt = new Date(d);
+    return dt.getMonth()===selMonth && dt.getFullYear()===selYear;
+  });
+
+  const activeProjs = projects.filter(p=>!p.archived);
+
+  // Count by project and type
+  function count(projId, type) {
+    return published.filter(x=>x.project===projId && (type==="video"?(x.pub_type!=="carousel"):(x.pub_type==="carousel"))).length;
+  }
+  function total(projId) { return published.filter(x=>x.project===projId).length; }
+
+  const totalVideo = published.filter(x=>x.pub_type!=="carousel").length;
+  const totalCarousel = published.filter(x=>x.pub_type==="carousel").length;
+  const totalAll = published.length;
+  const totalKpi = Object.values(kpis).reduce((a,v)=>a+(parseInt(v)||0),0);
+
+  const pctColor = p => p>=100?"#10b981":p>=60?"#f59e0b":"#ef4444";
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* Фильтр месяца */}
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:"#6b7280",fontFamily:"monospace",fontWeight:700}}>ПЕРИОД</span>
+        <select value={`${selYear}-${selMonth}`} onChange={e=>{const[y,m]=e.target.value.split("-");setSelYear(Number(y));setSelMonth(Number(m));}}
+          style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"5px 10px",borderRadius:7,fontSize:12,fontFamily:"inherit"}}>
+          {months.map(({m,y,label})=><option key={`${y}-${m}`} value={`${y}-${m}`}>{label}</option>)}
+        </select>
+        <span style={{fontSize:10,color:"#4b5563",fontFamily:"monospace"}}>{totalAll} публикаций за период</span>
+      </div>
+
+      {/* Таблица */}
+      <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,overflow:"hidden"}}>
+        <div style={{fontSize:10,fontWeight:800,color:"#6b7280",fontFamily:"monospace",padding:"12px 16px",borderBottom:"1px solid #1e1e2e",letterSpacing:"1px"}}>
+          ПУБЛИКАЦИИ ПО ПРОЕКТАМ
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead>
+            <tr style={{background:"#0a0a0f"}}>
+              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>ПРОЕКТ</th>
+              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>🎬 ВИДЕО / РИЛС</th>
+              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>🖼 КАРУСЕЛЬ</th>
+              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>ВСЕГО</th>
+              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>KPI ПЛАН</th>
+              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>ВЫПОЛНЕНИЕ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeProjs.map(proj=>{
+              const v = count(proj.id,"video");
+              const c = count(proj.id,"carousel");
+              const tot = total(proj.id);
+              const kpi = parseInt(kpis[proj.id])||0;
+              const pct = kpi>0?Math.min(100,Math.round(tot/kpi*100)):0;
+              const pc = pctColor(pct);
+              return (
+                <tr key={proj.id} style={{borderBottom:"1px solid #0d0d16"}}
+                  onMouseEnter={e=>{Array.from(e.currentTarget.cells).forEach(c=>c.style.background="#111118");}}
+                  onMouseLeave={e=>{Array.from(e.currentTarget.cells).forEach(c=>c.style.background="");}}>
+                  <td style={{padding:"10px 16px",color:"#d1d5db"}}>{proj.label}</td>
+                  <td style={{padding:"10px 16px",textAlign:"center"}}>
+                    <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:v>0?"#f0eee8":"#2d2d44"}}>{v}</span>
+                  </td>
+                  <td style={{padding:"10px 16px",textAlign:"center"}}>
+                    <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:c>0?"#f0eee8":"#2d2d44"}}>{c}</span>
+                  </td>
+                  <td style={{padding:"10px 16px",textAlign:"center"}}>
+                    <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:tot>0?"#f0eee8":"#2d2d44"}}>{tot}</span>
+                  </td>
+                  <td style={{padding:"10px 16px"}}>
+                    <input type="number" min="0" value={kpis[proj.id]||""} onChange={e=>setKpis(p=>({...p,[proj.id]:e.target.value}))}
+                      placeholder="—"
+                      style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"4px 8px",borderRadius:5,fontSize:12,width:60,textAlign:"center",fontFamily:"monospace",outline:"none"}}/>
+                  </td>
+                  <td style={{padding:"10px 16px"}}>
+                    {kpi>0?(
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{flex:1,height:5,background:"#1a1a2e",borderRadius:3,overflow:"hidden",minWidth:60}}>
+                          <div style={{width:pct+"%",height:"100%",background:pc,borderRadius:3,transition:"width 0.3s"}}/>
+                        </div>
+                        <span style={{fontSize:10,fontFamily:"monospace",fontWeight:700,color:pc,minWidth:34,textAlign:"right"}}>{pct}%</span>
+                      </div>
+                    ):<span style={{fontSize:10,color:"#2d2d44",fontFamily:"monospace"}}>—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+            {/* Итого */}
+            <tr style={{background:"#0a0a0f",borderTop:"1px solid #2d2d44"}}>
+              <td style={{padding:"10px 16px",fontWeight:700,color:"#f0eee8",fontSize:11,fontFamily:"monospace"}}>ИТОГО</td>
+              <td style={{padding:"10px 16px",textAlign:"center"}}>
+                <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:totalVideo>0?"#f0eee8":"#2d2d44"}}>{totalVideo}</span>
+              </td>
+              <td style={{padding:"10px 16px",textAlign:"center"}}>
+                <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:totalCarousel>0?"#f0eee8":"#2d2d44"}}>{totalCarousel}</span>
+              </td>
+              <td style={{padding:"10px 16px",textAlign:"center"}}>
+                <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:totalAll>0?"#10b981":"#2d2d44"}}>{totalAll}</span>
+              </td>
+              <td style={{padding:"10px 16px"}}>
+                <span style={{fontSize:10,color:"#4b5563",fontFamily:"monospace"}}>{totalKpi>0?"план: "+totalKpi:""}</span>
+              </td>
+              <td style={{padding:"10px 16px"}}>
+                {totalKpi>0&&<span style={{fontSize:10,fontFamily:"monospace",fontWeight:700,color:pctColor(Math.round(totalAll/totalKpi*100))}}>
+                  {Math.min(100,Math.round(totalAll/totalKpi*100))}%
+                </span>}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Projects View ─────────────────────────────────────────────────────────────
 // ── Projects View ─────────────────────────────────────────────────────────────
 function ProjectsView({projects,setProjects}){
   const [showArchive,setShowArchive]=useState(false);
@@ -2048,6 +2149,7 @@ function MainApp({currentUser, onLogout}){
       </>}
 
       {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
+      {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects}/>}
       {tab==="projects"&&<ProjectsView projects={projects} setProjects={setProjects}/>}
       {tab==="team"&&<TeamView teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/>}
     </div>
