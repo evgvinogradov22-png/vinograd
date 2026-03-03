@@ -49,153 +49,183 @@ function TeamSelect({label,value,onChange,team}){
 }
 
 // ── MiniChat ──────────────────────────────────────────────────────────────────
-function MiniChat({taskId,team,currentUser}){
-  const [msgs,setMsgs]=useState([]);
-  const [text,setText]=useState("");
-  const [uploadProgress,setUploadProgress]=useState([]);
-  const [showMentions,setShowMentions]=useState(false);
-  const [mentionQ,setMentionQ]=useState("");
-  const bottomRef=useRef(null); const fileRef=useRef(null); const inputRef=useRef(null);
-  const myId=currentUser?.id||"u1";
-  const nm=id=>teamOf(id,team)?.name||"?";
+function MiniChat({taskId, team, currentUser}){
+  const [msgs,       setMsgs]        = useState([]);
+  const [text,       setText]        = useState("");
+  const [progress,   setProgress]    = useState(null); // {name, pct} | null
+  const [err,        setErr]         = useState("");
+  const [showM,      setShowM]       = useState(false);
+  const [mentionQ,   setMentionQ]    = useState("");
+  const bottomRef = useRef(null);
+  const fileRef   = useRef(null);
+  const inputRef  = useRef(null);
+  const myId = currentUser?.id || "";
+  const nm   = id => teamOf(id, team)?.name || "?";
 
-  // Load chat from server
-  useEffect(()=>{
-    if(!taskId) return;
-    fetch(`/api/chat/${taskId}`).then(r=>r.ok?r.json():null).then(data=>{
-      if(data) setMsgs(data.map(m=>({
-        id:m.id, user:m.user_id, text:m.text, ts:m.created_at,
-        files: m.file_url ? [{name:m.file_name||"файл", url:m.file_url}] : []
-      })));
-    }).catch(()=>{});
-  },[taskId]);
+  // ── load history ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!taskId) return;
+    fetch(`/api/chat/${taskId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => {
+        setMsgs(rows.map(r => ({
+          id:    r.id,
+          user:  r.user_id,
+          text:  r.text  || "",
+          ts:    r.created_at,
+          fname: r.file_name || "",
+          furl:  r.file_url  || "",
+        })));
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
+      })
+      .catch(() => {});
+  }, [taskId]);
 
-  // Real-time via WebSocket (if available)
-  useEffect(()=>{
-    if(!taskId||typeof window.wsSubscribe!=="function") return;
-    return window.wsSubscribe(taskId,(msg)=>{
-      if(msg.type==="message") setMsgs(p=>[...p,{
-        id:msg.msg.id, user:msg.msg.user_id, text:msg.msg.text, ts:msg.msg.created_at,
-        files: msg.msg.file_url?[{name:msg.msg.file_name||"файл",url:msg.msg.file_url}]:[]
-      }]);
-    });
-  },[taskId]);
+  // ── post text message ────────────────────────────────────────────────────────
+  async function send() {
+    const t = text.trim(); if (!t) return;
+    setText(""); setShowM(false);
+    if (!taskId) { setErr("Сначала сохраните задачу"); return; }
+    try {
+      const r = await fetch(`/api/chat/${taskId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: myId, text: t, file_url: "", file_name: "" }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const m = await r.json();
+      setMsgs(p => [...p, { id:m.id, user:m.user_id, text:m.text, ts:m.created_at, fname:"", furl:"" }]);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
+    } catch(e) { setErr("Ошибка: " + e.message); }
+  }
 
-  async function postMsg(text, fileUrl="", fileName=""){
-    if(!taskId) return;
-    const r=await fetch(`/api/chat/${taskId}`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({user_id:myId, text, file_url:fileUrl, file_name:fileName})
-    });
-    if(r.ok){
-      const m=await r.json();
-      setMsgs(p=>[...p,{id:m.id,user:m.user_id,text:m.text,ts:m.created_at,
-        files:m.file_url?[{name:m.file_name||"файл",url:m.file_url}]:[]}]);
-      setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50);
+  // ── upload file → R2 → post message with url ─────────────────────────────────
+  async function handleFiles(e) {
+    const files = Array.from(e.target.files);
+    e.target.value = "";
+    if (!files.length) return;
+    if (!taskId) { setErr("Сначала сохраните задачу"); return; }
+    setErr("");
+    for (const f of files) {
+      setProgress({ name: f.name, pct: 20 });
+      try {
+        const fd = new FormData(); fd.append("file", f);
+        setProgress({ name: f.name, pct: 50 });
+        const up = await fetch("/api/upload", { method:"POST", body:fd });
+        setProgress({ name: f.name, pct: 85 });
+        if (!up.ok) throw new Error("Ошибка загрузки: " + await up.text());
+        const { url } = await up.json();
+        if (!url) throw new Error("Сервер не вернул ссылку");
+        setProgress({ name: f.name, pct: 95 });
+        const msg = await fetch(`/api/chat/${taskId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: myId, text: "", file_url: url, file_name: f.name }),
+        });
+        if (!msg.ok) throw new Error("Ошибка отправки сообщения");
+        const m = await msg.json();
+        setMsgs(p => [...p, { id:m.id, user:m.user_id, text:"", ts:m.created_at, fname:f.name, furl:url }]);
+        setProgress({ name: f.name, pct: 100 });
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
+      } catch(e) {
+        setErr(e.message);
+        console.error("File upload error:", e);
+      }
+      setTimeout(() => setProgress(null), 1000);
     }
   }
 
-  async function handleFiles(e){
-    const fileList=Array.from(e.target.files); if(!fileList.length) return;
-    setUploadProgress(fileList.map(f=>({name:f.name,pct:10})));
-    for(let i=0;i<fileList.length;i++){
-      const f=fileList[i];
-      try{
-        setUploadProgress(p=>p.map((x,j)=>j===i?{...x,pct:40}:x));
-        const fd=new FormData(); fd.append("file",f);
-        const r=await fetch("/api/upload",{method:"POST",body:fd});
-        setUploadProgress(p=>p.map((x,j)=>j===i?{...x,pct:90}:x));
-        if(r.ok){
-          const d=await r.json();
-          setUploadProgress(p=>p.map((x,j)=>j===i?{...x,pct:100}:x));
-          await postMsg("",d.url,f.name);
-        }
-      }catch(err){console.error(err);}
-    }
-    setTimeout(()=>setUploadProgress([]),1200);
-    e.target.value="";
+  // ── mentions ─────────────────────────────────────────────────────────────────
+  function onType(e) {
+    const v = e.target.value; setText(v);
+    const at = v.lastIndexOf("@");
+    if (at >= 0 && !v.slice(at+1).includes(" ")) { setShowM(true); setMentionQ(v.slice(at+1)); }
+    else setShowM(false);
   }
-
-  function handleTextChange(e){
-    const val=e.target.value; setText(val);
-    const at=val.lastIndexOf("@");
-    if(at>=0&&!val.slice(at+1).includes(" ")){
-      setShowMentions(true); setMentionQ(val.slice(at+1));
-    } else { setShowMentions(false); }
+  function pickMention(m) {
+    const at = text.lastIndexOf("@");
+    setText((at >= 0 ? text.slice(0, at) : "") + "@" + m.name + " ");
+    setShowM(false); inputRef.current?.focus();
   }
+  const mentionList = (team||[]).filter(m => m.id !== myId && m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0,5);
 
-  function insertMention(m){
-    const at=text.lastIndexOf("@");
-    setText((at>=0?text.slice(0,at):"")+"@"+m.name+" ");
-    setShowMentions(false); inputRef.current?.focus();
-  }
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:300,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,position:"relative"}}>
+      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>💬 ЧАТ</div>
 
-  async function send(){
-    if(!text.trim()) return;
-    const t=text; setText(""); setShowMentions(false);
-    await postMsg(t);
-  }
-
-  const mentionList=(team||[]).filter(m=>m.id!==myId&&m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0,5);
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",height:280,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,position:"relative"}}>
-      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>{"💬 ЧАТ"}</div>
-      <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:5}}>
-        {msgs.length===0&&<div style={{textAlign:"center",color:"#9ca3af",fontSize:10,paddingTop:20}}>{"Начните обсуждение"}</div>}
-        {msgs.map(m=>{
-          const isMe=m.user===myId;
-          const name=nm(m.user);
-          return <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end"}}>
-            <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{name[0].toUpperCase()}</div>
-            <div style={{maxWidth:"80%"}}>
-              {!isMe&&<div style={{fontSize:8,color:"#cbd5e1",fontFamily:"monospace",marginBottom:1}}>{"@"}{name}</div>}
-              <div style={{background:isMe?"#1e1630":"#1a1a2e",border:"1px solid "+(isMe?"#4c1d9530":"#2d2d44"),borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"5px 9px"}}>
-                {m.text&&<div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:700,background:"#a78bfa15",borderRadius:3,padding:"0 2px"}}>{p}</span>:p)}</div>}
-                {(m.files||[]).map((f,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:5,marginTop:3,background:"#ffffff08",borderRadius:5,padding:"4px 8px"}}>
-                    <span style={{fontSize:11}}>{/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name||"")?"🖼️":"📎"}</span>
-                    <span style={{fontSize:10,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
-                    {f.url?<a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0,fontWeight:700}}>{"↓"}</a>:<span style={{fontSize:9,color:"#9ca3af"}}>{"..."}</span>}
-                  </div>
-                ))}
+      {/* messages */}
+      <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:6}}>
+        {msgs.length===0 && <div style={{textAlign:"center",color:"#6b7280",fontSize:10,paddingTop:20}}>Начните обсуждение</div>}
+        {msgs.map(m => {
+          const isMe = m.user === myId;
+          const name = nm(m.user);
+          return (
+            <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end"}}>
+              <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{name[0].toUpperCase()}</div>
+              <div style={{maxWidth:"80%"}}>
+                {!isMe && <div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace",marginBottom:2}}>@{name}</div>}
+                <div style={{background:isMe?"#1e1630":"#1a1a2e",border:"1px solid "+(isMe?"#4c1d9530":"#2d2d44"),borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"6px 10px"}}>
+                  {m.text && <div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:700}}>{p}</span>:p)}</div>}
+                  {m.furl && (
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
+                      <span style={{fontSize:14}}>{/\.(jpg|jpeg|png|gif|webp)$/i.test(m.fname)?"🖼️":"/\.(mp4|mov|avi|mkv)$/i".test(m.fname)?"🎬":"📎"}</span>
+                      <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
+                      <a href={m.furl} download={m.fname||"file"} target="_blank" rel="noreferrer"
+                        style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>
+                        ↓ Скачать
+                      </a>
+                    </div>
+                  )}
+                </div>
+                <div style={{fontSize:7,color:"#6b7280",marginTop:2,textAlign:isMe?"right":"left"}}>{m.ts?new Date(m.ts).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
               </div>
-              <div style={{fontSize:7,color:"#9ca3af",marginTop:1,textAlign:isMe?"right":"left"}}>{m.ts?new Date(m.ts).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
             </div>
-          </div>;
+          );
         })}
         <div ref={bottomRef}/>
       </div>
 
-      {uploadProgress.length>0&&<div style={{padding:"4px 8px",borderTop:"1px solid #1e1e2e",display:"flex",flexDirection:"column",gap:3}}>
-        {uploadProgress.map((f,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:9,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{"📎 "}{f.name}</span>
-            <div style={{width:80,height:4,background:"#2d2d44",borderRadius:2,overflow:"hidden"}}>
-              <div style={{width:`${f.pct}%`,height:"100%",background:f.pct===100?"#10b981":"#7c3aed",transition:"width 0.3s",borderRadius:2}}/>
+      {/* upload progress */}
+      {progress && (
+        <div style={{padding:"6px 10px",borderTop:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,color:"#9ca3af",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📎 {progress.name}</span>
+          <div style={{width:100,height:5,background:"#2d2d44",borderRadius:3,overflow:"hidden"}}>
+            <div style={{width:`${progress.pct}%`,height:"100%",background:progress.pct===100?"#10b981":"#7c3aed",transition:"width 0.3s",borderRadius:3}}/>
+          </div>
+          <span style={{fontSize:9,color:progress.pct===100?"#10b981":"#9ca3af",minWidth:30}}>{progress.pct}%</span>
+        </div>
+      )}
+
+      {/* error */}
+      {err && <div style={{padding:"4px 10px",fontSize:10,color:"#ef4444",background:"#1a0000",borderTop:"1px solid #ef444430"}}>{err} <button onClick={()=>setErr("")} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button></div>}
+
+      {/* mention dropdown */}
+      {showM && mentionList.length > 0 && (
+        <div style={{position:"absolute",bottom:50,left:8,right:8,background:"#1a1a2e",border:"1px solid #3d3d5c",borderRadius:8,zIndex:200,overflow:"hidden"}}>
+          {mentionList.map(m => (
+            <div key={m.id} onClick={()=>pickMention(m)}
+              style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
+              onMouseEnter={e=>e.currentTarget.style.background="#2d2d44"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{width:18,height:18,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff"}}>{m.name[0]}</div>
+              <span style={{color:"#a78bfa",fontSize:11}}>@{m.name}</span>
+              <span style={{fontSize:9,color:"#6b7280",marginLeft:"auto"}}>{m.role}</span>
             </div>
-            <span style={{fontSize:8,color:f.pct===100?"#10b981":"#6b7280",minWidth:28}}>{f.pct}{"%"}</span>
-          </div>
-        ))}
-      </div>}
+          ))}
+        </div>
+      )}
 
-      {showMentions&&mentionList.length>0&&<div style={{position:"absolute",bottom:46,left:8,right:8,background:"#1a1a2e",border:"1px solid #3d3d5c",borderRadius:8,zIndex:200,overflow:"hidden"}}>
-        {mentionList.map(m=>(
-          <div key={m.id} onClick={()=>insertMention(m)} style={{padding:"7px 12px",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",gap:7}}
-            onMouseEnter={e=>e.currentTarget.style.background="#2d2d44"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-            <div style={{width:18,height:18,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff"}}>{m.name[0]}</div>
-            <span style={{color:"#a78bfa"}}>{"@"}{m.name}</span>
-            <span style={{fontSize:9,color:"#9ca3af",marginLeft:"auto"}}>{m.role}</span>
-          </div>
-        ))}
-      </div>}
-
-      <div style={{padding:"5px 6px",borderTop:"1px solid #1e1e2e",display:"flex",gap:4,alignItems:"center"}}>
+      {/* input row */}
+      <div style={{padding:"6px 8px",borderTop:"1px solid #1e1e2e",display:"flex",gap:6,alignItems:"center"}}>
         <input ref={fileRef} type="file" multiple style={{display:"none"}} onChange={handleFiles}/>
-        <button onClick={()=>fileRef.current?.click()} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#9ca3af",cursor:"pointer",fontSize:13,flexShrink:0}}>{"📎"}</button>
-        <input ref={inputRef} value={text} onChange={handleTextChange} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}if(e.key==="Escape")setShowMentions(false);}} placeholder={"Сообщение... (@ для упоминания)"} style={{...SI,flex:1,fontSize:11,padding:"4px 8px"}}/>
-        <button onClick={send} disabled={!text.trim()} style={{background:"linear-gradient(135deg,#7c3aed,#ec4899)",border:"none",borderRadius:6,padding:"4px 10px",color:"#fff",cursor:text.trim()?"pointer":"not-allowed",fontSize:13,flexShrink:0,opacity:text.trim()?1:0.5}}>{"➤"}</button>
+        <button onClick={()=>fileRef.current?.click()} title="Прикрепить файл"
+          style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:"#9ca3af",cursor:"pointer",fontSize:14,flexShrink:0}}>📎</button>
+        <input ref={inputRef} value={text} onChange={onType}
+          onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}if(e.key==="Escape")setShowM(false);}}
+          placeholder="Сообщение... (@ для упоминания)"
+          style={{...SI,flex:1,fontSize:11,padding:"5px 10px"}}/>
+        <button onClick={send} disabled={!text.trim()}
+          style={{background:"linear-gradient(135deg,#7c3aed,#6d28d9)",border:"none",borderRadius:7,padding:"5px 12px",color:"#fff",cursor:text.trim()?"pointer":"default",fontSize:13,flexShrink:0,opacity:text.trim()?1:0.4}}>➤</button>
       </div>
     </div>
   );
@@ -1166,7 +1196,7 @@ function MainApp({currentUser, onLogout}){
         setProjects(projs.map(p => ({...p, links: p.links || [], archived: p.archived || false})));
         setTeamMembers(users.map(u => ({...u, note: u.note || ""})));
         // Split tasks by type and merge data field
-        const expand = t => ({ id: t.id, project: t.project_id, status: t.status, title: t.title, chat: [], ...(t.data || {}) });
+        const expand = t => ({ id: t.id, project: t.project_id, status: t.status, title: t.title, archived: t.archived || false, chat: [], ...(t.data || {}) });
         setPreItems(tasks.filter(t=>t.type==="pre").map(expand));
         setProdItems(tasks.filter(t=>t.type==="prod").map(expand));
         setPostReels(tasks.filter(t=>t.type==="post_reels").map(expand));
@@ -1237,8 +1267,8 @@ function MainApp({currentUser, onLogout}){
 
   async function save(type,d){
     try {
-      const { id, project, status, title, chat, ...rest } = d;
-      const payload = { type, title: title||"", project_id: project, status, data: rest };
+      const { id, project, status, title, chat, archived, ...rest } = d;
+      const payload = { type, title: title||"", project_id: project, status, archived: archived||false, data: rest };
       // Check if item exists already
       const setter = type==="pre"?setPreItems:type==="prod"?setProdItems:type==="post_reels"?setPostReels:type==="post_video"?setPostVideo:type==="post_carousel"?setPostCarousels:setPubItems;
       const getter = type==="pre"?preItems:type==="prod"?prodItems:type==="post_reels"?postReels:type==="post_video"?postVideo:type==="post_carousel"?postCarousels:pubItems;
@@ -1248,7 +1278,7 @@ function MainApp({currentUser, onLogout}){
         setter(p=>p.map(x=>x.id===id?d:x));
       } else {
         const saved = await api.createTask({...payload, id});
-        const expanded = {id:saved.id,project:saved.project_id,status:saved.status,title:saved.title,chat:[],...(saved.data||{})};
+        const expanded = {id:saved.id,project:saved.project_id,status:saved.status,title:saved.title,archived:saved.archived||false,chat:[],...(saved.data||{})};
         setter(p=>[...p, expanded]);
       }
     } catch(e) { console.error("Save error:", e); alert("Ошибка сохранения: "+e.message); }
@@ -1256,13 +1286,13 @@ function MainApp({currentUser, onLogout}){
   }
 
   function archiveTask(type,id){
-    const upd=setter=>setter(p=>p.map(x=>x.id===id?{...x,archived:!x.archived}:x));
-    if(type==="pre") upd(setPreItems); else if(type==="prod") upd(setProdItems);
-    else if(type==="post_reels") upd(setPostReels); else if(type==="post_video") upd(setPostVideo);
-    else if(type==="post_carousel") upd(setPostCarousels); else if(type==="pub") upd(setPubItems);
+    const setter=type==="pre"?setPreItems:type==="prod"?setProdItems:type==="post_reels"?setPostReels:type==="post_video"?setPostVideo:type==="post_carousel"?setPostCarousels:setPubItems;
     const getter=type==="pre"?preItems:type==="prod"?prodItems:type==="post_reels"?postReels:type==="post_video"?postVideo:type==="post_carousel"?postCarousels:pubItems;
     const item=getter.find(x=>x.id===id);
-    if(item){ const{id:_id,project,status,title,chat,...rest}=item; api.updateTask(id,{data:{...rest,archived:!item.archived}}).catch(()=>{}); }
+    if(!item) return;
+    const newVal=!item.archived;
+    setter(p=>p.map(x=>x.id===id?{...x,archived:newVal}:x));
+    api.updateTask(id,{archived:newVal}).catch(e=>console.error("Archive error:",e));
   }
   function drop(type,id,newStatus){
     const upd=setter=>setter(p=>p.map(x=>x.id===id?{...x,status:newStatus}:x));
