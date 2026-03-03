@@ -709,24 +709,22 @@ function SourceInputs({d, u}){
 function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,sources:item.sources||[]}); const [tr,setTr]=useState(false); const [gb,setGb]=useState(false);
   const [err,setErr]=useState("");
+  const fileRef=useRef(null);
   const u=(k,v)=>setD(p=>({...p,[k]:v}));
   useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
   async function transcribe(){
-    if(!sourceFile&&!d.source_url){setErr("Сначала загрузите исходник");return;}
+    const firstSrc=(d.sources&&d.sources[0])||null;
+    const srcUrl=firstSrc?.url||d.source_url||"";
+    if(!srcUrl){setErr("Сначала загрузите исходник");return;}
     setTr(true);setErr("");
     try{
       const fd=new FormData();
-      if(sourceFile){
-        // Use the local file directly
-        fd.append("file",sourceFile);
-      } else {
-        // Re-fetch file via our proxy and send to transcription
-        const rb=await fetch(d.source_url);
-        if(!rb.ok) throw new Error("Не удалось получить файл ("+rb.status+")");
-        const blob=await rb.blob();
-        if(blob.size===0) throw new Error("Файл пустой — возможно ошибка загрузки");
-        fd.append("file",new File([blob],d.source_name||"video.mp4",{type:blob.type||"video/mp4"}));
-      }
+      const rb=await fetch(srcUrl);
+      if(!rb.ok) throw new Error("Не удалось получить файл ("+rb.status+")");
+      const blob=await rb.blob();
+      if(blob.size===0) throw new Error("Файл пустой — возможно ошибка загрузки");
+      const fname=firstSrc?.name||d.source_name||"video.mp4";
+      fd.append("file",new File([blob],fname,{type:blob.type||"video/mp4"}));
       const r=await fetch("/api/ai/transcribe",{method:"POST",body:fd});
       const data=await r.json();
       if(!r.ok) throw new Error(data.error||"Ошибка транскрипции");
