@@ -1,22 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { api, createWS } from "./api";
-
-// ── ErrorBoundary — показывает ошибку вместо чёрного экрана ─────────────────
-class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { err: null }; }
-  static getDerivedStateFromError(e) { return { err: e }; }
-  render() {
-    if (this.state.err) return (
-      <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0f",flexDirection:"column",gap:16,padding:20}}>
-        <div style={{fontSize:48}}>⚠️</div>
-        <div style={{fontSize:16,fontWeight:700,color:"#ef4444"}}>Ошибка приложения</div>
-        <div style={{fontSize:11,color:"#9ca3af",fontFamily:"monospace",background:"#111118",padding:"12px 16px",borderRadius:8,maxWidth:500,wordBreak:"break-all"}}>{String(this.state.err)}</div>
-        <button onClick={()=>window.location.reload()} style={{background:"linear-gradient(135deg,#7c3aed,#6d28d9)",border:"none",borderRadius:8,padding:"10px 24px",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:700}}>🔄 Перезагрузить</button>
-      </div>
-    );
-    return this.props.children;
-  }
-}
+import LoginScreen from "./LoginScreen";
 
 const APP_NAME = "Виноград";
 
@@ -31,7 +15,7 @@ const TABS = [
 ];
 
 const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
-const PROD_STATUSES = [{id:"planned",l:"Запланировано",c:"#6b7280"},{id:"ready",l:"Готово к съёмке",c:"#f59e0b"},{id:"shooting",l:"Идёт съёмка",c:"#3b82f6"},{id:"filmed",l:"Снято",c:"#8b5cf6"},{id:"done",l:"Материалы загружены",c:"#10b981"}];
+const PROD_STATUSES = [{id:"planned",l:"Запланировано",c:"#6b7280"},{id:"ready",l:"Готово к съёмке",c:"#f59e0b"},{id:"shooting",l:"Идёт съёмка",c:"#3b82f6"},{id:"done",l:"Снято",c:"#10b981"}];
 const POST_STATUSES = [{id:"not_started",l:"Не начат",c:"#4b5563"},{id:"in_progress",l:"В монтаже",c:"#f59e0b"},{id:"review",l:"На проверке",c:"#8b5cf6"},{id:"done",l:"Готово",c:"#10b981"}];
 const PUB_STATUSES  = [{id:"draft",l:"Черновик",c:"#6b7280"},{id:"ready",l:"Готово",c:"#f59e0b"},{id:"scheduled",l:"Запланировано",c:"#3b82f6"},{id:"published",l:"Опубликовано",c:"#10b981"}];
 const ROLES_LIST    = ["Директор","Менеджер проекта","Сценарист","Оператор","Монтажёр","Продюсер","Таргетолог","Дизайнер","Другое"];
@@ -69,20 +53,15 @@ function TeamSelect({label,value,onChange,team}){
 function MiniChat({taskId, team, currentUser}){
   const [msgs,     setMsgs]   = useState([]);
   const [text,     setText]   = useState("");
-  const [uploading,setUploading] = useState(false);
-  const [uploadPct,setUploadPct] = useState(0);
+  const [uploading,setUploading] = useState(false); // bool
+  const [uploadPct,setUploadPct] = useState(0);     // 0-100
   const [uploadName,setUploadName] = useState("");
   const [err,      setErr]    = useState("");
   const [showM,    setShowM]  = useState(false);
   const [mentionQ, setMentionQ] = useState("");
-  const [recording,setRecording] = useState(false);
-  const [recSec,   setRecSec]    = useState(0);
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
   const inputRef  = useRef(null);
-  const mediaRecRef  = useRef(null);
-  const recChunksRef = useRef([]);
-  const recTimerRef  = useRef(null);
   const myId = currentUser?.id || "";
   const nm   = id => { try { return teamOf(id, team)?.name || "?"; } catch(e) { return "?"; } };
 
@@ -191,50 +170,6 @@ function MiniChat({taskId, team, currentUser}){
     xhr.send(fd);
   }
 
-
-  async function startRec() {
-    if (recording || !taskId || taskId === "undefined") return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
-      const mr = new MediaRecorder(stream, { mimeType });
-      recChunksRef.current = [];
-      mr.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        clearInterval(recTimerRef.current); setRecSec(0);
-        const blob = new Blob(recChunksRef.current, { type: mimeType });
-        const fname = "voice_" + Date.now() + ".webm";
-        setUploading(true); setUploadName("🎙️ Транскрибирую...");
-        try {
-          const fd2 = new FormData();
-          fd2.append("file", new File([blob], fname, { type: blob.type }));
-          const tr = await fetch("/api/ai/transcribe", { method:"POST", body:fd2 });
-          const trData = await tr.json();
-          if (tr.ok && trData.text) {
-            setText(p => (p ? p + " " : "") + trData.text);
-            inputRef.current?.focus();
-          } else {
-            const fd3 = new FormData(); fd3.append("file", new File([blob], fname, { type: blob.type }));
-            const up = await fetch("/api/upload", { method:"POST", body:fd3 });
-            if (up.ok) {
-              const upD = await up.json(); const k = upD.key||"";
-              const dlurl = k ? "/api/download?key="+encodeURIComponent(k)+"&name="+encodeURIComponent(fname) : upD.url;
-              const msgR = await fetch("/api/chat/"+taskId, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"",file_url:dlurl,file_name:fname}) });
-              if (msgR.ok) { const m=await msgR.json(); setMsgs(p=>[...p,{id:m.id||genId(),user:m.user_id||myId,text:"",ts:m.created_at||Date.now(),fname,furl:dlurl}]); }
-            }
-          }
-        } catch(e2) { setErr("Ошибка записи: " + e2.message); }
-        setUploading(false); setUploadName("");
-      };
-      mr.start();
-      mediaRecRef.current = mr; setRecording(true); setRecSec(0);
-      recTimerRef.current = setInterval(() => setRecSec(s => s+1), 1000);
-    } catch(e) { setErr("Микрофон недоступен: " + e.message); }
-  }
-  function stopRec() {
-    if (mediaRecRef.current && recording) { mediaRecRef.current.stop(); setRecording(false); }
-  }
   // mentions
   function onType(e) {
     const v = e.target.value; setText(v);
@@ -323,8 +258,8 @@ function MiniChat({taskId, team, currentUser}){
       {/* input */}
       <div style={{padding:"6px 8px",borderTop:"1px solid #1e1e2e",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
         <input ref={fileRef} type="file" multiple accept="*/*" style={{position:"fixed",top:-9999,left:-9999,opacity:0,pointerEvents:"none"}} onChange={handleFiles}/>
-        <button onClick={()=>{ if(!uploading&&!recording) fileRef.current?.click(); }} title="Прикрепить файл" disabled={uploading||recording} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:(uploading||recording)?"#4b5563":"#9ca3af",cursor:(uploading||recording)?"not-allowed":"pointer",fontSize:14,flexShrink:0}}>📎</button>
-        <button onClick={recording?stopRec:startRec} disabled={uploading} title={recording?"Стоп":"Голосовое сообщение"} style={{background:recording?"#ef4444":"#1a1a2e",border:"1px solid "+(recording?"#ef4444":"#2d2d44"),borderRadius:7,padding:"5px 9px",color:recording?"#fff":"#9ca3af",cursor:uploading?"not-allowed":"pointer",fontSize:recording?11:14,fontWeight:recording?700:400,flexShrink:0,minWidth:36}}>{recording?"⏹ "+recSec+"с":"🎙️"}</button>
+        <button onClick={()=>{ if(!uploading) fileRef.current?.click(); }} title="Прикрепить файл" disabled={uploading}
+          style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:uploading?"#4b5563":"#9ca3af",cursor:uploading?"not-allowed":"pointer",fontSize:14,flexShrink:0}}>📎</button>
         <input ref={inputRef} value={text} onChange={onType}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}if(e.key==="Escape")setShowM(false);}}
           placeholder="Сообщение... (@ для упоминания)"
@@ -341,14 +276,14 @@ function Kanban({statuses,items,renderCard,onDrop,onAddClick}){
   const [dragId,setDragId]=useState(null);
   const [overSt,setOverSt]=useState(null);
   return(
-    <div style={{display:"flex",gap:12,overflowX:"auto",alignItems:"flex-start",paddingBottom:8,WebkitOverflowScrolling:"touch"}}>
+    <div style={{display:"flex",gap:10,overflowX:"auto",alignItems:"flex-start",paddingBottom:8}}>
       {statuses.map(st=>{
         const col=items.filter(x=>x.status===st.id);
         return <div key={st.id}
           onDragOver={e=>{e.preventDefault();setOverSt(st.id);}}
           onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverSt(null);}}
           onDrop={e=>{e.preventDefault();if(dragId){onDrop(dragId,st.id);setDragId(null);setOverSt(null);}}}
-          style={{minWidth:280,width:280,background:overSt===st.id?"#111120":"#0d0d16",border:`1px solid ${overSt===st.id?st.c+"70":"#1e1e2e"}`,borderRadius:12,padding:"10px 8px",flexShrink:0,transition:"all 0.12s"}}>
+          style={{minWidth:235,width:235,background:overSt===st.id?"#111120":"#0d0d16",border:`1px solid ${overSt===st.id?st.c+"70":"#1e1e2e"}`,borderRadius:12,padding:"10px 8px",flexShrink:0,transition:"all 0.12s"}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"0 2px"}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:st.c}}/>
             <span style={{fontSize:10,fontWeight:700,color:st.c,fontFamily:"monospace"}}>{st.l}</span>
@@ -1561,23 +1496,29 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
         </div>
         <input value={m.telegram} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,telegram:e.target.value}:x))} placeholder="@telegram" style={{...SI,marginBottom:6,fontSize:11}}/>
         <textarea value={m.note} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,note:e.target.value}:x))} placeholder="Заметки..." style={{...SI,minHeight:50,resize:"vertical",fontSize:11,lineHeight:1.4,marginBottom:8}}/>
-        {m.last_active&&<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(m.last_active).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>}
+
       </div>)}
     </div>
   </div>;
 }
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
-function AppInner(){
+export default function App(){
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem("vg_user") || "null"); } catch { return null; }
   });
-  function handleLogout() { localStorage.removeItem("vg_user"); setCurrentUser(null); }
-  if (!currentUser) return <LoginScreen onLogin={u => { localStorage.setItem("vg_user", JSON.stringify(u)); setCurrentUser(u); }}/>;
+
+  function handleLogout() {
+    localStorage.removeItem("vg_user");
+    setCurrentUser(null);
+  }
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={u => { localStorage.setItem("vg_user", JSON.stringify(u)); setCurrentUser(u); }}/>;
+  }
+
   return <MainApp currentUser={currentUser} onLogout={handleLogout}/>;
-}
-export default function App(){
-  return <ErrorBoundary><AppInner/></ErrorBoundary>;
 }
 
 // ── Centralized store lookup ──────────────────────────────────────────────────
@@ -1796,12 +1737,12 @@ function MainApp({currentUser, onLogout}){
     const execId=item.executor||item.editor||item.scriptwriter||item.operator||item.designer||"";
     const cust=teamOf(custId,teamMembers);
     const exec=teamOf(execId,teamMembers);
-    const dateStr=item.global_deadline||item.deadline||item.shoot_date?.slice(0,10)||item.planned_date?.slice(0,10)||item.post_deadline||"";
+    const dateStr=item.deadline||item.shoot_date?.slice(0,10)||item.planned_date?.slice(0,10)||item.post_deadline||"";
     const daysLeft=dateStr?Math.ceil((new Date(dateStr).getTime()-Date.now())/86400000):null;
     const urgent=daysLeft!==null&&daysLeft<=2;
-    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${urgent?"#ef444450":"#1e1e2e"}`,borderLeft:`3px solid ${urgent?"#ef4444":"#374151"}`,borderRadius:10,padding:"13px 14px",cursor:"pointer"}}
+    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${urgent?"#ef444450":"#1e1e2e"}`,borderLeft:`3px solid ${urgent?"#ef4444":"#374151"}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
       onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
-      <div style={{fontWeight:700,fontSize:13,marginBottom:6,lineHeight:1.3}}>{item.title||"Без названия"}</div>
+      <div style={{fontWeight:700,fontSize:12,marginBottom:5}}>{item.title||"Без названия"}</div>
       <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
         <Badge color="#374151">{proj.label}</Badge>
         {item.type&&<Badge color="#4b5563">{item.type}</Badge>}
@@ -1813,24 +1754,12 @@ function MainApp({currentUser, onLogout}){
         <span style={{color:"#9ca3af",flexShrink:0}}>→</span>
         <span style={{background:"#1a1a2e",borderRadius:4,padding:"2px 7px",color:exec?"#a0aec0":"#2d2d44",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90}}>{exec?exec.name:"исполнитель"}</span>
       </div>
-      {/* Дедлайн — inline */}
+      {/* Дедлайн */}
       {item.completed_at&&<div style={{fontSize:9,fontFamily:"monospace",color:"#10b981"}}>✅ Выполнено {item.completed_at}</div>}
-      {!item.completed_at&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}} onClick={e=>e.stopPropagation()}>
-        <span style={{fontSize:10,color:dateStr?(urgent?"#ef4444":"#4b5563"):"#2d2d44"}}>📅</span>
-        <input type="date" value={dateStr} onChange={e=>{
-          const val=e.target.value;
-          const df=type==="pre"?"deadline":type==="prod"?"shoot_date":type==="pub"?"planned_date":"post_deadline";
-          const setter=type==="pre"?setPreItems:type==="prod"?setProdItems:type==="post_reels"?setPostReels:type==="post_video"?setPostVideo:type==="post_carousel"?setPostCarousels:setPubItems;
-          setter(p=>p.map(x=>x.id===item.id?{...x,[df]:val}:x));
-          const {id:_,project,status,title,chat,completed_at,...rest}=item;
-          api.updateTask(item.id,{data:{...rest,[df]:val}}).catch(()=>{});
-        }} style={{background:"transparent",border:"none",color:dateStr?(urgent?"#ef4444":"#6b7280"):"#2d2d44",fontSize:9,fontFamily:"monospace",cursor:"pointer",outline:"none",padding:0,colorScheme:"dark",width:dateStr?"auto":14}}/>
-        {!dateStr&&<span style={{fontSize:9,color:"#2d2d44"}}>дедлайн</span>}
-        {dateStr&&daysLeft!==null&&<span style={{fontSize:9,color:urgent?"#ef4444":"#4b5563"}}>{daysLeft>0?daysLeft+"д":"сегодня"}</span>}
-      </div>}
+      {!item.completed_at&&dateStr&&<div style={{fontSize:9,fontFamily:"monospace",color:urgent?"#ef4444":"#4b5563"}}>📅 {dateStr}{daysLeft!==null&&` (${daysLeft>0?daysLeft+"д":"сегодня"})`}</div>}
       <div style={{display:"flex",gap:6,marginTop:5,alignItems:"center"}}>
         {chatCount>0&&<span style={{fontSize:9,color:"#9ca3af"}}>💬 {chatCount}</span>}
-        {(type==="post_reels"||type==="post_video"||type==="post_carousel")&&(item.status==="done"||item.status==="approved")&&<button onClick={e=>{
+        {(type==="post_reels"||type==="post_video"||type==="post_carousel")&&<button onClick={e=>{
           e.stopPropagation();
           // Mark post task as done
           drop(type,item.id,"done");
@@ -1851,12 +1780,12 @@ function MainApp({currentUser, onLogout}){
     </div>;
   }
 
-  const cnt={pre:preItems.filter(x=>!x.archived).length,prod:prodItems.filter(x=>!x.archived).length,post:(postReels.length+postVideo.length+postCarousels.length)-[...postReels,...postVideo,...postCarousels].filter(x=>x.archived).length,pub:pubItems.filter(x=>!x.archived).length,summary:0,projects:activeProjs.length,team:teamMembers.length};
+  const cnt={pre:preItems.length,prod:prodItems.length,post:postReels.length+postVideo.length+postCarousels.length,pub:pubItems.length,summary:0,projects:activeProjs.length,team:teamMembers.length};
 
   return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",flexDirection:"column",overflow:"hidden"}}>
     {/* TOP NAV — no filters, no add button */}
     <div style={{borderBottom:"1px solid #1a1a2e",background:"#0d0d16",flexShrink:0,padding:"0 16px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:2,height:52,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+      <div style={{display:"flex",alignItems:"center",gap:2,height:52}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginRight:12}}>
           <div style={{width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🍇</div>
           <div><div style={{fontSize:14,fontWeight:800}}>{APP_NAME}</div><div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace"}}>production system</div></div>
