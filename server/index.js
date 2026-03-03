@@ -48,11 +48,7 @@ app.use(express.json({ limit: "10mb" }));
 const BUILD_PATH = path.join(__dirname, "..", "client", "build");
 if (fs.existsSync(BUILD_PATH)) app.use(express.static(BUILD_PATH));
 
-function hash(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
-  return h.toString(36);
-}
+// plain text passwords
 
 // ── Init DB ───────────────────────────────────────────────────────────────────
 async function initDb() {
@@ -168,7 +164,7 @@ app.post("/api/auth/register", async (req, res) => {
       return res.status(409).json({ error: "Этот ник уже зарегистрирован" });
     const id = "u_" + uuidv4().replace(/-/g, "").slice(0, 10);
     await q("INSERT INTO users(id,telegram,name,role,color,password_hash) VALUES($1,$2,$3,$4,$5,$6)",
-      [id, clean, name || clean, role || "Оператор", color || "#8b5cf6", hash(password + clean)]);
+      [id, clean, name || clean, role || "Оператор", color || "#8b5cf6", password]);
     res.json({ id, telegram: clean, name: name || clean, role: role || "Оператор", color: color || "#8b5cf6" });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
 });
@@ -179,7 +175,7 @@ app.post("/api/auth/login", async (req, res) => {
     const clean = telegram.replace(/^@/, "").toLowerCase().trim();
     const user = await q1("SELECT * FROM users WHERE telegram=$1", [clean]);
     if (!user) return res.status(401).json({ error: "Пользователь не найден" });
-    if (hash(password + clean) !== user.password_hash) return res.status(401).json({ error: "Неверный пароль" });
+    if (password !== user.password_hash) return res.status(401).json({ error: "Неверный пароль" });
     res.json({ id: user.id, telegram: user.telegram, name: user.name, role: user.role, color: user.color });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
 });
@@ -189,7 +185,7 @@ app.post("/api/auth/login", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 app.get("/api/users", async (req, res) => {
-  try { res.json(await q("SELECT id,telegram,name,role,color FROM users ORDER BY created_at")); }
+  try { res.json(await q("SELECT id,telegram,name,role,color,last_active FROM users ORDER BY created_at")); }
   catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
@@ -835,6 +831,20 @@ app.get("*", (req, res) => {
   const index = path.join(BUILD_PATH, "index.html");
   if (fs.existsSync(index)) res.sendFile(index);
   else res.json({ status: "Виноград API running 🍇" });
+});
+
+// ── Сброс пароля ─────────────────────────────────────────────────────────────
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    const { telegram, new_password, invite_password } = req.body;
+    if (invite_password !== INVITE_PASSWORD) return res.status(403).json({ error: "Неверный код приглашения" });
+    if (!telegram || !new_password) return res.status(400).json({ error: "Заполните все поля" });
+    const clean = telegram.replace(/^@/, "").toLowerCase().trim();
+    const user = await q1("SELECT id FROM users WHERE telegram=$1", [clean]);
+    if (!user) return res.status(404).json({ error: "Пользователь не найден" });
+    await q("UPDATE users SET password_hash=$1 WHERE id=$2", [new_password, user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
