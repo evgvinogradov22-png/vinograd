@@ -1520,6 +1520,19 @@ export default function App(){
   return <MainApp currentUser={currentUser} onLogout={handleLogout}/>;
 }
 
+// ── Centralized store lookup ──────────────────────────────────────────────────
+function useTaskStore(type, stores) {
+  const map = {
+    pre:           [stores.preItems,      stores.setPreItems],
+    prod:          [stores.prodItems,     stores.setProdItems],
+    post_reels:    [stores.postReels,     stores.setPostReels],
+    post_video:    [stores.postVideo,     stores.setPostVideo],
+    post_carousel: [stores.postCarousels, stores.setPostCarousels],
+    pub:           [stores.pubItems,      stores.setPubItems],
+  };
+  return map[type] || [[], ()=>{}];
+}
+
 function MainApp({currentUser, onLogout}){
   const [tab,setTab]=useState("pre");
   const [viewMode,setViewMode]=useState("kanban");
