@@ -115,6 +115,8 @@ async function initDb() {
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''`);
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''`);
   await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS pmp_project_id TEXT DEFAULT ''`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
@@ -148,6 +150,13 @@ async function initDb() {
     created_at BIGINT DEFAULT 0
   )`);
 
+  // Set director role from env
+  const dirTg = process.env.DIRECTOR_TELEGRAM || "";
+  if (dirTg) {
+    const clean = dirTg.replace(/^@/,"").toLowerCase().trim();
+    await q("UPDATE users SET role='Директор' WHERE LOWER(REPLACE(telegram,'@',''))=$1", [clean]).catch(()=>{});
+    console.log("[DIRECTOR] role set for:", clean);
+  }
   console.log("✅ Database ready");
 }
 
@@ -280,6 +289,52 @@ app.post("/api/analytics/kpi", async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
+// AVATAR UPLOAD
+// ════════════════════════════════════════════════════════════════════════════════
+
+app.post("/api/avatar/user/:id", upload.single("file"), async (req, res) => {
+  const { id } = req.params;
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: "no file" });
+  try {
+    const key = "avatar_user_" + id + "_" + Date.now() + path.extname(file.originalname);
+    let url = "";
+    if (S3) {
+      const cmd = new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: file.buffer, ContentType: file.mimetype });
+      await S3.send(cmd);
+      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
+    } else {
+      const dest = path.join(os.tmpdir(), key);
+      fs.writeFileSync(dest, file.buffer);
+      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
+    }
+    await q("UPDATE users SET avatar_url=$1 WHERE id=$2", [url, id]);
+    res.json({ url });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/avatar/project/:id", upload.single("file"), async (req, res) => {
+  const { id } = req.params;
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: "no file" });
+  try {
+    const key = "avatar_proj_" + id + "_" + Date.now() + path.extname(file.originalname);
+    let url = "";
+    if (S3) {
+      const cmd = new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: file.buffer, ContentType: file.mimetype });
+      await S3.send(cmd);
+      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
+    } else {
+      const dest = path.join(os.tmpdir(), key);
+      fs.writeFileSync(dest, file.buffer);
+      url = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(file.originalname)}`;
+    }
+    await q("UPDATE projects SET avatar_url=$1 WHERE id=$2", [url, id]);
+    res.json({ url });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
 // TRAINING
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -312,7 +367,7 @@ app.delete("/api/training/:id", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 app.get("/api/users", async (req, res) => {
-  try { res.json(await q("SELECT id,telegram,name,role,color,last_active FROM users ORDER BY created_at")); }
+  try { res.json(await q("SELECT id,telegram,name,role,color,last_active,avatar_url FROM users ORDER BY created_at")); }
   catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
