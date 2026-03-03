@@ -458,10 +458,15 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
               <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>{WDAYS[days.indexOf(d)]}</div>
               <div style={{fontSize:15,fontWeight:800,color:isToday?"#a78bfa":"#f0eee8"}}>{d.getDate()}</div>
             </div>
-            {its.map(x=>{const sc=stColor(PUB_STATUSES,x.status);return(
+            {its.map(x=>{const sc=stColor(PUB_STATUSES,x.status);const proj=projects.find(p=>p.id===x.project);return(
               <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
                 onClick={e=>{e.stopPropagation();onItemClick(x);}}
-                style={{background:sc+"18",border:`1px solid ${sc}40`,borderRadius:5,padding:"3px 5px",marginBottom:3,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"grab"}}>{x.title}
+                style={{background:sc+"18",border:`1px solid ${sc}40`,borderRadius:5,padding:"4px 6px",marginBottom:3,cursor:"grab"}}>
+                <div style={{fontSize:9,fontWeight:700,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title||"Без названия"}</div>
+                <div style={{display:"flex",gap:3,marginTop:2}}>
+                  <span style={{fontSize:8,color:"#6b7280",fontFamily:"monospace"}}>{x.pub_type==="carousel"?"🖼":"🎬"}</span>
+                  {proj&&<span style={{fontSize:8,color:proj.color,fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
+                </div>
               </div>
             );})}
           </div>;
