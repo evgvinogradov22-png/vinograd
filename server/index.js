@@ -136,6 +136,9 @@ wss.on("connection", (ws) => {
       if (msg.type === "join") {
         clients.set(ws, { userId: msg.userId, taskId: msg.taskId });
       }
+      if (msg.type === "join_user") {
+        clients.set(ws, { userId: msg.userId, taskId: null });
+      }
     } catch {}
   });
   ws.on("close", () => clients.delete(ws));
@@ -144,9 +147,15 @@ wss.on("connection", (ws) => {
 function broadcast(taskId, payload) {
   const data = JSON.stringify(payload);
   for (const [ws, info] of clients) {
-    if (info.taskId === taskId && ws.readyState === 1) {
-      ws.send(data);
-    }
+    if (info.taskId === taskId && ws.readyState === 1) ws.send(data);
+  }
+}
+
+// Send notification to specific user (all their connections)
+function notifyWS(userId, payload) {
+  const data = JSON.stringify({ type: "notification", ...payload });
+  for (const [ws, info] of clients) {
+    if (info.userId === userId && ws.readyState === 1) ws.send(data);
   }
 }
 
@@ -290,6 +299,7 @@ app.post("/api/tasks", async (req, res) => {
         .map(f => taskData[f]).filter(Boolean);
       for (const uid of [...new Set(assignees)]) {
         await notifyUser(uid, `📋 Новая задача назначена на вас:\n<b>${title||"Без названия"}</b>`);
+        notifyWS(uid, { kind: "task_assigned", taskId: newTask.id, taskType: type, title: title||"Без названия", by: req.headers["x-user-id"]||"" });
       }
     }
     res.json(saved);
@@ -391,6 +401,7 @@ app.post("/api/chat/:taskId", async (req, res) => {
 
 "${preview}"${link}`;
               await notifyUser(mentioned.id, txt);
+              notifyWS(mentioned.id, { kind: "chat_message", taskId, title: taskRow.title||"", text: msgText.slice(0,80), by: req.headers["x-user-id"]||"" });
               participants.delete(mentioned.id); // don't double-notify
             }
           }
@@ -403,6 +414,7 @@ app.post("/api/chat/:taskId", async (req, res) => {
 
 ${preview}${link}`;
             await notifyUser(pid, txt);
+            notifyWS(pid, { kind: "chat_message", taskId, title: taskRow.title||"", text: msgText.slice(0,80), by: req.headers["x-user-id"]||"" });
           }
         }
       }
