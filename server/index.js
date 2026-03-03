@@ -356,42 +356,36 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Нет файла" });
     const origName = req.file.originalname;
-    const safeKey  = `vinogradov/${Date.now()}_${origName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    // Keep original filename in key (only replace truly unsafe chars)
+    const safeKey = `vinogradov/${Date.now()}_${origName.replace(/[^\w.\-а-яёА-ЯЁ]/gi, "_")}`;
     await r2.send(new PutObjectCommand({
-      Bucket:             R2_BUCKET,
-      Key:                safeKey,
-      Body:               req.file.buffer,
-      ContentType:        req.file.mimetype,
-      // Tell R2 to serve the file with the original filename
-      ContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(origName)}`,
+      Bucket:      R2_BUCKET,
+      Key:         safeKey,
+      Body:        req.file.buffer,
+      ContentType: req.file.mimetype,
     }));
-    const r2url = `${R2_PUBLIC_URL}/${safeKey}`;
-    // Return both the R2 url and a proxy download url
-    const dlurl = `/api/download?url=${encodeURIComponent(r2url)}&name=${encodeURIComponent(origName)}`;
-    res.json({ url: r2url, dlurl, key: safeKey, name: origName, size: req.file.size });
-  } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка загрузки" }); }
+    const url = `${R2_PUBLIC_URL}/${safeKey}`;
+    res.json({ url, key: safeKey, name: origName, size: req.file.size });
+  } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка загрузки: " + e.message }); }
 });
 
-// Proxy download — streams file from R2 with correct filename
+// Download proxy — serve file from R2 through our server so browser can download it
 app.get("/api/download", async (req, res) => {
-  const { url, name } = req.query;
-  if (!url) return res.status(400).send("url required");
+  const { key, name } = req.query;
+  if (!key) return res.status(400).send("key required");
   try {
-    const r = await fetch(url);
-    if (!r.ok) return res.status(502).send("Файл недоступен");
-    const ct  = r.headers.get("content-type")  || "application/octet-stream";
-    const len = r.headers.get("content-length");
-    const fname = name || "file";
-    res.setHeader("Content-Type", ct);
+    const { GetObjectCommand } = require("@aws-sdk/client-s3");
+    const obj = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    const fname = name || key.split("/").pop() || "file";
+    res.setHeader("Content-Type",        obj.ContentType || "application/octet-stream");
     res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
-    if (len) res.setHeader("Content-Length", len);
-    res.setHeader("Cache-Control", "no-store");
-    // Stream directly — never buffer in memory
+    if (obj.ContentLength) res.setHeader("Content-Length", obj.ContentLength);
+    // Stream body directly to client
     const { Readable } = require("stream");
-    Readable.fromWeb(r.body).pipe(res);
+    Readable.fromWeb(obj.Body.transformToWebStream()).pipe(res);
   } catch(e) {
-    console.error("Download proxy error:", e);
-    if (!res.headersSent) res.status(500).send("Ошибка загрузки файла");
+    console.error("Download error:", e);
+    if (!res.headersSent) res.status(500).send("Ошибка: " + e.message);
   }
 });
 
