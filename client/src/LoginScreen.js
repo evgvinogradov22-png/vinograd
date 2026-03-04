@@ -14,17 +14,26 @@ export default function LoginScreen({ onLogin }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ telegram:"", password:"", name:"", role:"Продюсер", color:"#8b5cf6", invite_password:"" });
   const [err, setErr] = useState("");
+  const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(false);
   const u = (k,v) => setForm(p => ({...p,[k]:v}));
 
   async function submit() {
-    setErr(""); setLoading(true);
+    setErr(""); setOk(""); setLoading(true);
     try {
-      const user = mode === "login"
-        ? await api.login({ telegram: form.telegram, password: form.password })
-        : await api.register(form);
-      localStorage.setItem("vg_user", JSON.stringify(user));
-      onLogin(user);
+      if (mode === "reset") {
+        const r=await fetch("/api/auth/reset-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({telegram:form.telegram,new_password:form.password,invite_password:form.invite_password})});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.error);
+        setOk("Пароль обновлён — войдите с новым паролем");
+        setMode("login");
+      } else {
+        const user = mode === "login"
+          ? await api.login({ telegram: form.telegram, password: form.password })
+          : await api.register(form);
+        localStorage.setItem("vg_user", JSON.stringify(user));
+        onLogin(user);
+      }
     } catch(e) { setErr(e.message); }
     setLoading(false);
   }
@@ -39,8 +48,8 @@ export default function LoginScreen({ onLogin }) {
         </div>
 
         <div style={{display:"flex",marginBottom:20,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:8,padding:3}}>
-          {[["login","Войти"],["register","Регистрация"]].map(([m,l]) => (
-            <button key={m} onClick={() => setMode(m)} style={{flex:1,padding:"7px",borderRadius:6,cursor:"pointer",background:mode===m?"#8b5cf6":"transparent",border:"none",color:mode===m?"#fff":"#6b7280",fontFamily:"inherit",fontSize:12,fontWeight:mode===m?700:400}}>{l}</button>
+          {[["login","Войти"],["register","Регистрация"],["reset","Забыл пароль"]].map(([m,l]) => (
+            <button key={m} onClick={() => { setMode(m); setErr(""); setOk(""); }} style={{flex:1,padding:"7px",borderRadius:6,cursor:"pointer",background:mode===m?"#8b5cf6":"transparent",border:"none",color:mode===m?"#fff":"#6b7280",fontFamily:"inherit",fontSize:11,fontWeight:mode===m?700:400}}>{l}</button>
           ))}
         </div>
 
@@ -65,10 +74,12 @@ export default function LoginScreen({ onLogin }) {
             <input value={form.invite_password} onChange={e=>u("invite_password",e.target.value)} placeholder="Код приглашения" style={SI}/>
           </>}
 
+                    {mode==="reset"&&<input value={form.invite_password} onChange={e=>u("invite_password",e.target.value)} placeholder="Код приглашения" style={SI}/> }
+          {ok&&<div style={{fontSize:11,color:"#10b981",background:"#001a0a",border:"1px solid #10b98130",borderRadius:7,padding:"8px 12px"}}>{ok}</div>}
           {err && <div style={{fontSize:11,color:"#ef4444",background:"#1a0000",border:"1px solid #ef444430",borderRadius:7,padding:"8px 12px"}}>{err}</div>}
 
           <button onClick={submit} disabled={loading} style={{background:"linear-gradient(135deg,#8b5cf6,#ec4899)",border:"none",borderRadius:8,padding:"11px",color:"#fff",cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,marginTop:4}}>
-            {loading ? "⏳ Загрузка..." : mode==="login" ? "Войти" : "Зарегистрироваться"}
+            {loading ? "⏳ Загрузка..." : mode==="login" ? "Войти" : mode==="reset" ? "Сменить пароль" : "Зарегистрироваться"}
           </button>
         </div>
       </div>

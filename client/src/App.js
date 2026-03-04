@@ -1955,6 +1955,13 @@ function useTaskStore(type, stores) {
 }
 
 function MainApp({currentUser, onLogout}){
+  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<=768);
+  useEffect(()=>{
+    const fn=()=>setIsMobile(window.innerWidth<=768);
+    window.addEventListener("resize",fn);
+    return()=>window.removeEventListener("resize",fn);
+  },[]);
+
   const [tab,setTab]=useState("pre");
   const [viewMode,setViewMode]=useState("kanban");
   const [postSubTab,setPostSubTab]=useState("reels");
@@ -2287,6 +2294,16 @@ function MainApp({currentUser, onLogout}){
 
   const cnt={pre:preItems.length,prod:prodItems.length,post:postReels.length+postVideo.length+postCarousels.length,pub:pubItems.length,summary:0,analytics:0,base:0};
 
+  // ── Mobile stores object ─────────────────────────────────────────────────
+  const mobileStores = {
+    preItems,prodItems,postReels,postVideo,postCarousels,pubItems,
+    setProjects,setTeam:setTeamMembers,
+    projects,team:teamMembers,modal,
+    openEdit,openNew,close,save,deleteTask,
+  };
+
+  if(isMobile) return <MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/>;
+
   return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",flexDirection:"column",overflow:"hidden"}}>
     {/* TOP NAV — no filters, no add button */}
     <div style={{borderBottom:"1px solid #1a1a2e",background:"#0d0d16",flexShrink:0,padding:"0 16px"}}>
@@ -2412,4 +2429,462 @@ function MainApp({currentUser, onLogout}){
     {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
     {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
   </div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MOBILE APP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const M = {
+  screen: { position:"absolute", inset:0, display:"flex", flexDirection:"column", background:"#0d0d14", transform:"translateX(100%)", transition:"transform 0.28s cubic-bezier(0.4,0,0.2,1)" },
+  screenActive: { transform:"translateX(0)" },
+  screenPrev: { transform:"translateX(-25%)" },
+  sh: { background:"#0d0d14", padding:"10px 16px 8px", flexShrink:0, borderBottom:"1px solid #111118" },
+  shRow: { display:"flex", alignItems:"center", gap:8 },
+  title: { fontSize:17, fontWeight:800, color:"#f0eee8", flex:1 },
+  sub: { fontSize:10, color:"#4b5563", fontFamily:"monospace", marginTop:2 },
+  back: { width:32, height:32, borderRadius:10, background:"#111118", border:"1px solid #1e1e2e", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:18, color:"#9ca3af", flexShrink:0 },
+  actionBtn: { background:"#8b5cf620", border:"1px solid #8b5cf640", borderRadius:10, padding:"6px 13px", fontSize:11, fontWeight:700, color:"#a78bfa", cursor:"pointer", fontFamily:"inherit", flexShrink:0 },
+  scroll: { flex:1, overflowY:"auto", overflowX:"hidden", WebkitOverflowScrolling:"touch" },
+  pad: { padding:"14px 16px" },
+  card: { background:"#111118", border:"1px solid #1a1a2e", borderRadius:14, padding:"12px 14px", marginBottom:8, cursor:"pointer", position:"relative", overflow:"hidden" },
+  cardTitle: { fontSize:13, fontWeight:700, color:"#f0eee8", marginBottom:7, lineHeight:1.3 },
+  tags: { display:"flex", gap:5, flexWrap:"wrap", marginBottom:7 },
+  tag: { fontSize:9, padding:"2px 8px", borderRadius:8, fontFamily:"monospace", fontWeight:700, background:"#1a1a2e", color:"#6b7280", border:"1px solid #242438" },
+  cfoot: { display:"flex", alignItems:"center", justifyContent:"space-between" },
+  avs: { display:"flex" },
+  av: { width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:800, color:"#fff", border:"2px solid #0d0d14", marginLeft:-5, flexShrink:0 },
+  secH: { display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 },
+  secT: { fontSize:10, fontWeight:800, color:"#4b5563", fontFamily:"monospace", letterSpacing:"0.08em" },
+  chip: { flexShrink:0, padding:"6px 13px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", background:"#111118", border:"1px solid #1e1e2e", color:"#4b5563", fontFamily:"inherit" },
+  chipOn: { background:"#8b5cf615", borderColor:"#8b5cf650", color:"#a78bfa" },
+};
+
+function MTag({children, color}){
+  const colorMap = { grey:{bg:"#6b728012",c:"#6b7280",b:"#6b728025"}, yellow:{bg:"#f59e0b12",c:"#f59e0b",b:"#f59e0b25"}, purple:{bg:"#8b5cf612",c:"#a78bfa",b:"#8b5cf625"}, green:{bg:"#10b98112",c:"#10b981",b:"#10b98125"}, blue:{bg:"#3b82f612",c:"#60a5fa",b:"#3b82f625"}, red:{bg:"#ef444412",c:"#ef4444",b:"#ef444425"} };
+  const col = colorMap[color] || {};
+  return <span style={{...M.tag, background:col.bg, color:col.c, borderColor:col.b}}>{children}</span>;
+}
+
+function MCard({item, type, color, projects, onOpen}){
+  const proj = projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
+  const accentColor = color || proj.color || "#6b7280";
+  const ALL_STATUSES = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
+  const st = ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
+  const stColorKey = st.c==="#10b981"?"green":st.c==="#f59e0b"?"yellow":st.c==="#8b5cf6"?"purple":st.c==="#3b82f6"?"blue":"grey";
+  const typeLabel = type==="pre"?"✍️ Сценарий":type==="prod"?"🎬 Съёмка":type==="post_reels"?"🎞 Рилс":type==="post_video"?"🎬 Видео":type==="post_carousel"?"🖼 Карусель":"🚀 Публикация";
+  const dateStr = item.deadline||item.shoot_date||item.planned_date||item.post_deadline||"";
+  const memberIds = ["producer","editor","scriptwriter","operator","designer","customer","executor"].map(f=>item[f]).filter(Boolean);
+  return (
+    <div style={{...M.card, borderLeft:`3px solid ${accentColor}`}} onClick={()=>onOpen(type,item)}>
+      <div style={M.cardTitle}>{item.title||"Без названия"}</div>
+      <div style={M.tags}>
+        <span style={M.tag}>{proj.label}</span>
+        <MTag color={stColorKey}>{st.l}</MTag>
+        <span style={M.tag}>{typeLabel}</span>
+      </div>
+      <div style={M.cfoot}>
+        <div style={{...M.avs, gap:0}}>
+          {memberIds.slice(0,3).map((uid,i)=>{
+            const m = []; // will get from context
+            return <div key={i} style={{...M.av, background:accentColor, marginLeft:i===0?0:-6}}>{uid[0]?.toUpperCase()||"?"}</div>;
+          })}
+        </div>
+        <span style={{fontSize:9, color:"#374151", fontFamily:"monospace"}}>{dateStr?`📅 ${dateStr}`:"—"}</span>
+      </div>
+    </div>
+  );
+}
+
+function MCardFull({item, type, color, projects, team, onOpen}){
+  const proj = projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
+  const accentColor = color || proj.color || "#6b7280";
+  const ALL_STATUSES = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
+  const st = ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
+  const stColorKey = st.c==="#10b981"?"green":st.c==="#f59e0b"?"yellow":st.c==="#8b5cf6"?"purple":st.c==="#3b82f6"?"blue":"grey";
+  const typeLabel = type==="pre"?"✍️ Сценарий":type==="prod"?"🎬 Съёмка":type==="post_reels"?"🎞 Рилс":type==="post_video"?"🎬 Видео":type==="post_carousel"?"🖼 Карусель":"🚀 Публикация";
+  const dateStr = item.deadline||item.shoot_date||item.planned_date||item.post_deadline||"";
+  const execFields = ["editor","scriptwriter","operator","designer","executor"];
+  const custFields = ["producer","customer"];
+  const execs = execFields.map(f=>team.find(m=>m.id===item[f])).filter(Boolean);
+  const custs = custFields.map(f=>team.find(m=>m.id===item[f])).filter(Boolean);
+  return (
+    <div style={{...M.card, borderLeft:`3px solid ${accentColor}`}} onClick={()=>onOpen(type,item)}>
+      <div style={M.cardTitle}>{item.title||"Без названия"}</div>
+      <div style={M.tags}>
+        <span style={M.tag}>{proj.label}</span>
+        <MTag color={stColorKey}>{st.l}</MTag>
+        <span style={M.tag}>{typeLabel}</span>
+      </div>
+      <div style={M.cfoot}>
+        <div style={{...M.avs, gap:0}}>
+          {[...custs,...execs].slice(0,4).map((m,i)=>(
+            <div key={m.id} style={{...M.av, background:m.color||accentColor, marginLeft:i===0?0:-6}}>{(m.name||"?")[0].toUpperCase()}</div>
+          ))}
+        </div>
+        <span style={{fontSize:9, color:"#374151", fontFamily:"monospace"}}>{dateStr?`📅 ${dateStr}`:"—"}</span>
+      </div>
+    </div>
+  );
+}
+
+function MTasksScreen({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,onOpen,onAdd}){
+  const [filter,setFilter] = useState("all");
+  const sections = [
+    {id:"post_reels", label:"ПОСТПРОДАКШН · РИЛСЫ", color:"#ec4899", items:postReels, show:filter==="all"||filter==="post"},
+    {id:"post_video", label:"ПОСТПРОДАКШН · ВИДЕО", color:"#3b82f6", items:postVideo, show:filter==="all"||filter==="post"},
+    {id:"post_carousel", label:"ПОСТПРОДАКШН · КАРУСЕЛИ", color:"#a78bfa", items:postCarousels, show:filter==="all"||filter==="post"},
+    {id:"pre", label:"ПРЕПРОДАКШН", color:"#8b5cf6", items:preItems, show:filter==="all"||filter==="pre"},
+    {id:"prod", label:"ПРОДАКШН · СЪЁМКИ", color:"#3b82f6", items:prodItems, show:filter==="all"||filter==="prod"},
+    {id:"pub", label:"ПУБЛИКАЦИИ", color:"#10b981", items:pubItems, show:filter==="all"||filter==="pub"},
+  ];
+  const total = [...preItems,...prodItems,...postReels,...postVideo,...postCarousels,...pubItems].filter(x=>!x.archived).length;
+  const chips = [{id:"all",l:"Все"},{id:"post",l:"Постпродакшн"},{id:"pre",l:"Препродакшн"},{id:"prod",l:"Продакшн"},{id:"pub",l:"Публикации"}];
+  return <>
+    <div style={M.sh}>
+      <div style={M.shRow}>
+        <div style={{flex:1}}><div style={M.title}>Задачи</div><div style={M.sub}>{total} активных</div></div>
+        <button style={M.actionBtn} onClick={onAdd}>+ Создать</button>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:6,overflowX:"auto",padding:"10px 16px 0",flexShrink:0,scrollbarWidth:"none"}}>
+      {chips.map(c=><button key={c.id} style={{...M.chip,...(filter===c.id?M.chipOn:{})}} onClick={()=>setFilter(c.id)}>{c.l}</button>)}
+    </div>
+    <div style={{...M.scroll,...M.pad}}>
+      {sections.filter(s=>s.show&&s.items.filter(x=>!x.archived).length>0).map(s=>(
+        <div key={s.id} style={{marginBottom:16}}>
+          <div style={M.secH}><span style={M.secT}>{s.label}</span><span style={{fontSize:10,color:"#374151",fontFamily:"monospace"}}>{s.items.filter(x=>!x.archived).length}</span></div>
+          {s.items.filter(x=>!x.archived).map(item=>(
+            <MCardFull key={item.id} item={item} type={s.id} color={s.color} projects={projects} team={team} onOpen={onOpen}/>
+          ))}
+        </div>
+      ))}
+      {total===0&&<div style={{textAlign:"center",color:"#374151",fontSize:12,padding:"40px 0"}}>Нет активных задач</div>}
+    </div>
+  </>;
+}
+
+function MPubScreen({pubItems,projects,team,onOpen,onAdd}){
+  const [view,setView] = useState("list");
+  const active = pubItems.filter(x=>!x.archived);
+  const byStatus = PUB_STATUSES.map(st=>({...st, items:active.filter(x=>x.status===st.id)}));
+  return <>
+    <div style={M.sh}>
+      <div style={M.shRow}>
+        <div style={{flex:1}}><div style={M.title}>Публикации</div></div>
+        <button style={M.actionBtn} onClick={onAdd}>+ Добавить</button>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:6,padding:"10px 16px 0",flexShrink:0}}>
+      {[{id:"list",l:"Список"},{id:"week",l:"Неделя"}].map(v=>(
+        <button key={v.id} style={{...M.chip,...(view===v.id?M.chipOn:{})}} onClick={()=>setView(v.id)}>{v.l}</button>
+      ))}
+    </div>
+    <div style={{...M.scroll,...M.pad}}>
+      {byStatus.filter(s=>s.items.length>0).map(s=>(
+        <div key={s.id} style={{marginBottom:16}}>
+          <div style={M.secH}><span style={{...M.secT,color:s.c}}>{s.l.toUpperCase()} · {s.items.length}</span></div>
+          {s.items.map(item=>(
+            <div key={item.id} style={{...M.card, borderLeft:`3px solid ${s.c}`}} onClick={()=>onOpen("pub",item)}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+                <div style={{flex:1}}>
+                  <div style={M.cardTitle}>{item.title||"Без названия"}</div>
+                  <div style={M.tags}>
+                    <span style={M.tag}>{projects.find(p=>p.id===item.project)?.label||""}</span>
+                    <MTag color={s.c==="#10b981"?"green":s.c==="#f59e0b"?"yellow":s.c==="#3b82f6"?"blue":"grey"}>{s.l}</MTag>
+                    {item.pub_type&&<span style={M.tag}>{item.pub_type==="video"?"🎬 Видео":item.pub_type==="carousel"?"🖼 Карусель":"📝 Пост"}</span>}
+                  </div>
+                </div>
+                <span style={{color:item.starred?"#f59e0b":"#2d2d44",fontSize:20,cursor:"pointer",lineHeight:1}}>★</span>
+              </div>
+              <div style={M.cfoot}>
+                <span style={{fontSize:9,color:"#374151",fontFamily:"monospace"}}>{item.planned_date||"—"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+      {active.length===0&&<div style={{textAlign:"center",color:"#374151",fontSize:12,padding:"40px 0"}}>Нет публикаций</div>}
+    </div>
+  </>;
+}
+
+function MSummaryScreen({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,currentUser,onOpen}){
+  const [member,setMember] = useState("all");
+  const allItems = [
+    ...preItems.map(x=>({...x,_type:"pre"})),
+    ...prodItems.map(x=>({...x,_type:"prod"})),
+    ...postReels.map(x=>({...x,_type:"post_reels"})),
+    ...postVideo.map(x=>({...x,_type:"post_video"})),
+    ...postCarousels.map(x=>({...x,_type:"post_carousel"})),
+  ].filter(x=>!x.archived);
+  const execFields = ["editor","scriptwriter","operator","designer","executor"];
+  const custFields = ["producer","customer"];
+  const filtered = member==="all" ? allItems : allItems.filter(x=>[...execFields,...custFields].some(f=>x[f]===member));
+  const asExec = filtered.filter(x=>execFields.some(f=>member==="all"?x[f]:x[f]===member));
+  const asCust = filtered.filter(x=>custFields.some(f=>member==="all"?x[f]:x[f]===member));
+  const colorMap = {"#ec4899":"pink","#3b82f6":"blue","#8b5cf6":"purple","#10b981":"green","#f59e0b":"yellow"};
+  const typeColor = {pre:"#8b5cf6",prod:"#3b82f6",post_reels:"#ec4899",post_video:"#3b82f6",post_carousel:"#a78bfa"};
+  return <>
+    <div style={M.sh}>
+      <div style={M.shRow}><div style={M.title}>Сводка</div></div>
+      <div style={{display:"flex",gap:5,overflowX:"auto",marginTop:8,scrollbarWidth:"none",paddingBottom:2}}>
+        <button style={{...M.chip,padding:"4px 10px",fontSize:10,...(member==="all"?M.chipOn:{})}} onClick={()=>setMember("all")}>Все</button>
+        {team.map(m=>(
+          <button key={m.id} style={{...M.chip,padding:"4px 10px",fontSize:10,...(member===m.id?M.chipOn:{})}} onClick={()=>setMember(m.id)}>{m.name?.split(" ")[0]||m.telegram}</button>
+        ))}
+      </div>
+    </div>
+    <div style={{...M.scroll,...M.pad}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div>
+          <div style={{fontSize:9,fontWeight:800,fontFamily:"monospace",color:"#4b5563",marginBottom:8,paddingBottom:6,borderBottom:"1px solid #111118"}}>ИСПОЛНИТЕЛЬ · {asExec.length}</div>
+          {asExec.map(item=>{
+            const proj=projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
+            const c=typeColor[item._type]||"#6b7280";
+            const ALL_STATUSES=[...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES];
+            const st=ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
+            return <div key={item.id} style={{...M.card,padding:"10px 11px",marginBottom:6,borderLeft:`3px solid ${c}`}} onClick={()=>onOpen(item._type,item)}>
+              <div style={{fontSize:11,fontWeight:700,marginBottom:5,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+              <div style={{display:"flex",gap:4,marginBottom:4,flexWrap:"wrap"}}>
+                <span style={{...M.tag,fontSize:8}}>{proj.label}</span>
+                <span style={{...M.tag,fontSize:8,background:st.c+"12",color:st.c,borderColor:st.c+"25"}}>{st.l}</span>
+              </div>
+            </div>;
+          })}
+          {asExec.length===0&&<div style={{fontSize:11,color:"#374151",padding:"8px 0"}}>Нет задач</div>}
+        </div>
+        <div>
+          <div style={{fontSize:9,fontWeight:800,fontFamily:"monospace",color:"#4b5563",marginBottom:8,paddingBottom:6,borderBottom:"1px solid #111118"}}>ЗАКАЗЧИК · {asCust.length}</div>
+          {asCust.map(item=>{
+            const proj=projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
+            const c=typeColor[item._type]||"#6b7280";
+            const ALL_STATUSES=[...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES];
+            const st=ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
+            return <div key={item.id} style={{...M.card,padding:"10px 11px",marginBottom:6,borderLeft:`3px solid ${c}`}} onClick={()=>onOpen(item._type,item)}>
+              <div style={{fontSize:11,fontWeight:700,marginBottom:5,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+              <div style={{display:"flex",gap:4,marginBottom:4,flexWrap:"wrap"}}>
+                <span style={{...M.tag,fontSize:8}}>{proj.label}</span>
+                <span style={{...M.tag,fontSize:8,background:st.c+"12",color:st.c,borderColor:st.c+"25"}}>{st.l}</span>
+              </div>
+            </div>;
+          })}
+          {asCust.length===0&&<div style={{fontSize:11,color:"#374151",padding:"8px 0"}}>Нет задач</div>}
+        </div>
+      </div>
+    </div>
+  </>;
+}
+
+function MAnalyticsScreen({pubItems,projects}){
+  const [month,setMonth]=useState(()=>new Date().getMonth());
+  const [year,setYear]=useState(()=>new Date().getFullYear());
+  const pubInMonth = pubItems.filter(x=>{
+    const d=x.planned_date||""; if(!d) return false;
+    const dt=new Date(d); return dt.getMonth()===month&&dt.getFullYear()===year;
+  });
+  const starred = pubItems.filter(x=>x.starred&&!x.archived);
+  return <>
+    <div style={M.sh}>
+      <div style={M.shRow}>
+        <div style={{flex:1}}><div style={M.title}>Аналитика</div></div>
+        <select style={{background:"#111118",border:"1px solid #1e1e2e",color:"#f0eee8",padding:"5px 8px",borderRadius:8,fontSize:11,fontFamily:"inherit",outline:"none"}} value={month} onChange={e=>setMonth(Number(e.target.value))}>
+          {MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
+        </select>
+      </div>
+    </div>
+    <div style={{...M.scroll,...M.pad}}>
+      <div style={{...M.secH,marginBottom:10}}><span style={M.secT}>ПУБЛИКАЦИИ ПО ПРОЕКТАМ</span></div>
+      <div style={{background:"#111118",border:"1px solid #1a1a2e",borderRadius:14,overflow:"hidden",marginBottom:16}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead><tr style={{background:"#0a0a0f"}}>
+            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 10px",textAlign:"left",borderBottom:"1px solid #1a1a2e"}}>ПРОЕКТ</th>
+            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #1a1a2e"}}>🎬</th>
+            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #1a1a2e"}}>🖼</th>
+            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #1a1a2e"}}>Всего</th>
+          </tr></thead>
+          <tbody>
+            {projects.filter(p=>!p.archived).map(proj=>{
+              const pp=pubInMonth.filter(x=>x.project===proj.id);
+              const vids=pp.filter(x=>x.pub_type==="video").length;
+              const cars=pp.filter(x=>x.pub_type==="carousel").length;
+              const total=pp.length;
+              return <tr key={proj.id} style={{borderBottom:"1px solid #111118"}}>
+                <td style={{padding:"8px 10px",color:"#d1d5db",fontSize:11}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:proj.color,marginRight:6}}></span>{proj.label}</td>
+                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"monospace",color:vids?"#f0eee8":"#2d2d44"}}>{vids}</td>
+                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"monospace",color:cars?"#f0eee8":"#2d2d44"}}>{cars}</td>
+                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"monospace",color:total?"#f0eee8":"#2d2d44"}}>{total}</td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
+      {starred.length>0&&<>
+        <div style={{...M.secH,marginBottom:10}}><span style={M.secT}>★ ЗАЛЁТНЫЕ РИЛСЫ · {starred.length}</span></div>
+        {starred.map(item=>(
+          <div key={item.id} style={{...M.card,borderLeft:"3px solid #10b981"}}>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <span style={{color:"#f59e0b",fontSize:18}}>★</span>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+                <div style={{display:"flex",gap:5,marginTop:4}}>
+                  <span style={M.tag}>{projects.find(p=>p.id===item.project)?.label||""}</span>
+                  <span style={M.tag}>{item.planned_date||""}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </>}
+    </div>
+  </>;
+}
+
+function MBaseScreen({projects,setProjects,teamMembers,setTeamMembers,currentUser}){
+  const [sub,setSub]=useState("projects");
+  const isDirector=currentUser?.role==="Директор";
+  return <>
+    <div style={M.sh}>
+      <div style={M.shRow}><div style={M.title}>База</div></div>
+      <div style={{display:"flex",gap:5,marginTop:8}}>
+        {[{id:"projects",l:"📁 Проекты"},{id:"team",l:"👥 Команда"},{id:"training",l:"📚 Обучение"}].map(t=>(
+          <button key={t.id} style={{...M.chip,padding:"5px 12px",fontSize:11,...(sub===t.id?M.chipOn:{})}} onClick={()=>setSub(t.id)}>{t.l}</button>
+        ))}
+      </div>
+    </div>
+    <div style={{...M.scroll,...M.pad}}>
+      {sub==="projects"&&projects.filter(p=>!p.archived).map(proj=>(
+        <div key={proj.id} style={{background:"#111118",border:"1px solid #1a1a2e",borderRadius:14,padding:14,marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{width:36,height:36,borderRadius:10,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:900,color:"#fff",flexShrink:0}}>{(proj.label||"?")[0]}</div>
+            <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"#f0eee8"}}>{proj.label}</div></div>
+          </div>
+          <div style={{fontSize:11,color:"#4b5563",lineHeight:1.4}}>{proj.description||"Нет описания"}</div>
+        </div>
+      ))}
+      {sub==="team"&&teamMembers.map(m=>(
+        <div key={m.id} style={{background:"#111118",border:"1px solid #1a1a2e",borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:44,height:44,borderRadius:14,background:`linear-gradient(135deg,${m.color||"#6b7280"},${m.color||"#6b7280"}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,color:"#fff",flexShrink:0}}>{(m.name||"?")[0].toUpperCase()}</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#f0eee8"}}>{m.name}</div>
+            <div style={{fontSize:10,color:"#4b5563",fontFamily:"monospace",marginTop:2}}>{m.role}</div>
+            {m.telegram&&<div style={{fontSize:10,color:"#3b82f6",marginTop:2}}>@{m.telegram}</div>}
+          </div>
+        </div>
+      ))}
+      {sub==="training"&&<TrainingView/>}
+    </div>
+  </>;
+}
+
+function MobileApp({currentUser,onLogout,stores}){
+  const {preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,modal,openEdit,openNew,close,save,deleteTask} = stores;
+  const [tab,setTab]=useState("tasks");
+  const [notifOpen,setNotifOpen]=useState(false);
+  const [notifs,setNotifs]=useState([]);
+  const saveFnRef=useRef(null);
+
+  useEffect(()=>{
+    let cancelled=false;
+    function poll(){
+      if(cancelled) return;
+      fetch("/api/notifications",{headers:{"x-user-id":currentUser.id}})
+        .then(r=>r.ok?r.json():[]).then(data=>{if(!cancelled)setNotifs(data);}).catch(()=>{});
+    }
+    poll(); const iv=setInterval(poll,15000); return()=>{cancelled=true;clearInterval(iv);};
+  },[currentUser.id]);
+
+  const unread=notifs.filter(n=>!n.read).length;
+  const total=[...preItems,...prodItems,...postReels,...postVideo,...postCarousels,...pubItems].filter(x=>!x.archived).length;
+
+  const tabs=[
+    {id:"tasks",icon:"📋",label:"Задачи",badge:total>0?total:null},
+    {id:"pub",icon:"🚀",label:"Публикации"},
+    {id:"summary",icon:"📊",label:"Сводка"},
+    {id:"analytics",icon:"📈",label:"Аналитика"},
+    {id:"base",icon:"🗂",label:"База"},
+  ];
+
+  function handleOpen(type,item){ openEdit(type,item); }
+  function handleAdd(){ openNew("post_reels"); }
+
+  return (
+    <div style={{height:"100vh",background:"#0d0d14",color:"#f0eee8",display:"flex",flexDirection:"column",fontFamily:"'Syne','Inter',sans-serif",overflow:"hidden",position:"relative"}}>
+
+      {/* TOP BAR */}
+      <div style={{background:"#0d0d14",borderBottom:"1px solid #111118",padding:"10px 16px 8px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🍇</div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:15,fontWeight:800}}>Виноград</div>
+          <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>@{currentUser.telegram}</div>
+        </div>
+        <div style={{position:"relative"}}>
+          <button onClick={()=>setNotifOpen(p=>!p)} style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,position:"relative"}}>
+            🔔
+            {unread>0&&<span style={{position:"absolute",top:3,right:3,width:8,height:8,borderRadius:"50%",background:"#ef4444",border:"2px solid #0d0d14"}}/>}
+          </button>
+        </div>
+        <button onClick={onLogout} style={{background:"transparent",border:"1px solid #1e1e2e",borderRadius:8,padding:"5px 10px",color:"#4b5563",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>Выйти</button>
+      </div>
+
+      {/* SCREENS */}
+      <div style={{flex:1,overflow:"hidden",position:"relative"}}>
+        {tab==="tasks"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
+          <MTasksScreen preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={team} onOpen={handleOpen} onAdd={handleAdd}/>
+        </div>}
+        {tab==="pub"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
+          <MPubScreen pubItems={pubItems} projects={projects} team={team} onOpen={handleOpen} onAdd={()=>openNew("pub")}/>
+        </div>}
+        {tab==="summary"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
+          <MSummaryScreen preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={team} currentUser={currentUser} onOpen={handleOpen}/>
+        </div>}
+        {tab==="analytics"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
+          <MAnalyticsScreen pubItems={pubItems} projects={projects}/>
+        </div>}
+        {tab==="base"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
+          <MBaseScreen projects={projects} setProjects={stores.setProjects} teamMembers={team} setTeamMembers={stores.setTeam} currentUser={currentUser}/>
+        </div>}
+      </div>
+
+      {/* BOTTOM NAV */}
+      <div style={{height:76,background:"#0d0d14",borderTop:"1px solid #111118",display:"flex",alignItems:"flex-start",paddingTop:10,flexShrink:0}}>
+        {tabs.map(t=>(
+          <div key={t.id} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",padding:"2px 0"}} onClick={()=>setTab(t.id)}>
+            <div style={{position:"relative"}}>
+              <span style={{fontSize:22,lineHeight:1}}>{t.icon}</span>
+              {t.badge&&<span style={{position:"absolute",top:-3,right:-9,background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 4px",borderRadius:8,fontFamily:"monospace"}}>{t.badge}</span>}
+            </div>
+            <span style={{fontSize:9,fontFamily:"monospace",fontWeight:700,color:tab===t.id?"#8b5cf6":"#374151"}}>{t.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* NOTIF OVERLAY */}
+      {notifOpen&&<>
+        <div onClick={()=>setNotifOpen(false)} style={{position:"absolute",inset:0,background:"#00000080",zIndex:30}}/>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"#111118",borderRadius:"22px 22px 0 0",borderTop:"1px solid #1e1e2e",padding:"14px 16px",zIndex:31,maxHeight:"60%",overflowY:"auto"}}>
+          <div style={{width:36,height:4,background:"#2d2d44",borderRadius:2,margin:"0 auto 14px"}}/>
+          <div style={{fontSize:15,fontWeight:800,marginBottom:12}}>🔔 Уведомления</div>
+          {notifs.length===0&&<div style={{color:"#4b5563",fontSize:12,textAlign:"center",padding:"20px 0"}}>Нет уведомлений</div>}
+          {notifs.map(n=>(
+            <div key={n.id} style={{display:"flex",gap:10,padding:"10px 0",borderBottom:"1px solid #1a1a2e",alignItems:"flex-start"}}>
+              <div style={{width:7,height:7,borderRadius:"50%",background:n.read?"#374151":"#8b5cf6",marginTop:4,flexShrink:0}}/>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:"#f0eee8"}}>{n.title}</div>
+                {n.text&&<div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{n.text}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </>}
+
+      {/* MODALS — same as desktop */}
+      {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)}           onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)}          onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)}    onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)}    onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={team} currentUser={currentUser}/></Modal>}
+      {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)}           onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={team} currentUser={currentUser}/></Modal>}
+    </div>
+  );
 }
