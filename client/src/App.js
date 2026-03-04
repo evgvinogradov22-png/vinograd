@@ -1906,16 +1906,20 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 
 class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
-  componentDidCatch(e, info) { console.error("[ErrorBoundary]", e, info); }
+  componentDidCatch(e, info) { console.error("[ErrorBoundary]", e, info); this.setState({info}); }
   render() {
     if (this.state.error) {
+      const msg = this.state.error?.message || "Неизвестная ошибка";
+      const stack = this.state.info?.componentStack || "";
       return (
-        <div style={{padding:40,color:"#ef4444",fontFamily:"monospace"}}>
-          <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>⚠️ Ошибка компонента</div>
-          <div style={{fontSize:12,color:"#9ca3af",marginBottom:12}}>{this.state.error?.message}</div>
-          <button onClick={()=>this.setState({error:null})} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:6,padding:"6px 14px",color:"#f0eee8",cursor:"pointer",fontFamily:"inherit"}}>↩ Назад</button>
+        <div style={{padding:24,color:"#f0eee8",fontFamily:"monospace",background:"#0d0d14",minHeight:"100vh",display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{fontSize:20}}>⚠️</div>
+          <div style={{fontSize:14,fontWeight:700,color:"#ef4444"}}>Ошибка приложения</div>
+          <div style={{fontSize:11,color:"#9ca3af",background:"#111118",padding:12,borderRadius:8,wordBreak:"break-all"}}>{msg}</div>
+          <button onClick={()=>{ localStorage.removeItem("vg_user"); window.location.reload(); }} style={{background:"#ef444420",border:"1px solid #ef444440",borderRadius:8,padding:"10px 16px",color:"#ef4444",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>🔄 Выйти и перезайти</button>
+          <button onClick={()=>window.location.reload()} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:8,padding:"10px 16px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>↩ Перезагрузить</button>
         </div>
       );
     }
@@ -1923,8 +1927,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-export default function App(){
-  // ── Auth ──────────────────────────────────────────────────────────────────
+function AppInner(){
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem("vg_user") || "null"); } catch { return null; }
   });
@@ -1939,6 +1942,10 @@ export default function App(){
   }
 
   return <MainApp currentUser={currentUser} onLogout={handleLogout}/>;
+}
+
+export default function App(){
+  return <ErrorBoundary><AppInner/></ErrorBoundary>;
 }
 
 // ── Centralized store lookup ──────────────────────────────────────────────────
@@ -2302,7 +2309,7 @@ function MainApp({currentUser, onLogout}){
     openEdit,openNew,close,save,deleteTask,
   };
 
-  if(isMobile) return <MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/>;
+  if(isMobile) return <ErrorBoundary key="mobile"><MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/></ErrorBoundary>;
 
   return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",flexDirection:"column",overflow:"hidden"}}>
     {/* TOP NAV — no filters, no add button */}
