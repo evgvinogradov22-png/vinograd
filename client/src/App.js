@@ -552,8 +552,9 @@ function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,sho
 // ── Forms ─────────────────────────────────────────────────────────────────────
 function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,refs:item.refs||[]}); const [ai,setAi]=useState(false); const [newRef,setNewRef]=useState("");
-  const u=(k,v)=>setD(p=>({...p,[k]:v}));
-  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
+  const _dRef1=useRef(d);
+  const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; _dRef1.current=next; return next; });
+  useEffect(()=>{ _dRef1.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(_dRef1.current); },[d]);
   async function genScript(){
     setAi(true);
     try{
@@ -608,8 +609,9 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
 
 function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,checklist:[...(item.checklist||[])],equipment:[...(item.equipment||[])],actors:[...(item.actors||[])]}); const [ne,setNe]=useState(""); const [na,setNa]=useState(""); const [nc,setNc]=useState("");
-  const u=(k,v)=>setD(p=>({...p,[k]:v}));
-  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
+  const _dRef2=useRef(d);
+  const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; _dRef2.current=next; return next; });
+  useEffect(()=>{ _dRef2.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(_dRef2.current); },[d]);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
@@ -797,8 +799,9 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
   const [d,setD]=useState({...item,sources:item.sources||[]}); const [tr,setTr]=useState(false); const [gb,setGb]=useState(false);
   const [err,setErr]=useState("");
   const fileRef=useRef(null);
-  const u=(k,v)=>setD(p=>({...p,[k]:v}));
-  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
+  const dRef=useRef(d);
+  const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; dRef.current=next; return next; });
+  useEffect(()=>{ dRef.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(dRef.current); },[d]);
   async function transcribe(){
     const firstSrc=(d.sources&&d.sources[0])||null;
     const srcUrl=firstSrc?.url||d.source_url||"";
@@ -871,8 +874,10 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
 
 function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,source_links:item.source_links||[]}); const [nl,setNl]=useState("");
-  const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
-  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
+  const fileRef=useRef(null);
+  const dRefPV=useRef(d);
+  const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; dRefPV.current=next; return next; });
+  useEffect(()=>{ dRefPV.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(dRefPV.current); },[d]);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
@@ -937,8 +942,9 @@ function SlideImageUpload({slide,idx,onUploaded}){
 
 function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item,slides:[...(item.slides||[{id:genId(),text:"",img:"",img_name:""}])]}); const [newSlide,setNewSlide]=useState("");
-  const u=(k,v)=>setD(p=>({...p,[k]:v}));
-  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
+  const _dRef3=useRef(d);
+  const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; _dRef3.current=next; return next; });
+  useEffect(()=>{ _dRef3.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(_dRef3.current); },[d]);
   const fileRef=useRef(null);
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -1148,8 +1154,10 @@ function PmpPublishPanel({d, u, projects}){
 
 function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
-  const fileRef=useRef(null); const u=(k,v)=>setD(p=>({...p,[k]:v}));
-  useEffect(()=>{ if(saveFnRef) saveFnRef.current=()=>onSave(d); },[d]);
+  const fileRef=useRef(null);
+  const dRefPV=useRef(d);
+  const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; dRefPV.current=next; return next; });
+  useEffect(()=>{ dRefPV.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(dRefPV.current); },[d]);
   async function genCap(){
     setAiCap(true);
     try{
