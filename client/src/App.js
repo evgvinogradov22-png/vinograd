@@ -988,170 +988,6 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
 }
 
 // ── PmpPublishPanel ─────────────────────────────────────────────────────────){
-  const [open,        setOpen]        = useState(false);
-  const [pmpProjects, setPmpProjects] = useState([]); // [{id,name}]
-  const [channels,    setChannels]    = useState([]); // [{id,name,platform}]
-  const [selChannels, setSelChannels] = useState([]); // selected channel ids
-  const [loading,     setLoading]     = useState(false);
-  const [status,      setStatus]      = useState(""); // status message
-  const [error,       setError]       = useState("");
-
-  // Find PMP project id from current Виноград project
-  const vinProj = projects.find(p => p.id === d.project);
-  const pmpProjId = d.pmp_project_id || vinProj?.pmp_project_id || "";
-
-  // Load PMP projects on first open
-  async function loadProjects(){
-    setLoading(true); setError("");
-    try {
-      const r = await fetch("/api/pmp/projects");
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Ошибка");
-      const list = data?.data || data?.items || data || [];
-      setPmpProjects(Array.isArray(list) ? list : []);
-    } catch(e) { setError(e.message); }
-    setLoading(false);
-  }
-
-  // Load channels for selected PMP project
-  async function loadChannels(pid){
-    if (!pid) return;
-    setLoading(true); setError("");
-    try {
-      const r = await fetch("/api/pmp/channels?project_id=" + pid);
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Ошибка");
-      const list = data?.data || data?.items || data || [];
-      setChannels(Array.isArray(list) ? list : []);
-    } catch(e) { setError(e.message); }
-    setLoading(false);
-  }
-
-  // Toggle channel selection
-  function toggleCh(id){
-    setSelChannels(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
-  }
-
-  // Full publish flow: upload file → create publication
-  async function publish(){
-    const pid = pmpProjId || d.pmp_project_id;
-    if (!pid) { setError("Укажи PMP Project ID в настройках проекта или в поле ниже"); return; }
-    if (!selChannels.length) { setError("Выбери хотя бы один канал"); return; }
-    setLoading(true); setError(""); setStatus("");
-
-    try {
-      let file_ids = [];
-
-      // Step 1: Upload file if we have one
-      const fileUrl = d.file_url || d.final_file_url || "";
-      if (fileUrl) {
-        setStatus("📤 Загружаю файл в Post My Post...");
-        const upR = await fetch("/api/pmp/upload", {
-          method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ file_url: fileUrl, file_name: d.file_name||d.final_file_name||"media", pmp_project_id: pid }),
-        });
-        const upData = await upR.json();
-        if (!upR.ok) throw new Error("Upload: " + upData.error);
-        file_ids = [upData.file_id];
-        setStatus("✅ Файл загружен (ID: " + upData.file_id + ")");
-      }
-
-      // Step 2: Create publication
-      setStatus("🚀 Создаю публикацию...");
-      const pubR = await fetch("/api/pmp/publish", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({
-          pmp_project_id: Number(pid),
-          channel_ids: selChannels,
-          post_at: d.planned_date ? new Date(d.planned_date).toISOString() : null,
-          text: d.caption || d.title || "",
-          hashtags: d.hashtags || "",
-          file_ids,
-          pub_type: d.pub_type || "video",
-        }),
-      });
-      const pubData = await pubR.json();
-      if (!pubR.ok) throw new Error("Publish: " + pubData.error);
-
-      setStatus("✅ Опубликовано! ID: " + (pubData.publication_id || "?"));
-      u("pmp_published", true);
-      u("pmp_publication_id", pubData.publication_id);
-    } catch(e) {
-      setError(e.message);
-      setStatus("");
-    }
-    setLoading(false);
-  }
-
-  const PLATFORM_ICONS = { instagram:"📸", tiktok:"🎵", facebook:"📘", vk:"💙", youtube:"▶️", telegram:"✈️", twitter:"🐦", linkedin:"💼" };
-
-  return (
-    <div style={{background:"#0a0f1a",border:"1px solid #1e3a5f",borderRadius:10,overflow:"hidden"}}>
-      <button onClick={()=>{ setOpen(p=>!p); if(!open&&!pmpProjects.length) loadProjects(); }}
-        style={{width:"100%",background:"transparent",border:"none",padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",color:"#f0eee8"}}>
-        <span style={{fontSize:13}}>📡</span>
-        <span style={{fontSize:11,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
-        {d.pmp_published && <span style={{fontSize:9,background:"#10b98120",color:"#10b981",border:"1px solid #10b98140",borderRadius:10,padding:"1px 8px"}}>✅ опубликовано</span>}
-        <span style={{marginLeft:"auto",color:"#4b5563",fontSize:12}}>{open?"▲":"▼"}</span>
-      </button>
-
-      {open && <div style={{padding:"12px 14px",borderTop:"1px solid #1e3a5f",display:"flex",flexDirection:"column",gap:10}}>
-
-        {/* PMP Project ID override */}
-        <Field label="PMP PROJECT ID (из URL проекта в postmypost.io)">
-          <input value={pmpProjId} onChange={e=>u("pmp_project_id",e.target.value)}
-            onBlur={e=>{ if(e.target.value) loadChannels(e.target.value); }}
-            placeholder={pmpProjId||"123456"} style={{...SI,fontFamily:"monospace"}}/>
-        </Field>
-
-        {/* PMP Projects dropdown (optional — auto-fill project id) */}
-        {pmpProjects.length>0 && <Field label="ИЛИ ВЫБЕРИ ПРОЕКТ ИЗ СПИСКА">
-          <select onChange={e=>{ u("pmp_project_id",e.target.value); loadChannels(e.target.value); }} style={SI} value={pmpProjId||""}>
-            <option value="">— выбрать —</option>
-            {pmpProjects.map(p=><option key={p.id} value={p.id}>{p.name||p.title||p.id}</option>)}
-          </select>
-        </Field>}
-
-        {/* Channel selector */}
-        {channels.length>0 && <div>
-          <span style={LB}>КАНАЛЫ (куда публиковать)</span>
-          <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:4}}>
-            {channels.map(ch=>{
-              const icon = PLATFORM_ICONS[ch.platform?.toLowerCase()] || "📲";
-              const sel = selChannels.includes(ch.id);
-              return <div key={ch.id} onClick={()=>toggleCh(ch.id)}
-                style={{display:"flex",alignItems:"center",gap:8,background:sel?"#1e3a5f":"#111118",border:`1px solid ${sel?"#38bdf8":"#2d2d44"}`,borderRadius:7,padding:"7px 10px",cursor:"pointer"}}>
-                <span>{icon}</span>
-                <span style={{fontSize:11,color:sel?"#38bdf8":"#9ca3af",flex:1}}>{ch.name||ch.username||ch.id}</span>
-                <span style={{fontSize:9,color:"#6b7280",fontFamily:"monospace"}}>{ch.platform}</span>
-                <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?"#38bdf8":"#4b5563"}`,background:sel?"#38bdf8":"transparent",flexShrink:0}}/>
-              </div>;
-            })}
-          </div>
-        </div>}
-
-        {!channels.length && pmpProjId && !loading && (
-          <button onClick={()=>loadChannels(pmpProjId)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:7,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>
-            🔄 Загрузить каналы
-          </button>
-        )}
-
-        {/* Status / Error */}
-        {loading && <div style={{fontSize:11,color:"#38bdf8",fontFamily:"monospace"}}>⏳ {status||"Загрузка..."}</div>}
-        {!loading && status && <div style={{fontSize:11,color:"#10b981",fontFamily:"monospace"}}>{status}</div>}
-        {error && <div style={{fontSize:11,color:"#ef4444",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,padding:"6px 10px"}}>{error}</div>}
-
-        {/* Publish button */}
-        <button onClick={publish} disabled={loading||!selChannels.length}
-          style={{background:loading||!selChannels.length?"#1a1a2e":"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:8,padding:"10px",color:loading||!selChannels.length?"#4b5563":"#fff",cursor:loading||!selChannels.length?"not-allowed":"pointer",fontSize:12,fontWeight:700}}>
-          {loading?"⏳ Публикую...":"🚀 Опубликовать в Post My Post"}
-        </button>
-      </div>}
-    </div>
-  );
-}
 
 function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
@@ -1797,7 +1633,6 @@ function TrainingView(){
 // ── Projects View ─────────────────────────────────────────────────────────────
 function ProjectsView({projects,setProjects}){
   const [showArchive,setShowArchive]=useState(false);
-  const [pmpProjects,setPmpProjects]=useState([]);
   const [pmpLoading,setPmpLoading]=useState(false);
   // Load PMP projects ONCE for all cards
   useEffect(()=>{
@@ -1852,14 +1687,14 @@ function ProjectsView({projects,setProjects}){
     {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#9ca3af"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
       {visible.map(proj=>(
-        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects} pmpProjects={pmpProjects} pmpLoading={pmpLoading}/>
+        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects} pmpLoading={pmpLoading}/>
       ))}
     </div>
   </div>;
 }
 
 
-function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading=false}){
+function ProjectCard({proj, showArchive, setProjects}){
   const [nl,setNl]=useState("");
   const loadingPmp=pmpLoading;
   const pmpErr="";
@@ -1878,35 +1713,7 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
           </div>
           <textarea value={proj.description} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,description:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{description:e.target.value}).catch(()=>{})} placeholder="Описание проекта..." style={{...SI,minHeight:60,resize:"vertical",lineHeight:1.5,marginBottom:8,fontSize:11}}/>
 
-          {/* ── Post My Post linking ── */}
-          <div style={{background:"#0a0f1a",border:"1px solid #1e3a5f",borderRadius:8,padding:"9px 11px",marginBottom:8}}>
-            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
-              <span style={{fontSize:11}}>📡</span>
-              <span style={{fontSize:10,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
-              {proj.pmp_project_id&&<span style={{fontSize:9,background:"#10b98115",color:"#10b981",border:"1px solid #10b98130",borderRadius:10,padding:"1px 7px",fontFamily:"monospace"}}>✅ привязан</span>}
-            </div>
-            {loadingPmp
-              ? <div style={{fontSize:10,color:"#6b7280"}}>⏳ Загружаю проекты PMP...</div>
-              : pmpErr
-                ? <div style={{fontSize:10,color:"#6b7280"}}>{pmpErr}</div>
-                : pmpProjects.length>0
-                  ? <select value={proj.pmp_project_id||""} onChange={e=>savePmpId(e.target.value)} style={{...SI,fontSize:11}}>
-                      <option value="">— не привязан —</option>
-                      {pmpProjects.map(p=><option key={p.id} value={p.id}>{p.name||p.title||("Проект "+p.id)}</option>)}
-                    </select>
-                  : <div style={{fontSize:10,color:"#4b5563"}}>Нет проектов (проверь POSTMYPOST_TOKEN)</div>
-            }
-          </div>
-
-          <span style={LB}>ДОКУМЕНТЫ И ССЫЛКИ</span>
-          {proj.links.filter(l=>l).map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
-            <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
-            <button onClick={()=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:x.links.filter((_,j)=>j!==i)}:x))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:11}}>×</button>
-          </div>)}
-          <div style={{display:"flex",gap:5,marginTop:4}}>
-            <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1,fontSize:11,padding:"5px 8px"}} onKeyDown={e=>{if(e.key==="Enter"&&nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}}/>
-            <button onClick={()=>{if(nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:6,padding:"0 10px",color:"#a78bfa",cursor:"pointer",fontSize:15}}>+</button>
-          </div>
+          
         </div>;
 }
 
