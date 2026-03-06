@@ -1214,6 +1214,66 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
   </div>;
 }
 
+// ── AdminForm ────────────────────────────────────────────────────────────────
+function AdminForm({item, onSave, onDelete, onClose, projects, team, currentUser, saveFnRef}) {
+  const [d, setD] = useState({status:"new", priority:"normal", ...item});
+  const u = (k,v) => setD(p => ({...p, [k]:v}));
+  useEffect(() => { if(saveFnRef) saveFnRef.current = () => onSave(d); }, [d]);
+  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
+    <div style={{display:"flex",gap:10}}>
+      <div style={{flex:1}}>
+        <label style={LB}>НАЗВАНИЕ</label>
+        <input value={d.title||""} onChange={e=>u("title",e.target.value)} style={SI} placeholder="Название задачи"/>
+      </div>
+      <div style={{width:160}}>
+        <label style={LB}>ПРОЕКТ</label>
+        <select value={d.project||""} onChange={e=>u("project",e.target.value)} style={SI}>
+          <option value="">— без проекта —</option>
+          {projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+      </div>
+    </div>
+    <StatusRow statuses={ADMIN_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
+    <div style={{display:"flex",gap:10}}>
+      <div style={{flex:1}}>
+        <label style={LB}>ДЕДЛАЙН</label>
+        <input type="date" value={d.deadline||""} onChange={e=>u("deadline",e.target.value)} style={SI}/>
+      </div>
+      <div style={{flex:1}}>
+        <label style={LB}>ПРИОРИТЕТ</label>
+        <select value={d.priority||"normal"} onChange={e=>u("priority",e.target.value)} style={SI}>
+          <option value="low">Низкий</option>
+          <option value="normal">Обычный</option>
+          <option value="high">Высокий</option>
+          <option value="urgent">Срочно</option>
+        </select>
+      </div>
+    </div>
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div>
+          <div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div>
+          <TeamSelect label="" value={d.customer||""} onChange={v=>u("customer",v)} team={team}/>
+        </div>
+        <div>
+          <div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div>
+          <TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/>
+        </div>
+      </div>
+    </div>
+    <div>
+      <label style={LB}>ТЗ / ОПИСАНИЕ</label>
+      <textarea value={d.description||""} onChange={e=>u("description",e.target.value)}
+        placeholder="Подробное описание задачи..."
+        style={{...SI, minHeight:90, resize:"vertical", lineHeight:1.5}}/>
+    </div>
+    {item?.id && <MiniChat taskId={item.id} team={team} currentUser={currentUser}/>}
+    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item?.id ? ()=>onDelete(item.id) : undefined}/>
+  </div>;
+}
+
+
 // ── Summary View ──────────────────────────────────────────────────────────────
 // ── Unread @mentions ─────────────────────────────────────────────────────────
 function UnreadMentions({allChats,projects,team,me,onOpenTask}){
@@ -1265,7 +1325,7 @@ function UnreadMentions({allChats,projects,team,me,onOpenTask}){
   );
 }
 
-function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,currentUser,onOpenTask}){
+function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,adminItems=[],projects,team,currentUser,onOpenTask}){
   const ME = currentUser?.id || "";
   const [memberFilter, setMemberFilter] = useState("all");
 
@@ -2477,7 +2537,7 @@ function MainApp({currentUser, onLogout}){
         <FilterBar pf={adminFilt.pf} setPf={v=>setAdminFilt(p=>({...p,pf:v}))} member={adminFilt.member} setMember={v=>setAdminFilt(p=>({...p,member:v}))} sortBy={adminFilt.sortBy} setSortBy={v=>setAdminFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Задачу" onAdd={()=>openNew("admin")} showArchived={showArchivedAdmin} onArchiveToggle={()=>setShowArchivedAdmin(p=>!p)}/>
         <Kanban statuses={ADMIN_STATUSES} items={filtAdmin} renderCard={x=>mkCard(x,"admin")} onDrop={(id,st)=>drop("admin",id,st)} onAddClick={st=>openNew("admin",{status:st})}/>
       </>}
-            {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
+            {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects}/>}
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
