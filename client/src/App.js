@@ -1016,7 +1016,7 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
   </div>;
 }
 
-// ── PmpPublishPanel ─────────────────────────────────────────────────────────){
+// ── PubForm ──────────────────────────────────────────────────────────────────
 
 function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
@@ -2848,6 +2848,3 @@ function MobileApp({currentUser,onLogout,stores}){
     </div>
   );
 }
-
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
