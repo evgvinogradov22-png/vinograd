@@ -370,13 +370,13 @@ function Kanban({statuses,items,renderCard,onDrop,onAddClick}){
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"0 2px"}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:st.c}}/>
             <span style={{fontSize:10,fontWeight:700,color:st.c,fontFamily:"monospace"}}>{st.l}</span>
-            <span style={{fontSize:9,background:st.c+"20",color:st.c,borderRadius:10,padding:"0 6px",marginLeft:"auto",fontFamily:"monospace"}}>{col.length}</span>
+            <span style={{fontSize:9,background:st.c+"20",color:st.c,borderRadius:10,padding:"0 6px",fontFamily:"monospace"}}>{col.length}</span>
+            <button onClick={()=>onAddClick(st.id)} style={{marginLeft:"auto",background:"transparent",border:`1px solid ${st.c}40`,borderRadius:6,width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",color:st.c,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}}>+</button>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {col.map(item=>(
               <div key={item.id} draggable onDragStart={()=>setDragId(item.id)} style={{cursor:"grab",userSelect:"none"}}>{renderCard(item)}</div>
             ))}
-            <button onClick={()=>onAddClick(st.id)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#6b7280",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить</button>
           </div>
         </div>;
       })}
@@ -1966,6 +1966,7 @@ function MainApp({currentUser, onLogout}){
     let r=items;
     if(filt.pf!=="all") r=r.filter(x=>x.project===filt.pf);
     if(filt.member!=="all") r=r.filter(x=>memberFields.some(f=>x[f]===filt.member));
+    if(showArchived){ return [...r].sort((a,b)=>(b.completed_at||"").localeCompare(a.completed_at||"")); }
     if(filt.sortBy==="deadline") r=[...r].sort((a,b)=>(a.deadline||a.shoot_date||a.planned_date||"")>(b.deadline||b.shoot_date||b.planned_date||"")?1:-1);
     if(filt.sortBy==="project") r=[...r].sort((a,b)=>a.project>b.project?1:-1);
     if(filt.sortBy==="status") r=[...r].sort((a,b)=>a.status>b.status?1:-1);
@@ -2146,7 +2147,7 @@ function MainApp({currentUser, onLogout}){
           setModal({type:"pub",item:pubItem});
         }} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
         {item.archived&&<Badge color="#4b5563">📦 архив</Badge>}
-        <button onClick={e=>{e.stopPropagation();archiveTask(type,item.id);}} title={item.archived?"Разархивировать":"Архивировать"} style={{marginLeft:"auto",background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:10,padding:"0 2px"}}>{item.archived?"↩":"📦"}</button>
+        {(item.archived||["done","approved","published","cancelled"].includes(item.status))&&<button onClick={e=>{e.stopPropagation();archiveTask(type,item.id);}} title={item.archived?"Из архива":"В архив"} style={{marginLeft:"auto",background:"transparent",border:"none",color:item.archived?"#10b981":"#6b7280",cursor:"pointer",fontSize:10,padding:"0 2px"}}>{item.archived?"↩":"📦"}</button>}
       </div>
     </div>;
   }
