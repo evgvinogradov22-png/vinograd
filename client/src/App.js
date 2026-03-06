@@ -776,7 +776,7 @@ function FinalFileOrLink({d,u,fileRef}){
                 <source src={d.final_file_url}/>
               </video>}
           </div>
-        :<>{uploading?<UploadProgress progress={uploadProgress} fileName={d.final_file_name}/>:<button onClick={()=>fRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить финальное видео</button>}</>
+        :{uploading?<UploadProgress progress={uploadProgress} fileName={d.final_file_name}/>:<button onClick={()=>fRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить финальное видео</button>}}
     </>}
   </div>;
 }
