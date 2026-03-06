@@ -761,22 +761,25 @@ function FinalFileOrLink({d,u,fileRef}){
         }catch(e){alert("Ошибка: "+e.message);}
         setUploading(false); e.target.value="";
       }}/>
-      {d.final_file_name
-        ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,overflow:"hidden"}}>
-            <div style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-              <span>🎬</span>
-              <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
-              {d.final_file_url
-                ?<a href={d.final_file_url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
-                :<span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
-              <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
+      {uploading
+        ? <UploadProgress progress={uploadProgress} fileName={d.final_file_name}/>
+        : d.final_file_name
+          ? <div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,overflow:"hidden"}}>
+              <div style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+                <span>🎬</span>
+                <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
+                {d.final_file_url
+                  ? <a href={d.final_file_url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
+                  : <span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
+                <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
+              </div>
+              {d.final_file_url&&/\.(mp4|mov|webm|avi|mkv)$/i.test(d.final_file_name)&&
+                <video controls style={{width:"100%",maxHeight:320,display:"block",background:"#000"}} preload="metadata">
+                  <source src={d.final_file_url}/>
+                </video>}
             </div>
-            {d.final_file_url&&/\.(mp4|mov|webm|avi|mkv)$/i.test(d.final_file_name)&&
-              <video controls style={{width:"100%",maxHeight:320,display:"block",background:"#000"}} preload="metadata">
-                <source src={d.final_file_url}/>
-              </video>}
-          </div>
-        :{uploading?<UploadProgress progress={uploadProgress} fileName={d.final_file_name}/>:<button onClick={()=>fRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить финальное видео</button>}}
+          : <button onClick={()=>fRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить финальное видео</button>
+      }
     </>}
   </div>;
 }
