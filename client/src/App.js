@@ -1856,6 +1856,71 @@ function useTaskStore(type, stores) {
   return map[type] || [[], ()=>{}];
 }
 
+// ── PublishedView ─────────────────────────────────────────────────────────────
+function PublishedView({items, projects, onOpen}) {
+  function getWeekKey(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d)) return null;
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const mon = new Date(d); mon.setDate(diff);
+    return mon.toISOString().slice(0, 10);
+  }
+  function getWeekLabel(monStr) {
+    const mon = new Date(monStr);
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    const fmt = d => d.toLocaleDateString("ru", {day:"numeric", month:"short"});
+    return `${fmt(mon)} — ${fmt(sun)}`;
+  }
+  const published = items.filter(x => x.status === "published");
+  const grouped = {};
+  published.forEach(item => {
+    const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
+    const k = getWeekKey(dateStr) || "unknown";
+    if (!grouped[k]) grouped[k] = [];
+    grouped[k].push(item);
+  });
+  const weeks = Object.keys(grouped).filter(k=>k!=="unknown").sort((a,b)=>b.localeCompare(a));
+  if (grouped["unknown"]) weeks.push("unknown");
+  if (published.length === 0) return <div style={{textAlign:"center",padding:"60px 0",color:"#4b5563"}}>
+    <div style={{fontSize:36,marginBottom:8}}>📭</div>
+    <div style={{fontSize:12}}>Нет опубликованных материалов</div>
+  </div>;
+  return <div style={{display:"flex",flexDirection:"column",gap:20}}>
+    {weeks.map(wk => {
+      const wItems = grouped[wk];
+      const label = wk === "unknown" ? "Без даты" : getWeekLabel(wk);
+      const weekTotal = wItems.reduce((s,x)=>s+pubCount(x),0);
+      return <div key={wk}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#10b981",fontFamily:"monospace"}}>{label}</div>
+          <div style={{fontSize:9,background:"#10b98120",color:"#10b981",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>{weekTotal} публ.</div>
+          <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
+          {wItems.map(item => {
+            const proj = projects.find(p=>p.id===item.project);
+            const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
+            return <div key={item.id} onClick={()=>onOpen(item)}
+              style={{background:"#111118",border:"1px solid #10b98130",borderLeft:"3px solid #10b981",borderRadius:8,padding:"9px 12px",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
+              onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
+              <div style={{fontSize:11,fontWeight:700,color:"#f0eee8",marginBottom:4,lineHeight:1.3}}>{item.title||"Без названия"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                {proj&&<span style={{fontSize:8,color:proj.color,background:proj.color+"18",borderRadius:3,padding:"1px 5px",fontFamily:"monospace"}}>{proj.label}</span>}
+                <span style={{fontSize:8,color:"#6b7280",fontFamily:"monospace"}}>{item.pub_type==="carousel"?"🖼 Карусель":`🎬${(item.reels_count||1)>1?" ×"+(item.reels_count||1):""} Рилс`}</span>
+                {item.starred&&<span style={{fontSize:10,color:"#f59e0b"}}>★</span>}
+              </div>
+              {dateStr&&<div style={{fontSize:8,color:"#10b981",fontFamily:"monospace",marginTop:4}}>✅ {dateStr}</div>}
+            </div>;
+          })}
+        </div>
+      </div>;
+    })}
+  </div>;
+}
+
 function MainApp({currentUser, onLogout}){
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<=768);
   useEffect(()=>{
