@@ -411,7 +411,7 @@ function CalView({items,dateField,onDayClick,renderChip,color,onMoveToDay}){
             onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverDay(null);}}
             onDrop={e=>{e.preventDefault();if(dragId){onMoveToDay(dragId,k);setDragId(null);setOverDay(null);}}}
             onClick={()=>onDayClick(k)}
-            style={{minHeight:74,background:isOver?"`${color}08`:isToday?`${color}06`:"#1a1a20",border:isOver?`1px solid ${color}70`:isToday?`1px solid ${color}40`:"1px solid #2a2a35",borderRadius:8,padding:"5px",cursor:"pointer",transition:"all .15s"}}
+            style={{minHeight:72,background:isOver?`${color}08`:isToday?`${color}06`:"#1a1a20",border:isOver?`1px solid ${color}70`:isToday?`1px solid ${color}40`:"1px solid #2a2a35",borderRadius:8,padding:"5px",cursor:"pointer",transition:"all .15s"}}
             onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor=color+"50";}}
             onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#2a2a35";}}>
             <div style={{fontSize:10,color:isToday||isOver?color:"#55556a",fontWeight:isToday?900:500,marginBottom:3,fontFamily:"'JetBrains Mono',monospace"}}>{day}</div>
