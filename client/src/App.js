@@ -1633,18 +1633,6 @@ function TrainingView(){
 // ── Projects View ─────────────────────────────────────────────────────────────
 function ProjectsView({projects,setProjects}){
   const [showArchive,setShowArchive]=useState(false);
-  const [pmpLoading,setPmpLoading]=useState(false);
-  // Load PMP projects ONCE for all cards
-  useEffect(()=>{
-    let cancelled=false;
-    setPmpLoading(true);
-    fetch("/api/pmp/projects")
-      .then(r=>r.ok?r.json():[])
-      .then(data=>{ if(!cancelled){ const list=data?.data||data?.items||data||[]; setPmpProjects(Array.isArray(list)?list:[]); } })
-      .catch(()=>{})
-      .finally(()=>{ if(!cancelled) setPmpLoading(false); });
-    return ()=>{cancelled=true;};
-  },[]);
   const [adding,setAdding]=useState(false);
   const [newP,setNewP]=useState({label:"",color:"#8b5cf6",description:"",links:[""]});
   const visible=projects.filter(p=>showArchive?p.archived:!p.archived);
@@ -1687,7 +1675,7 @@ function ProjectsView({projects,setProjects}){
     {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#9ca3af"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
       {visible.map(proj=>(
-        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects} pmpLoading={pmpLoading}/>
+        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects}/>
       ))}
     </div>
   </div>;
@@ -1696,14 +1684,6 @@ function ProjectsView({projects,setProjects}){
 
 function ProjectCard({proj, showArchive, setProjects}){
   const [nl,setNl]=useState("");
-  const loadingPmp=pmpLoading;
-  const pmpErr="";
-
-  function savePmpId(val){
-    setProjects(p=>p.map(x=>x.id===proj.id?{...x,pmp_project_id:val}:x));
-    api.updateProject(proj.id,{pmp_project_id:val}).catch(()=>{});
-  }
-
   return <div style={{background:"#111118",border:'1px solid #1e1e2e',borderTop:'3px solid #2d2d44',borderRadius:12,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
 <div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{(proj.label||"?")[0]}</div>
