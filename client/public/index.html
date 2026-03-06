@@ -3,11 +3,41 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Виноград 🍇</title>
+  <title>Виноград</title>
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#0a0a0f; color:#f0eee8; font-family:'Inter',sans-serif; }
+    :root {
+      --bg:  #0f0f12;
+      --bg2: #141418;
+      --bg3: #1a1a20;
+      --sur: #1e1e26;
+      --sur2:#23232c;
+      --br:  #2a2a35;
+      --br2: #32323e;
+      --tx:  #f0f0f5;
+      --t2:  #8b8b9e;
+      --t3:  #55556a;
+      --ac:  #c8ff57;
+      --ac2: #a8e040;
+      --red: #ff4d6d; --redl: rgba(255,77,109,.12);
+      --ora: #ff8c42; --oral: rgba(255,140,66,.12);
+      --yel: #ffd166; --yell: rgba(255,209,102,.12);
+      --gn:  #06d6a0; --gnl:  rgba(6,214,160,.12);
+      --bl:  #4cc9f0; --bll:  rgba(76,201,240,.12);
+      --pu:  #b388ff; --pul:  rgba(179,136,255,.12);
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: var(--bg);
+      color: var(--tx);
+      font-family: 'Onest', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
     #root { height:100vh; }
+    ::selection { background: var(--ac); color: #0f0f12; }
+    ::-webkit-scrollbar { width:3px; height:3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--br2); border-radius:2px; }
   </style>
 </head>
 <body>

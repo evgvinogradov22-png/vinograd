@@ -5,23 +5,23 @@ import LoginScreen from "./LoginScreen";
 const APP_NAME = "Виноград";
 
 const TABS = [
-  { id:"pre",       label:"Препродакшн",  icon:"✍️",  color:"#8b5cf6" },
-  { id:"prod",      label:"Продакшн",      icon:"🎬",  color:"#3b82f6" },
-  { id:"post",      label:"Постпродакшн",  icon:"🎞️", color:"#ec4899" },
-  { id:"pub",       label:"Публикация",    icon:"🚀",  color:"#10b981" },
-  { id:"summary",   label:"Сводка",        icon:"📊",  color:"#f97316" },
-  { id:"analytics", label:"Аналитика",     icon:"📈",  color:"#a78bfa" },
-  { id:"base",      label:"База",          icon:"🗂",   color:"#06b6d4" },
+  { id:"pre",       label:"Препродакшн",  icon:"✍",   color:"#b388ff" },
+  { id:"prod",      label:"Продакшн",      icon:"◎",   color:"#4cc9f0" },
+  { id:"post",      label:"Постпродакшн",  icon:"✦",   color:"#ff4d6d" },
+  { id:"pub",       label:"Публикация",    icon:"⬆",   color:"#06d6a0" },
+  { id:"summary",   label:"Сводка",        icon:"◈",   color:"#ff8c42" },
+  { id:"analytics", label:"Аналитика",     icon:"◈",   color:"#c8ff57" },
+  { id:"base",      label:"База",          icon:"◈",   color:"#4cc9f0" },
 ];
 
-const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
-const PROD_STATUSES = [{id:"planned",l:"Запланировано",c:"#6b7280"},{id:"ready",l:"Готово к съёмке",c:"#f59e0b"},{id:"shooting",l:"Идёт съёмка",c:"#3b82f6"},{id:"done",l:"Снято",c:"#10b981"}];
-const POST_STATUSES = [{id:"not_started",l:"Не начат",c:"#4b5563"},{id:"in_progress",l:"В монтаже",c:"#f59e0b"},{id:"review",l:"На проверке",c:"#8b5cf6"},{id:"done",l:"Готово",c:"#10b981"}];
-const PUB_STATUSES  = [{id:"draft",l:"Черновик",c:"#6b7280"},{id:"ready",l:"Готово",c:"#f59e0b"},{id:"scheduled",l:"Запланировано",c:"#3b82f6"},{id:"published",l:"Опубликовано",c:"#10b981"}];
+const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#55556a"},{id:"brief",l:"Бриф",c:"#ffd166"},{id:"script",l:"Сценарий",c:"#c8ff57"},{id:"approved",l:"Утверждено",c:"#06d6a0"}];
+const PROD_STATUSES = [{id:"planned",l:"Запланировано",c:"#55556a"},{id:"ready",l:"Готово к съёмке",c:"#ffd166"},{id:"shooting",l:"Идёт съёмка",c:"#4cc9f0"},{id:"done",l:"Снято",c:"#06d6a0"}];
+const POST_STATUSES = [{id:"not_started",l:"Не начат",c:"#55556a"},{id:"in_progress",l:"В монтаже",c:"#ffd166"},{id:"review",l:"На проверке",c:"#c8ff57"},{id:"done",l:"Готово",c:"#06d6a0"}];
+const PUB_STATUSES  = [{id:"draft",l:"Черновик",c:"#55556a"},{id:"ready",l:"Готово",c:"#ffd166"},{id:"scheduled",l:"Запланировано",c:"#4cc9f0"},{id:"published",l:"Опубликовано",c:"#06d6a0"}];
 const ROLES_LIST    = ["Директор","Менеджер проекта","Сценарист","Оператор","Монтажёр","Продюсер","Таргетолог","Дизайнер","Другое"];
 const MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const WDAYS  = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
-const AVATAR_COLORS = ["#ef4444","#3b82f6","#ec4899","#10b981","#f59e0b","#8b5cf6","#06b6d4","#f97316"];
+const AVATAR_COLORS = ["#ff4d6d","#4cc9f0","#b388ff","#06d6a0","#ffd166","#c8ff57","#ff8c42","#4cc9f0"];
 
 
 const genId = () => Math.random().toString(36).slice(2,9);
@@ -29,16 +29,16 @@ const dim=(y,m)=>new Date(y,m+1,0).getDate();
 const fd=(y,m)=>{const d=new Date(y,m,1).getDay();return d===0?6:d-1;};
 
 
-const SI={background:"#16161f",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 11px",color:"#f0eee8",fontSize:12,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"};
-const LB={fontSize:9,color:"#cbd5e1",fontWeight:700,letterSpacing:"0.1em",marginBottom:4,display:"block",fontFamily:"monospace"};
-const projOf=(id,projects)=>projects.find(p=>p.id===id)||{label:"?",color:"#9ca3af"};
+const SI={background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:8,padding:"8px 11px",color:"#f0f0f5",fontSize:13,fontFamily:"'Onest',sans-serif",outline:"none",width:"100%",boxSizing:"border-box",transition:"border-color .15s"};
+const LB={fontSize:10,color:"#55556a",fontWeight:700,letterSpacing:"0.07em",marginBottom:5,display:"block",fontFamily:"'JetBrains Mono',monospace",textTransform:"uppercase"};
+const projOf=(id,projects)=>projects.find(p=>p.id===id)||{label:"?",color:"#8b8b9e"};
 const teamOf=(id,team)=>team.find(u=>u.id===id);
-const stColor=(sts,id)=>sts.find(s=>s.id===id)?.c||"#6b7280";
+const stColor=(sts,id)=>sts.find(s=>s.id===id)?.c||"#55556a";
 
-function Badge({color,children}){ return <span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:color+"20",color,fontFamily:"monospace"}}>{children}</span>; }
+function Badge({color,children}){ return <span style={{fontSize:11,padding:"2px 9px",borderRadius:4,background:color+"20",color,fontFamily:"'JetBrains Mono',monospace",fontWeight:700,letterSpacing:".02em"}}>{children}</span>; }
 function Field({label,children}){ return <div><span style={LB}>{label}</span>{children}</div>; }
-function Btn({onClick,color="#7c3aed",disabled,children,style={}}){
-  return <button onClick={onClick} disabled={disabled} style={{background:disabled?"#1a1a2e":`linear-gradient(135deg,${color},${color}cc)`,border:"none",borderRadius:7,padding:"4px 11px",color:disabled?"#4b5563":"#fff",cursor:disabled?"not-allowed":"pointer",fontSize:10,fontFamily:"inherit",fontWeight:600,...style}}>{children}</button>;
+function Btn({onClick,color="#c8ff57",disabled,children,style={}}){
+  return <button onClick={onClick} disabled={disabled} style={{background:disabled?"#1a1a20":color,border:disabled?"1px solid #2a2a35":"none",borderRadius:7,padding:"5px 13px",color:disabled?"#55556a":"#0f0f12",cursor:disabled?"not-allowed":"pointer",fontSize:12,fontFamily:"'Onest',sans-serif",fontWeight:700,letterSpacing:".01em",transition:"all .15s",...style}}>{children}</button>;
 }
 function TeamSelect({label,value,onChange,team}){
   return <Field label={label}>
@@ -252,12 +252,12 @@ function MiniChat({taskId, team, currentUser}){
   const mentionList = (team||[]).filter(m => m.id !== myId && m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0,5);
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:300,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,position:"relative"}}>
-      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700,flexShrink:0}}>💬 ЧАТ</div>
+    <div style={{display:"flex",flexDirection:"column",height:310,background:"#141418",border:"1px solid #2a2a35",borderRadius:10,position:"relative"}}>
+      <div style={{padding:"9px 14px",borderBottom:"1px solid #2a2a35",fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",fontWeight:700,flexShrink:0,letterSpacing:".05em"}}>💬 ЧАТ</div>
 
       {/* messages */}
       <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,minHeight:0}}>
-        {msgs.length===0 && <div style={{textAlign:"center",color:"#6b7280",fontSize:10,paddingTop:20}}>Начните обсуждение</div>}
+        {msgs.length===0 && <div style={{textAlign:"center",color:"#55556a",fontSize:10,paddingTop:20}}>Начните обсуждение</div>}
         {msgs.map(m => {
           const isMe = m.user === myId;
           const rawName = nm(m.user);
@@ -266,19 +266,19 @@ function MiniChat({taskId, team, currentUser}){
           const fileIcon = ["jpg","jpeg","png","gif","webp"].includes(ext) ? "🖼️" : ["mp4","mov","avi","mkv","webm"].includes(ext) ? "🎬" : "📎";
           return (
             <div key={m.id} style={{display:"flex",flexDirection:isMe?"row-reverse":"row",gap:5,alignItems:"flex-end",flexShrink:0}}>
-              <div style={{width:20,height:20,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{safeName[0].toUpperCase()}</div>
+              <div style={{width:22,height:22,borderRadius:6,background:"#32323e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#f0f0f5",flexShrink:0}}>{safeName[0].toUpperCase()}</div>
               <div style={{maxWidth:"80%"}}>
-                {!isMe && <div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace",marginBottom:2}}>@{safeName}</div>}
-                <div style={{background:isMe?"#1e1630":"#1a1a2e",border:"1px solid "+(isMe?"#4c1d9530":"#2d2d44"),borderRadius:isMe?"9px 9px 3px 9px":"9px 9px 9px 3px",padding:"6px 10px"}}>
-                  {m.text && <div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:700}}>{p}</span>:p)}</div>}
+                {!isMe && <div style={{fontSize:8,color:"#8b8b9e",fontFamily:"'JetBrains Mono',monospace",marginBottom:2}}>@{safeName}</div>}
+                <div style={{background:isMe?"#c8ff57":"#23232c",border:isMe?"none":"1px solid #2a2a35",borderRadius:isMe?"10px 10px 3px 10px":"10px 10px 10px 3px",padding:"8px 12px"}}>
+                  {m.text && <div style={{fontSize:12,color:isMe?"#0f0f12":"#f0f0f5",lineHeight:1.5,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#c8ff57",fontWeight:700}}>{p}</span>:p)}</div>}
                   {m.furl && (()=>{
                     const isVoiceFile = (m.fname||"").match(/\.webm$|\.ogg$|\.mp3$|\.m4a$/i) || m.isVoice;
                     if (isVoiceFile) return (
                       <div style={{marginTop:m.text?5:0}}>
-                        <audio controls src={m.furl} style={{width:"100%",height:32,borderRadius:6,accentColor:"#8b5cf6"}}/>
+                        <audio controls src={m.furl} style={{width:"100%",height:32,borderRadius:6,accentColor:"#c8ff57"}}/>
                         {m.transcript && <div style={{marginTop:5,fontSize:10,color:"#d1d5db",background:"#ffffff0a",borderRadius:5,padding:"5px 8px",lineHeight:1.4}}>📝 {m.transcript}</div>}
                         {!m.transcript && <button onClick={()=>transcribeMsg(m.id,m.furl,m.fname)} disabled={m.transcribing}
-                          style={{marginTop:4,background:"transparent",border:"1px solid #4b5563",borderRadius:5,padding:"2px 8px",color:m.transcribing?"#4b5563":"#9ca3af",cursor:m.transcribing?"not-allowed":"pointer",fontSize:9,fontFamily:"monospace"}}>
+                          style={{marginTop:4,background:"transparent",border:"1px solid #4b5563",borderRadius:5,padding:"2px 8px",color:m.transcribing?"#55556a":"#8b8b9e",cursor:m.transcribing?"not-allowed":"pointer",fontSize:9,fontFamily:"'JetBrains Mono',monospace"}}>
                           {m.transcribing?"⏳ Транскрибирую...":"📝 Транскрибировать"}
                         </button>}
                       </div>
@@ -288,12 +288,12 @@ function MiniChat({taskId, team, currentUser}){
                         <span style={{fontSize:14}}>{fileIcon}</span>
                         <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
                         <a href={m.furl} target="_blank" rel="noreferrer"
-                          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>↓</a>
+                          style={{flexShrink:0,background:"#4cc9f0",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>↓</a>
                       </div>
                     );
                   })()}
                 </div>
-                <div style={{fontSize:7,color:"#6b7280",marginTop:2,textAlign:isMe?"right":"left"}}>{(()=>{const t=Number(m.ts);return t>1000000000?new Date(t).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""})()}</div>
+                <div style={{fontSize:7,color:"#55556a",marginTop:2,textAlign:isMe?"right":"left"}}>{(()=>{const t=Number(m.ts);return t>1000000000?new Date(t).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""})()}</div>
               </div>
             </div>
           );
@@ -303,43 +303,43 @@ function MiniChat({taskId, team, currentUser}){
 
       {/* real upload progress bar */}
       {uploading && (
-        <div style={{padding:"6px 10px",borderTop:"1px solid #1e1e2e",flexShrink:0,background:"#0d0d16"}}>
+        <div style={{padding:"9px 12px",borderTop:"1px solid #2a2a35",flexShrink:0,background:"#141418"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-            <span style={{fontSize:10,color:"#9ca3af",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📎 {uploadName}</span>
-            <span style={{fontSize:10,fontWeight:700,color:uploadPct===100?"#10b981":"#7c3aed",minWidth:36,textAlign:"right"}}>{uploadPct}%</span>
+            <span style={{fontSize:10,color:"#8b8b9e",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📎 {uploadName}</span>
+            <span style={{fontSize:10,fontWeight:700,color:uploadPct===100?"#06d6a0":"#c8ff57",minWidth:36,textAlign:"right"}}>{uploadPct}%</span>
           </div>
-          <div style={{height:4,background:"#2d2d44",borderRadius:3,overflow:"hidden"}}>
-            <div style={{width:`${uploadPct}%`,height:"100%",background:uploadPct===100?"#10b981":"linear-gradient(90deg,#7c3aed,#a78bfa)",transition:"width 0.2s",borderRadius:3}}/>
+          <div style={{height:4,background:"#2a2a35",borderRadius:3,overflow:"hidden"}}>
+            <div style={{width:`${uploadPct}%`,height:"100%",background:uploadPct===100?"#06d6a0":"linear-gradient(90deg,#7c3aed,#a78bfa)",transition:"width 0.2s",borderRadius:3}}/>
           </div>
         </div>
       )}
 
       {/* error */}
-      {err && <div style={{padding:"4px 10px",fontSize:10,color:"#ef4444",background:"#1a0000",borderTop:"1px solid #ef444430",flexShrink:0}}>{err} <button onClick={()=>setErr("")} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button></div>}
+      {err && <div style={{padding:"4px 10px",fontSize:10,color:"#ff4d6d",background:"#1a0000",borderTop:"1px solid #ef444430",flexShrink:0}}>{err} <button onClick={()=>setErr("")} style={{background:"none",border:"none",color:"#55556a",cursor:"pointer",fontSize:11}}>✕</button></div>}
 
       {/* mention dropdown */}
       {showM && mentionList.length > 0 && (
-        <div style={{position:"absolute",bottom:50,left:8,right:8,background:"#1a1a2e",border:"1px solid #3d3d5c",borderRadius:8,zIndex:200,overflow:"hidden"}}>
+        <div style={{position:"absolute",bottom:50,left:8,right:8,background:"#1a1a20",border:"1px solid #3d3d5c",borderRadius:8,zIndex:200,overflow:"hidden"}}>
           {mentionList.map(m => (
             <div key={m.id} onClick={()=>pickMention(m)}
               style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
-              onMouseEnter={e=>e.currentTarget.style.background="#2d2d44"}
+              onMouseEnter={e=>e.currentTarget.style.background="#2a2a35"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{width:18,height:18,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff"}}>{(m.name||"?")[0]}</div>
-              <span style={{color:"#a78bfa",fontSize:11}}>@{m.name}</span>
-              <span style={{fontSize:9,color:"#6b7280",marginLeft:"auto"}}>{m.role}</span>
+              <div style={{width:18,height:18,borderRadius:"50%",background:"#32323e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff"}}>{(m.name||"?")[0]}</div>
+              <span style={{color:"#c8ff57",fontSize:11}}>@{m.name}</span>
+              <span style={{fontSize:9,color:"#55556a",marginLeft:"auto"}}>{m.role}</span>
             </div>
           ))}
         </div>
       )}
 
       {/* input */}
-      <div style={{padding:"6px 8px",borderTop:"1px solid #1e1e2e",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+      <div style={{padding:"6px 8px",borderTop:"1px solid #2a2a35",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
         <input ref={fileRef} type="file" multiple accept="*/*" style={{position:"fixed",top:-9999,left:-9999,opacity:0,pointerEvents:"none"}} onChange={handleFiles}/>
         <button onClick={()=>{ if(!uploading&&!recording) fileRef.current?.click(); }} title="Прикрепить файл" disabled={uploading||recording}
-          style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 9px",color:(uploading||recording)?"#4b5563":"#9ca3af",cursor:(uploading||recording)?"not-allowed":"pointer",fontSize:14,flexShrink:0}}>📎</button>
+          style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:7,padding:"5px 9px",color:(uploading||recording)?"#55556a":"#8b8b9e",cursor:(uploading||recording)?"not-allowed":"pointer",fontSize:14,flexShrink:0}}>📎</button>
         <button onClick={recording?stopRec:startRec} disabled={uploading} title={recording?"Остановить":"Голосовое + транскрипция"}
-          style={{background:recording?"#ef4444":"#1a1a2e",border:"1px solid "+(recording?"#ef4444":"#2d2d44"),borderRadius:7,padding:"5px 9px",color:recording?"#fff":"#9ca3af",cursor:uploading?"not-allowed":"pointer",fontSize:recording?10:14,fontWeight:700,flexShrink:0,minWidth:34,transition:"all 0.15s"}}>
+          style={{background:recording?"#ff4d6d":"#1a1a20",border:"1px solid "+(recording?"#ff4d6d":"#2a2a35"),borderRadius:7,padding:"5px 9px",color:recording?"#fff":"#8b8b9e",cursor:uploading?"not-allowed":"pointer",fontSize:recording?10:14,fontWeight:700,flexShrink:0,minWidth:34,transition:"all 0.15s"}}>
           {recording?"⏹ "+recSec+"с":"🎙️"}</button>
         <input ref={inputRef} value={text} onChange={onType}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}if(e.key==="Escape")setShowM(false);}}
@@ -364,17 +364,17 @@ function Kanban({statuses,items,renderCard,onDrop,onAddClick}){
           onDragOver={e=>{e.preventDefault();setOverSt(st.id);}}
           onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverSt(null);}}
           onDrop={e=>{e.preventDefault();if(dragId){onDrop(dragId,st.id);setDragId(null);setOverSt(null);}}}
-          style={{minWidth:280,width:280,background:overSt===st.id?"#111120":"#0d0d16",border:`1px solid ${overSt===st.id?st.c+"70":"#1e1e2e"}`,borderRadius:12,padding:"10px 8px",flexShrink:0,transition:"all 0.12s"}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"0 2px"}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:st.c}}/>
-            <span style={{fontSize:10,fontWeight:700,color:st.c,fontFamily:"monospace"}}>{st.l}</span>
-            <span style={{fontSize:9,background:st.c+"20",color:st.c,borderRadius:10,padding:"0 6px",marginLeft:"auto",fontFamily:"monospace"}}>{col.length}</span>
+          style={{minWidth:244,width:244,background:overSt===st.id?"#1e1e26":"#141418",border:`1px solid ${overSt===st.id?st.c+"60":"#2a2a35"}`,borderRadius:10,overflow:"hidden",flexShrink:0,transition:"all .15s"}}>
+          <div style={{display:"flex",alignItems:"center",gap:7,padding:"10px 13px 9px",borderBottom:"1px solid #2a2a35",flexShrink:0}}>
+            <div style={{width:8,height:8,borderRadius:3,background:st.c,flexShrink:0}}/>
+            <span style={{fontSize:12,fontWeight:800,flex:1,letterSpacing:".01em"}}>{st.l}</span>
+            <span style={{fontSize:11,color:"#55556a",fontFamily:"'JetBrains Mono',monospace"}}>{col.length}</span>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{padding:"8px"}}>
             {col.map(item=>(
               <div key={item.id} draggable onDragStart={()=>setDragId(item.id)} style={{cursor:"grab",userSelect:"none"}}>{renderCard(item)}</div>
             ))}
-            <button onClick={()=>onAddClick(st.id)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#6b7280",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить</button>
+            <button onClick={()=>onAddClick(st.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 11px",fontSize:12,fontWeight:600,color:"#55556a",cursor:"pointer",background:"transparent",border:"none",borderBottom:"1px solid #2a2a35",width:"100%",textAlign:"left",fontFamily:"'Onest',sans-serif",transition:"all .15s",flexShrink:0,marginBottom:6}} onMouseEnter={e=>{e.currentTarget.style.background="rgba(200,255,87,.06)";e.currentTarget.style.color="#c8ff57";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="#55556a";}}>+ Добавить задачу</button>
           </div>
         </div>;
       })}
@@ -395,12 +395,12 @@ function CalView({items,dateField,onDayClick,renderChip,color,onMoveToDay}){
   return(
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-        <button onClick={()=>m===0?(setM(11),setY(y=>y-1)):setM(m=>m-1)} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
-        <h3 style={{fontSize:15,fontWeight:800,margin:0}}>{MONTHS[m]} <span style={{color:"#9ca3af"}}>{y}</span></h3>
-        <button onClick={()=>m===11?(setM(0),setY(y=>y+1)):setM(m=>m+1)} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
+        <button onClick={()=>m===0?(setM(11),setY(y=>y-1)):setM(m=>m-1)} style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
+        <h3 style={{fontSize:15,fontWeight:800,margin:0}}>{MONTHS[m]} <span style={{color:"#8b8b9e"}}>{y}</span></h3>
+        <button onClick={()=>m===11?(setM(0),setY(y=>y+1)):setM(m=>m+1)} style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
-        {WDAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:"#9ca3af",fontFamily:"monospace",padding:"2px 0",fontWeight:700}}>{d}</div>)}
+        {WDAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:"#8b8b9e",fontFamily:"'JetBrains Mono',monospace",padding:"2px 0",fontWeight:700}}>{d}</div>)}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
         {Array.from({length:first}).map((_,i)=><div key={"e"+i} style={{minHeight:74}}/>)}
@@ -411,16 +411,16 @@ function CalView({items,dateField,onDayClick,renderChip,color,onMoveToDay}){
             onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverDay(null);}}
             onDrop={e=>{e.preventDefault();if(dragId){onMoveToDay(dragId,k);setDragId(null);setOverDay(null);}}}
             onClick={()=>onDayClick(k)}
-            style={{minHeight:74,background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?`1px solid ${color}`:isToday?`1px solid ${color}`:"1px solid #1e1e2e",borderRadius:6,padding:"4px 4px 3px",cursor:"pointer",transition:"all 0.1s"}}
+            style={{minHeight:74,background:isOver?"`${color}08`:isToday?`${color}06`:"#1a1a20",border:isOver?`1px solid ${color}70`:isToday?`1px solid ${color}40`:"1px solid #2a2a35",borderRadius:8,padding:"5px",cursor:"pointer",transition:"all .15s"}}
             onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor=color+"50";}}
-            onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
-            <div style={{fontSize:9,color:isToday||isOver?color:"#9ca3af",fontWeight:isToday?800:400,marginBottom:2,fontFamily:"monospace"}}>{day}</div>
+            onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#2a2a35";}}>
+            <div style={{fontSize:10,color:isToday||isOver?color:"#55556a",fontWeight:isToday?900:500,marginBottom:3,fontFamily:"'JetBrains Mono',monospace"}}>{day}</div>
             {its.slice(0,2).map(x=>(
               <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}} style={{cursor:"grab",userSelect:"none"}}>
                 {renderChip(x)}
               </div>
             ))}
-            {its.length>2&&<div style={{fontSize:8,color:"#9ca3af"}}>+{its.length-2}</div>}
+            {its.length>2&&<div style={{fontSize:8,color:"#8b8b9e"}}>+{its.length-2}</div>}
           </div>;
         })}
       </div>
@@ -439,9 +439,9 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
   return(
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()-7);setBase(d);}} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
+        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()-7);setBase(d);}} style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
         <span style={{fontSize:13,fontWeight:700}}>{days[0].getDate()} {MONTHS[days[0].getMonth()]} — {days[6].getDate()} {MONTHS[days[6].getMonth()]} {days[0].getFullYear()}</span>
-        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()+7);setBase(d);}} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
+        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()+7);setBase(d);}} style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
         {days.map(d=>{
@@ -451,12 +451,12 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
             onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverDay(null);}}
             onDrop={e=>{e.preventDefault();if(dragId){onMoveToDay(dragId,k+"T12:00");setDragId(null);setOverDay(null);}}}
             onClick={()=>onDayClick(k+"T12:00")}
-            style={{background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?"1px solid #7c3aed":isToday?"1px solid #7c3aed":"1px solid #1e1e2e",borderRadius:10,padding:"8px 7px",minHeight:130,cursor:"pointer",transition:"all 0.1s"}}
-            onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#3d3d5c";}}
-            onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
+            style={{background:isOver?"rgba(200,255,87,.05)":isToday?"rgba(200,255,87,.03)":"#1e1e26",border:isOver?"1px solid #7c3aed":isToday?"1px solid #7c3aed":"1px solid #2a2a35",borderRadius:10,padding:"8px 7px",minHeight:130,cursor:"pointer",transition:"all 0.1s"}}
+            onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#32323e";}}
+            onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#2a2a35";}}>
             <div style={{textAlign:"center",marginBottom:6}}>
-              <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>{WDAYS[days.indexOf(d)]}</div>
-              <div style={{fontSize:15,fontWeight:800,color:isToday?"#a78bfa":"#f0eee8"}}>{d.getDate()}</div>
+              <div style={{fontSize:9,color:"#8b8b9e",fontFamily:"'JetBrains Mono',monospace"}}>{WDAYS[days.indexOf(d)]}</div>
+              <div style={{fontSize:17,fontWeight:900,color:isToday?"#c8ff57":"#f0f0f5",letterSpacing:"-.5px",fontFamily:"'Onest',sans-serif"}}>{d.getDate()}</div>
             </div>
             {its.map(x=>{const sc=stColor(PUB_STATUSES,x.status);const proj=projects.find(p=>p.id===x.project);return(
               <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
@@ -464,8 +464,8 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
                 style={{background:sc+"18",border:`1px solid ${sc}40`,borderRadius:5,padding:"4px 6px",marginBottom:3,cursor:"grab"}}>
                 <div style={{fontSize:9,fontWeight:700,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title||"Без названия"}</div>
                 <div style={{display:"flex",gap:3,marginTop:2}}>
-                  <span style={{fontSize:8,color:"#6b7280",fontFamily:"monospace"}}>{x.pub_type==="carousel"?"🖼":"🎬"}</span>
-                  {proj&&<span style={{fontSize:8,color:proj.color,fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
+                  <span style={{fontSize:8,color:"#55556a",fontFamily:"'JetBrains Mono',monospace"}}>{x.pub_type==="carousel"?"🖼":"🎬"}</span>
+                  {proj&&<span style={{fontSize:8,color:proj.color,fontFamily:"'JetBrains Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
                 </div>
               </div>
             );})}
@@ -481,15 +481,15 @@ function Modal({title,color,onClose,onSave,onDelete,children}){
   const [confirmDel,setConfirmDel]=useState(false);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.87)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,width:"min(700px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
-        <div style={{padding:"10px 16px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-          <div style={{flex:1,fontSize:13,fontWeight:800,color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
-          {onDelete&&!confirmDel&&<button onClick={()=>setConfirmDel(true)} title="Удалить" style={{background:"transparent",border:"1px solid #ef444450",borderRadius:7,padding:"5px 10px",color:"#ef4444",cursor:"pointer",fontSize:12}}>🗑</button>}
-          {onDelete&&confirmDel&&<><button onClick={()=>{setConfirmDel(false);onDelete();}} style={{background:"#ef4444",border:"none",borderRadius:7,padding:"5px 12px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>Удалить!</button><button onClick={()=>setConfirmDel(false)} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"5px 8px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>✕</button></>}
-          {onSave&&<button onClick={onSave} style={{background:`linear-gradient(135deg,${color},${color}bb)`,border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button>}
-          <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#9ca3af",fontSize:14,flexShrink:0}}>×</button>
+      <div style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:12,width:"min(680px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.7)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"10px 16px",borderBottom:"1px solid #2a2a35",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <div style={{flex:1,fontSize:14,fontWeight:800,letterSpacing:"-.2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
+          {onDelete&&!confirmDel&&<button onClick={()=>setConfirmDel(true)} title="Удалить" style={{background:"transparent",border:"1px solid #ef444450",borderRadius:7,padding:"5px 10px",color:"#ff4d6d",cursor:"pointer",fontSize:12}}>🗑</button>}
+          {onDelete&&confirmDel&&<><button onClick={()=>{setConfirmDel(false);onDelete();}} style={{background:"#ff4d6d",border:"none",borderRadius:7,padding:"5px 12px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>Удалить!</button><button onClick={()=>setConfirmDel(false)} style={{background:"transparent",border:"1px solid #2a2a35",borderRadius:7,padding:"5px 8px",color:"#8b8b9e",cursor:"pointer",fontSize:11}}>✕</button></>}
+          {onSave&&<button onClick={onSave} style={{background:"#c8ff57",border:"none",borderRadius:7,padding:"6px 16px",color:"#0f0f12",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Onest',sans-serif",letterSpacing:".01em"}}>💾 Сохранить</button>}
+          <button onClick={onClose} style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#8b8b9e",fontSize:14,flexShrink:0}}>×</button>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"16px 18px",isolation:"isolate"}}>{children}</div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 20px",isolation:"isolate"}}>{children}</div>
       </div>
     </div>
   );
@@ -498,17 +498,17 @@ function Modal({title,color,onClose,onSave,onDelete,children}){
 // ── Reusable form pieces ──────────────────────────────────────────────────────
 function SaveRow({onClose,onSave,onDelete,color}){
   const [confirmDel,setConfirmDel]=useState(false);
-  return <div style={{display:"flex",gap:8,marginTop:4,paddingTop:8,borderTop:"1px solid #1e1e2e"}}>
-    {onDelete&&!confirmDel&&<button onClick={()=>setConfirmDel(true)} title="Удалить задачу" style={{background:"transparent",border:"1px solid #ef444440",borderRadius:8,padding:"8px 12px",color:"#ef4444",cursor:"pointer",fontSize:14}}>🗑</button>}
-    {onDelete&&confirmDel&&<><button onClick={onDelete} style={{background:"#ef4444",border:"none",borderRadius:8,padding:"8px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>Удалить!</button><button onClick={()=>setConfirmDel(false)} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 10px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>✕</button></>}
-    <button onClick={onClose} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
-    <button onClick={onSave} style={{flex:2,background:`linear-gradient(135deg,${color},${color}cc)`,border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Сохранить</button>
+  return <div style={{display:"flex",gap:8,marginTop:4,paddingTop:8,borderTop:"1px solid #2a2a35"}}>
+    {onDelete&&!confirmDel&&<button onClick={()=>setConfirmDel(true)} title="Удалить задачу" style={{background:"transparent",border:"1px solid #ef444440",borderRadius:8,padding:"8px 12px",color:"#ff4d6d",cursor:"pointer",fontSize:14}}>🗑</button>}
+    {onDelete&&confirmDel&&<><button onClick={onDelete} style={{background:"#ff4d6d",border:"none",borderRadius:8,padding:"8px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>Удалить!</button><button onClick={()=>setConfirmDel(false)} style={{background:"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"8px 10px",color:"#8b8b9e",cursor:"pointer",fontSize:11}}>✕</button></>}
+    <button onClick={onClose} style={{flex:1,background:"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"8px",color:"#8b8b9e",cursor:"pointer",fontFamily:"'Onest',sans-serif"}}>Отмена</button>
+    <button onClick={onSave} style={{flex:2,background:"#c8ff57",border:"none",borderRadius:8,padding:"8px",color:"#0f0f12",cursor:"pointer",fontFamily:"'Onest',sans-serif",fontWeight:700,fontSize:12,letterSpacing:".01em"}}>Сохранить</button>
   </div>;
 }
 function StatusRow({statuses,value,onChange}){
   return <Field label="СТАТУС">
     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-      {statuses.map(s=><button key={s.id} onClick={()=>onChange(s.id)} style={{flex:1,minWidth:80,padding:"6px 4px",borderRadius:7,cursor:"pointer",background:value===s.id?s.c+"20":"#111118",border:`1px solid ${value===s.id?s.c:"#2d2d44"}`,color:value===s.id?s.c:"#4b5563",fontSize:9,fontFamily:"monospace"}}>{s.l}</button>)}
+      {statuses.map(s=><button key={s.id} onClick={()=>onChange(s.id)} style={{flex:1,minWidth:80,padding:"6px 4px",borderRadius:7,cursor:"pointer",background:value===s.id?s.c+"20":"#1a1a20",border:`1px solid ${value===s.id?s.c+"80":"#2a2a35"}`,color:value===s.id?s.c:"#55556a",fontSize:11,fontFamily:"'Onest',sans-serif",fontWeight:600,transition:"all .15s"}}>{s.l}</button>)}
     </div>
   </Field>;
 }
@@ -517,25 +517,25 @@ function StatusRow({statuses,value,onChange}){
 function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,showMember=true,showSort=true,addLabel,onAdd,showArchived=false,onArchiveToggle}){
   const activeProjs=projects.filter(p=>!p.archived);
   return(
-    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:14,padding:"10px 14px",background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10}}>
+    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:16,padding:"8px 0 14px"}}>
       <div style={{flex:1,display:"flex",gap:8,flexWrap:"wrap"}}>
         <div>
           <span style={{...LB,display:"inline",marginRight:6}}>ПРОЕКТ</span>
-          <select value={pf} onChange={e=>setPf(e.target.value)} style={{...SI,width:"auto",padding:"4px 8px",fontSize:11,display:"inline-block"}}>
+          <select value={pf} onChange={e=>setPf(e.target.value)} style={{...SI,width:"auto",padding:"5px 9px",fontSize:12,display:"inline-block"}}>
             <option value="all">Все</option>
             {activeProjs.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </div>
         {showMember&&<div>
           <span style={{...LB,display:"inline",marginRight:6}}>СОТРУДНИК</span>
-          <select value={member} onChange={e=>setMember(e.target.value)} style={{...SI,width:"auto",padding:"4px 8px",fontSize:11,display:"inline-block"}}>
+          <select value={member} onChange={e=>setMember(e.target.value)} style={{...SI,width:"auto",padding:"5px 9px",fontSize:12,display:"inline-block"}}>
             <option value="all">Все</option>
             {team.map(u=><option key={u.id} value={u.id}>@{u.name}</option>)}
           </select>
         </div>}
         {showSort&&<div>
           <span style={{...LB,display:"inline",marginRight:6}}>СОРТИРОВКА</span>
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...SI,width:"auto",padding:"4px 8px",fontSize:11,display:"inline-block"}}>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...SI,width:"auto",padding:"5px 9px",fontSize:12,display:"inline-block"}}>
             <option value="default">По умолчанию</option>
             <option value="deadline">По дедлайну</option>
             <option value="project">По проекту</option>
@@ -543,8 +543,8 @@ function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,sho
           </select>
         </div>}
       </div>
-      {onArchiveToggle&&<button onClick={onArchiveToggle} style={{background:showArchived?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"6px 11px",color:showArchived?"#f0eee8":"#4b5563",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>📦 {showArchived?"Скрыть архив":"Архив"}</button>}
-      {onAdd&&<button onClick={onAdd} style={{background:"linear-gradient(135deg,#7c3aed,#ec4899)",border:"none",borderRadius:8,padding:"7px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit",whiteSpace:"nowrap"}}>＋ {addLabel}</button>}
+      {onArchiveToggle&&<button onClick={onArchiveToggle} style={{background:showArchived?"#2a2a35":"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"6px 12px",color:showArchived?"#f0f0f5":"#55556a",cursor:"pointer",fontSize:11,fontFamily:"'Onest',sans-serif",fontWeight:600,transition:"all .15s"}}>📦 {showArchived?"Скрыть архив":"Архив"}</button>}
+      {onAdd&&<button onClick={onAdd} style={{background:"#c8ff57",border:"none",borderRadius:8,padding:"7px 15px",color:"#0f0f12",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Onest',sans-serif",whiteSpace:"nowrap",letterSpacing:".01em",transition:"all .15s"}}>＋ {addLabel}</button>}
     </div>
   );
 }
@@ -585,21 +585,21 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
     </div>
     <Field label="РЕФЕРЕНСЫ">
       <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:5}}>
-        {d.refs.map((r,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 9px"}}>
-          <a href={r} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {r}</a>
-          <button onClick={()=>u("refs",d.refs.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
+        {d.refs.map((r,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:6,padding:"4px 9px"}}>
+          <a href={r} target="_blank" rel="noreferrer" style={{flex:1,fontSize:12,color:"#c8ff57",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>🔗 {r}</a>
+          <button onClick={()=>u("refs",d.refs.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer"}}>×</button>
         </div>)}
       </div>
       <div style={{display:"flex",gap:5}}>
         <input value={newRef} onChange={e=>setNewRef(e.target.value)} placeholder="https://..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&newRef){u("refs",[...d.refs,newRef]);setNewRef("");}}}/>
-        <button onClick={()=>{if(newRef){u("refs",[...d.refs,newRef]);setNewRef("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+        <button onClick={()=>{if(newRef){u("refs",[...d.refs,newRef]);setNewRef("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 13px",color:"#c8ff57",cursor:"pointer",fontSize:18,fontWeight:700}}>+</button>
       </div>
     </Field>
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginBottom:10,fontWeight:700,letterSpacing:".05em"}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
-        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.scriptwriter} onChange={v=>u("scriptwriter",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#c8ff57",fontFamily:"'JetBrains Mono',monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#06d6a0",fontFamily:"'JetBrains Mono',monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.scriptwriter} onChange={v=>u("scriptwriter",v)} team={team}/></div>
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
@@ -624,43 +624,43 @@ function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFn
     <StatusRow statuses={PROD_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
     <Field label="ЛОКАЦИЯ"><input value={d.location} onChange={e=>u("location",e.target.value)} placeholder="Адрес / место" style={SI}/></Field>
     <Field label="ОБОРУДОВАНИЕ">
-      {d.equipment.map((eq,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
+      {d.equipment.map((eq,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
         <span>🎥</span><span style={{flex:1,fontSize:11,color:"#d1d5db"}}>{eq}</span>
-        <button onClick={()=>u("equipment",d.equipment.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
+        <button onClick={()=>u("equipment",d.equipment.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer"}}>×</button>
       </div>)}
       <div style={{display:"flex",gap:5}}>
         <input value={ne} onChange={e=>setNe(e.target.value)} placeholder="Добавить..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&ne){u("equipment",[...d.equipment,ne]);setNe("");}}}/>
-        <button onClick={()=>{if(ne){u("equipment",[...d.equipment,ne]);setNe("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+        <button onClick={()=>{if(ne){u("equipment",[...d.equipment,ne]);setNe("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 13px",color:"#c8ff57",cursor:"pointer",fontSize:18,fontWeight:700}}>+</button>
       </div>
     </Field>
     <Field label="АКТЁРЫ / УЧАСТНИКИ">
       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
-        {d.actors.map((a,i)=><div key={i} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:20,padding:"3px 10px",fontSize:11,color:"#d1d5db",display:"flex",gap:5}}>
-          👤 {a}<button onClick={()=>u("actors",d.actors.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",lineHeight:1}}>×</button>
+        {d.actors.map((a,i)=><div key={i} style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:20,padding:"3px 10px",fontSize:11,color:"#d1d5db",display:"flex",gap:5}}>
+          👤 {a}<button onClick={()=>u("actors",d.actors.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",lineHeight:1}}>×</button>
         </div>)}
       </div>
       <div style={{display:"flex",gap:5}}>
         <input value={na} onChange={e=>setNa(e.target.value)} placeholder="Имя..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&na){u("actors",[...d.actors,na]);setNa("");}}}/>
-        <button onClick={()=>{if(na){u("actors",[...d.actors,na]);setNa("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+        <button onClick={()=>{if(na){u("actors",[...d.actors,na]);setNa("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 13px",color:"#c8ff57",cursor:"pointer",fontSize:18,fontWeight:700}}>+</button>
       </div>
     </Field>
     <Field label="ЧЕК-ЛИСТ">
-      {d.checklist.map(item=><div key={item.id} onClick={()=>u("checklist",d.checklist.map(c=>c.id===item.id?{...c,done:!c.done}:c))} style={{display:"flex",alignItems:"center",gap:7,background:item.done?"#0a1a0a":"#1a1a2e",border:`1px solid ${item.done?"#10b98130":"#2d2d44"}`,borderRadius:7,padding:"5px 9px",cursor:"pointer",marginBottom:3}}>
-        <div style={{width:15,height:15,borderRadius:4,border:`2px solid ${item.done?"#10b981":"#3d3d55"}`,background:item.done?"#10b981":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{item.done&&<span style={{color:"#fff",fontSize:9}}>✓</span>}</div>
-        <span style={{fontSize:11,flex:1,color:item.done?"#10b981":"#d1d5db",textDecoration:item.done?"line-through":"none"}}>{item.text}</span>
-        <button onClick={e=>{e.stopPropagation();u("checklist",d.checklist.filter(c=>c.id!==item.id));}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:11}}>×</button>
+      {d.checklist.map(item=><div key={item.id} onClick={()=>u("checklist",d.checklist.map(c=>c.id===item.id?{...c,done:!c.done}:c))} style={{display:"flex",alignItems:"center",gap:7,background:item.done?"#0a1a0a":"#1a1a20",border:`1px solid ${item.done?"#10b98130":"#2a2a35"}`,borderRadius:7,padding:"5px 9px",cursor:"pointer",marginBottom:3}}>
+        <div style={{width:15,height:15,borderRadius:4,border:`2px solid ${item.done?"#06d6a0":"#3d3d55"}`,background:item.done?"#06d6a0":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{item.done&&<span style={{color:"#fff",fontSize:9}}>✓</span>}</div>
+        <span style={{fontSize:11,flex:1,color:item.done?"#06d6a0":"#d1d5db",textDecoration:item.done?"line-through":"none"}}>{item.text}</span>
+        <button onClick={e=>{e.stopPropagation();u("checklist",d.checklist.filter(c=>c.id!==item.id));}} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:11}}>×</button>
       </div>)}
       <div style={{display:"flex",gap:5}}>
         <input value={nc} onChange={e=>setNc(e.target.value)} placeholder="Новый пункт..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&nc){u("checklist",[...d.checklist,{id:genId(),text:nc,done:false}]);setNc("");}}}/>
-        <button onClick={()=>{if(nc){u("checklist",[...d.checklist,{id:genId(),text:nc,done:false}]);setNc("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+        <button onClick={()=>{if(nc){u("checklist",[...d.checklist,{id:genId(),text:nc,done:false}]);setNc("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 13px",color:"#c8ff57",cursor:"pointer",fontSize:18,fontWeight:700}}>+</button>
       </div>
-      <div style={{fontSize:9,color:"#6b7280",fontFamily:"monospace",marginTop:3}}>{d.checklist.filter(c=>c.done).length}/{d.checklist.length} выполнено</div>
+      <div style={{fontSize:9,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginTop:3}}>{d.checklist.filter(c=>c.done).length}/{d.checklist.length} выполнено</div>
     </Field>
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginBottom:10,fontWeight:700,letterSpacing:".05em"}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.customer} onChange={v=>u("customer",v)} team={team}/></div>
-        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.operator} onChange={v=>u("operator",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#c8ff57",fontFamily:"'JetBrains Mono',monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.customer} onChange={v=>u("customer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#06d6a0",fontFamily:"'JetBrains Mono',monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.operator} onChange={v=>u("operator",v)} team={team}/></div>
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
@@ -678,13 +678,13 @@ function FinalFileOrLink({d,u,fileRef}){
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
       <span style={LB}>ФИНАЛЬНОЕ ВИДЕО</span>
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
-        <button onClick={()=>setMode("link")} style={{background:mode==="link"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="link"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>🔗 Ссылка</button>
-        <button onClick={()=>setMode("file")} style={{background:mode==="file"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="file"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>📁 Файл</button>
+        <button onClick={()=>setMode("link")} style={{background:mode==="link"?"#32323e":"transparent",border:"1px solid #2a2a35",borderRadius:5,padding:"2px 9px",color:mode==="link"?"#f0f0f5":"#8b8b9e",cursor:"pointer",fontSize:10}}>🔗 Ссылка</button>
+        <button onClick={()=>setMode("file")} style={{background:mode==="file"?"#32323e":"transparent",border:"1px solid #2a2a35",borderRadius:5,padding:"2px 9px",color:mode==="file"?"#f0f0f5":"#8b8b9e",cursor:"pointer",fontSize:10}}>📁 Файл</button>
       </div>
     </div>
     {mode==="link"&&<div style={{display:"flex",gap:6,alignItems:"center"}}>
       <input value={d.final_link||""} onChange={e=>u("final_link",e.target.value)} placeholder="https://drive.google.com/..." style={{...SI,flex:1}}/>
-      {d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"5px 12px",borderRadius:6,textDecoration:"none"}}>↓ Открыть</a>}
+      {d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#4cc9f0",color:"#fff",fontSize:10,fontWeight:700,padding:"5px 12px",borderRadius:6,textDecoration:"none"}}>↓ Открыть</a>}
     </div>}
     {mode==="file"&&<>
       <input ref={fRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={async e=>{
@@ -704,18 +704,18 @@ function FinalFileOrLink({d,u,fileRef}){
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,overflow:"hidden"}}>
             <div style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
               <span>🎬</span>
-              <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
+              <span style={{flex:1,fontSize:11,color:"#06d6a0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
               {d.final_file_url
-                ?<a href={d.final_file_url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
-                :<span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
-              <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
+                ?<a href={d.final_file_url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#4cc9f0",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
+                :<span style={{fontSize:9,color:"#ffd166"}}>⏳</span>}
+              <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:16}}>×</button>
             </div>
             {d.final_file_url&&/\.(mp4|mov|webm|avi|mkv)$/i.test(d.final_file_name)&&
               <video controls style={{width:"100%",maxHeight:320,display:"block",background:"#000"}} preload="metadata">
                 <source src={d.final_file_url}/>
               </video>}
           </div>
-        :<button onClick={()=>fRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:uploading?"#f59e0b":"#9ca3af",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 Загрузить финальное видео"}</button>}
+        :<button onClick={()=>fRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #32323e",borderRadius:8,padding:"11px",color:uploading?"#ffd166":"#8b8b9e",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 Загрузить финальное видео"}</button>}
     </>}
   </div>;
 }
@@ -769,28 +769,28 @@ function SourceInputs({d, u}){
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
       <span style={LB}>ИСХОДНИК (ВИДЕО)</span>
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
-        <button onClick={()=>setMode("file")} style={{background:mode==="file"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="file"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>📁 Файл</button>
-        <button onClick={()=>setMode("link")} style={{background:mode==="link"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="link"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>🔗 Ссылка</button>
+        <button onClick={()=>setMode("file")} style={{background:mode==="file"?"#32323e":"transparent",border:"1px solid #2a2a35",borderRadius:5,padding:"2px 9px",color:mode==="file"?"#f0f0f5":"#8b8b9e",cursor:"pointer",fontSize:10}}>📁 Файл</button>
+        <button onClick={()=>setMode("link")} style={{background:mode==="link"?"#32323e":"transparent",border:"1px solid #2a2a35",borderRadius:5,padding:"2px 9px",color:mode==="link"?"#f0f0f5":"#8b8b9e",cursor:"pointer",fontSize:10}}>🔗 Ссылка</button>
       </div>
     </div>
     {/* Existing sources */}
     {sources.map((s,i)=>(
       <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:7,padding:"6px 10px",marginBottom:5}}>
         <span>{s.url&&!s.url.startsWith("http")?"📁":"🔗"}</span>
-        <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
-        {s.url&&<a href={s.url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none"}}>↓</a>}
-        <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
+        <span style={{flex:1,fontSize:11,color:"#06d6a0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+        {s.url&&<a href={s.url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#4cc9f0",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none"}}>↓</a>}
+        <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:14}}>×</button>
       </div>
     ))}
     {/* Add new */}
     {mode==="file"&&<>
       <input ref={fileRef} type="file" accept="video/*,audio/*" multiple style={{display:"none"}} onChange={addFile}/>
-      <button onClick={()=>fileRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:uploading?"#f59e0b":"#9ca3af",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 "+ (sources.length?"+ Ещё файл":"Загрузить исходник")}</button>
-      {uploadErr&&<div style={{fontSize:10,color:"#ef4444",marginTop:4}}>{uploadErr}</div>}
+      <button onClick={()=>fileRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #32323e",borderRadius:8,padding:"10px",color:uploading?"#ffd166":"#8b8b9e",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 "+ (sources.length?"+ Ещё файл":"Загрузить исходник")}</button>
+      {uploadErr&&<div style={{fontSize:10,color:"#ff4d6d",marginTop:4}}>{uploadErr}</div>}
     </>}
     {mode==="link"&&<div style={{display:"flex",gap:6,marginTop:4}}>
       <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://drive.google.com/..." onKeyDown={e=>e.key==="Enter"&&addLink()} style={{...SI,flex:1,fontSize:11}}/>
-      <button onClick={addLink} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 14px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+      <button onClick={addLink} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 14px",color:"#c8ff57",cursor:"pointer",fontSize:16}}>+</button>
     </div>}
   </div>;
 }
@@ -848,23 +848,23 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <span style={LB}>ТРАНСКРИПЦИЯ (Whisper AI)</span>
-        <Btn onClick={transcribe} disabled={tr||(!d.source_name&&!(d.sources&&d.sources.length))} color="#7c3aed">{tr?"⏳ Транскрибирую...":"🎙️ Транскрибировать"}</Btn>
+        <Btn onClick={transcribe} disabled={tr||(!d.source_name&&!(d.sources&&d.sources.length))} color="#c8ff57">{tr?"⏳ Транскрибирую...":"🎙️ Транскрибировать"}</Btn>
       </div>
       <textarea value={d.transcript} onChange={e=>u("transcript",e.target.value)} placeholder="Загрузите исходник и нажмите кнопку..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/>
     </div>
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <span style={LB}>ИДЕИ ДЛЯ БИРОЛОВ (GPT-4)</span>
-        <Btn onClick={genBirolls} disabled={gb||!d.transcript} color="#10b981">{gb?"⏳ Генерирую...":"✨ Сгенерировать"}</Btn>
+        <Btn onClick={genBirolls} disabled={gb||!d.transcript} color="#06d6a0">{gb?"⏳ Генерирую...":"✨ Сгенерировать"}</Btn>
       </div>
-      <textarea value={d.birolls} onChange={e=>u("birolls",e.target.value)} placeholder="Появятся после транскрипции..." style={{...SI,minHeight:90,resize:"vertical",fontFamily:"monospace",fontSize:11}}/>
+      <textarea value={d.birolls} onChange={e=>u("birolls",e.target.value)} placeholder="Появятся после транскрипции..." style={{...SI,minHeight:90,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",fontSize:11}}/>
     </div>
     <FinalFileOrLink d={d} u={u} fileRef={fileRef}/>
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginBottom:10,fontWeight:700,letterSpacing:".05em"}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
-        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#c8ff57",fontFamily:"'JetBrains Mono',monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#06d6a0",fontFamily:"'JetBrains Mono',monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
@@ -888,23 +888,23 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
     </div>
     <Field label="ИСХОДНИКИ (ССЫЛКИ)">
-      {d.source_links.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
-        <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
-        <button onClick={()=>u("source_links",d.source_links.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
+      {d.source_links.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
+        <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:12,color:"#c8ff57",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>🔗 {l}</a>
+        <button onClick={()=>u("source_links",d.source_links.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer"}}>×</button>
       </div>)}
       <div style={{display:"flex",gap:5}}>
         <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&nl){u("source_links",[...d.source_links,nl]);setNl("");}}}/>
-        <button onClick={()=>{if(nl){u("source_links",[...d.source_links,nl]);setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
+        <button onClick={()=>{if(nl){u("source_links",[...d.source_links,nl]);setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 13px",color:"#c8ff57",cursor:"pointer",fontSize:18,fontWeight:700}}>+</button>
       </div>
     </Field>
     <Field label="КОЛ-ВО ИТОГОВЫХ ВИДЕО"><input type="number" min="1" value={d.video_count||1} onChange={e=>u("video_count",parseInt(e.target.value)||1)} style={{...SI,width:100}}/></Field>
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Подробное ТЗ..." style={{...SI,minHeight:100,resize:"vertical",lineHeight:1.5}}/></Field>
     <FinalFileOrLink d={d} u={u} fileRef={fileRef}/>
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginBottom:10,fontWeight:700,letterSpacing:".05em"}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
-        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#c8ff57",fontFamily:"'JetBrains Mono',monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#06d6a0",fontFamily:"'JetBrains Mono',monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
@@ -930,13 +930,13 @@ function SlideImageUpload({slide,idx,onUploaded}){
     <input ref={ref} type="file" accept="image/*" style={{display:"none"}} onChange={handle}/>
     {slide.img
       ?<div style={{position:"relative",display:"inline-block",marginTop:4}}>
-          <img src={slide.img} alt="" style={{maxWidth:"100%",maxHeight:120,borderRadius:6,border:"1px solid #2d2d44",display:"block"}}/>
+          <img src={slide.img} alt="" style={{maxWidth:"100%",maxHeight:120,borderRadius:6,border:"1px solid #2a2a35",display:"block"}}/>
           <div style={{display:"flex",gap:4,marginTop:3}}>
-            <a href={slide.img} download={slide.img_name||"slide.jpg"} style={{fontSize:9,color:"#06b6d4",textDecoration:"none"}}>⬇ Скачать</a>
-            <button onClick={()=>onUploaded("","")} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:9}}>× Удалить</button>
+            <a href={slide.img} download={slide.img_name||"slide.jpg"} style={{fontSize:9,color:"#4cc9f0",textDecoration:"none"}}>⬇ Скачать</a>
+            <button onClick={()=>onUploaded("","")} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:9}}>× Удалить</button>
           </div>
         </div>
-      :<button onClick={()=>ref.current?.click()} disabled={loading} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:5,padding:"3px 10px",color:loading?"#f59e0b":"#4b5563",cursor:"pointer",fontSize:9,marginTop:3}}>{loading?"⏳ Загрузка...":"🖼 Загрузить изображение"}</button>}
+      :<button onClick={()=>ref.current?.click()} disabled={loading} style={{background:"transparent",border:"1px dashed #32323e",borderRadius:5,padding:"3px 10px",color:loading?"#ffd166":"#55556a",cursor:"pointer",fontSize:9,marginTop:3}}>{loading?"⏳ Загрузка...":"🖼 Загрузить изображение"}</button>}
   </div>;
 }
 
@@ -957,27 +957,27 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
     <Field label="СЛАЙДЫ КАРУСЕЛИ">
       <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
         {d.slides.map((sl,i)=>(
-          <div key={sl.id} style={{display:"flex",gap:6,alignItems:"flex-start",background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 10px"}}>
-            <div style={{width:24,height:24,borderRadius:6,background:"#2d2d44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#9ca3af",flexShrink:0}}>{i+1}</div>
+          <div key={sl.id} style={{display:"flex",gap:6,alignItems:"flex-start",background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:8,padding:"8px 10px"}}>
+            <div style={{width:24,height:24,borderRadius:6,background:"#2a2a35",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#8b8b9e",flexShrink:0}}>{i+1}</div>
             <div style={{flex:1}}>
               <textarea value={sl.text} onChange={e=>u("slides",d.slides.map((s,j)=>j===i?{...s,text:e.target.value}:s))} placeholder={`Текст слайда ${i+1}...`} style={{...SI,minHeight:40,resize:"vertical",fontSize:11,lineHeight:1.4}}/>
               
               <SlideImageUpload slide={sl} idx={i} onUploaded={(url,name)=>u("slides",d.slides.map((s,j)=>j===i?{...s,img:url,img_name:name}:s))}/>
             </div>
-            <button onClick={()=>u("slides",d.slides.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14,marginTop:2}}>×</button>
+            <button onClick={()=>u("slides",d.slides.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:14,marginTop:2}}>×</button>
           </div>
         ))}
       </div>
-      <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:"",img_name:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
+      <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:"",img_name:""}])} style={{background:"transparent",border:"1px dashed #32323e",borderRadius:8,padding:"8px",color:"#55556a",cursor:"pointer",fontSize:12,width:"100%",fontFamily:"'Onest',sans-serif",fontWeight:500,transition:"all .15s"}}>+ Добавить слайд</button>
       
     </Field>
     <Field label="ТЗ ДЛЯ ДИЗАЙНЕРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Стиль, цвета, шрифты, особенности оформления..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/></Field>
-    <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+    <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#4cc9f0",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginBottom:10,fontWeight:700,letterSpacing:".05em"}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
-        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.designer} onChange={v=>u("designer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#c8ff57",fontFamily:"'JetBrains Mono',monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#06d6a0",fontFamily:"'JetBrains Mono',monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.designer} onChange={v=>u("designer",v)} team={team}/></div>
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
@@ -1089,11 +1089,11 @@ function PmpPublishPanel({d, u, projects}){
   return (
     <div style={{background:"#0a0f1a",border:"1px solid #1e3a5f",borderRadius:10,overflow:"hidden"}}>
       <button onClick={()=>{ setOpen(p=>!p); if(!open&&!pmpProjects.length) loadProjects(); }}
-        style={{width:"100%",background:"transparent",border:"none",padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",color:"#f0eee8"}}>
+        style={{width:"100%",background:"transparent",border:"none",padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",color:"#f0f0f5"}}>
         <span style={{fontSize:13}}>📡</span>
         <span style={{fontSize:11,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
-        {d.pmp_published && <span style={{fontSize:9,background:"#10b98120",color:"#10b981",border:"1px solid #10b98140",borderRadius:10,padding:"1px 8px"}}>✅ опубликовано</span>}
-        <span style={{marginLeft:"auto",color:"#4b5563",fontSize:12}}>{open?"▲":"▼"}</span>
+        {d.pmp_published && <span style={{fontSize:9,background:"rgba(6,214,160,.12)",color:"#06d6a0",border:"1px solid #10b98140",borderRadius:10,padding:"1px 8px"}}>✅ опубликовано</span>}
+        <span style={{marginLeft:"auto",color:"#55556a",fontSize:12}}>{open?"▲":"▼"}</span>
       </button>
 
       {open && <div style={{padding:"12px 14px",borderTop:"1px solid #1e3a5f",display:"flex",flexDirection:"column",gap:10}}>
@@ -1102,7 +1102,7 @@ function PmpPublishPanel({d, u, projects}){
         <Field label="PMP PROJECT ID (из URL проекта в postmypost.io)">
           <input value={pmpProjId} onChange={e=>u("pmp_project_id",e.target.value)}
             onBlur={e=>{ if(e.target.value) loadChannels(e.target.value); }}
-            placeholder={pmpProjId||"123456"} style={{...SI,fontFamily:"monospace"}}/>
+            placeholder={pmpProjId||"123456"} style={{...SI,fontFamily:"'JetBrains Mono',monospace"}}/>
         </Field>
 
         {/* PMP Projects dropdown (optional — auto-fill project id) */}
@@ -1121,30 +1121,30 @@ function PmpPublishPanel({d, u, projects}){
               const icon = PLATFORM_ICONS[ch.platform?.toLowerCase()] || "📲";
               const sel = selChannels.includes(ch.id);
               return <div key={ch.id} onClick={()=>toggleCh(ch.id)}
-                style={{display:"flex",alignItems:"center",gap:8,background:sel?"#1e3a5f":"#111118",border:`1px solid ${sel?"#38bdf8":"#2d2d44"}`,borderRadius:7,padding:"7px 10px",cursor:"pointer"}}>
+                style={{display:"flex",alignItems:"center",gap:8,background:sel?"#1e3a5f":"#1e1e26",border:`1px solid ${sel?"#38bdf8":"#2a2a35"}`,borderRadius:7,padding:"7px 10px",cursor:"pointer"}}>
                 <span>{icon}</span>
-                <span style={{fontSize:11,color:sel?"#38bdf8":"#9ca3af",flex:1}}>{ch.name||ch.username||ch.id}</span>
-                <span style={{fontSize:9,color:"#6b7280",fontFamily:"monospace"}}>{ch.platform}</span>
-                <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?"#38bdf8":"#4b5563"}`,background:sel?"#38bdf8":"transparent",flexShrink:0}}/>
+                <span style={{fontSize:11,color:sel?"#38bdf8":"#8b8b9e",flex:1}}>{ch.name||ch.username||ch.id}</span>
+                <span style={{fontSize:9,color:"#55556a",fontFamily:"'JetBrains Mono',monospace"}}>{ch.platform}</span>
+                <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?"#38bdf8":"#55556a"}`,background:sel?"#38bdf8":"transparent",flexShrink:0}}/>
               </div>;
             })}
           </div>
         </div>}
 
         {!channels.length && pmpProjId && !loading && (
-          <button onClick={()=>loadChannels(pmpProjId)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:7,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>
+          <button onClick={()=>loadChannels(pmpProjId)} style={{background:"transparent",border:"1px dashed #32323e",borderRadius:7,padding:"7px",color:"#8b8b9e",cursor:"pointer",fontSize:11}}>
             🔄 Загрузить каналы
           </button>
         )}
 
         {/* Status / Error */}
-        {loading && <div style={{fontSize:11,color:"#38bdf8",fontFamily:"monospace"}}>⏳ {status||"Загрузка..."}</div>}
-        {!loading && status && <div style={{fontSize:11,color:"#10b981",fontFamily:"monospace"}}>{status}</div>}
-        {error && <div style={{fontSize:11,color:"#ef4444",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,padding:"6px 10px"}}>{error}</div>}
+        {loading && <div style={{fontSize:11,color:"#38bdf8",fontFamily:"'JetBrains Mono',monospace"}}>⏳ {status||"Загрузка..."}</div>}
+        {!loading && status && <div style={{fontSize:11,color:"#06d6a0",fontFamily:"'JetBrains Mono',monospace"}}>{status}</div>}
+        {error && <div style={{fontSize:11,color:"#ff4d6d",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,padding:"6px 10px"}}>{error}</div>}
 
         {/* Publish button */}
         <button onClick={publish} disabled={loading||!selChannels.length}
-          style={{background:loading||!selChannels.length?"#1a1a2e":"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:8,padding:"10px",color:loading||!selChannels.length?"#4b5563":"#fff",cursor:loading||!selChannels.length?"not-allowed":"pointer",fontSize:12,fontWeight:700}}>
+          style={{background:loading||!selChannels.length?"#1a1a20":"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:8,padding:"10px",color:loading||!selChannels.length?"#55556a":"#fff",cursor:loading||!selChannels.length?"not-allowed":"pointer",fontSize:12,fontWeight:700}}>
           {loading?"⏳ Публикую...":"🚀 Опубликовать в Post My Post"}
         </button>
       </div>}
@@ -1183,27 +1183,27 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <span style={LB}>ПОДПИСЬ / CAPTION</span>
-        <Btn onClick={genCap} disabled={aiCap} color="#10b981">{aiCap?"⏳ Генерирую...":"✨ AI caption"}</Btn>
+        <Btn onClick={genCap} disabled={aiCap} color="#06d6a0">{aiCap?"⏳ Генерирую...":"✨ AI caption"}</Btn>
       </div>
       <textarea value={d.caption} onChange={e=>u("caption",e.target.value)} placeholder="Текст публикации..." style={{...SI,minHeight:90,resize:"vertical",lineHeight:1.5}}/>
-      <div style={{fontSize:9,color:"#6b7280",marginTop:2,fontFamily:"monospace"}}>{d.caption.length} символов</div>
+      <div style={{fontSize:9,color:"#55556a",marginTop:2,fontFamily:"'JetBrains Mono',monospace"}}>{d.caption.length} символов</div>
     </div>
-    <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"monospace",fontSize:11}}/></Field>
+    <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",fontSize:11}}/></Field>
     <Field label="ФАЙЛ / МЕДИА">
       <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files[0];if(f){u("file_name",f.name);const fd=new FormData();fd.append("file",f);const r=await fetch("/api/upload",{method:"POST",body:fd}).catch(()=>null);if(r?.ok){const upD=await r.json();const k=upD.key||"";u("file_url",k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upD.url);}}}}/>
       {d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-            <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.file_name}</span>
-            {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700}}>↓</a>}
-            <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
+            <span>📎</span><span style={{fontSize:12,color:"#06d6a0",flex:1}}>{d.file_name}</span>
+            {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#4cc9f0",textDecoration:"none",fontWeight:700}}>↓</a>}
+            <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer"}}>×</button>
           </div>
-        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
+        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #32323e",borderRadius:8,padding:"10px",color:"#8b8b9e",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
     </Field>
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginBottom:10,fontWeight:700,letterSpacing:".05em"}}>УЧАСТНИКИ</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div><div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
-        <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#c8ff57",fontFamily:"'JetBrains Mono',monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div><TeamSelect label="" value={d.producer} onChange={v=>u("producer",v)} team={team}/></div>
+        <div><div style={{fontSize:9,color:"#06d6a0",fontFamily:"'JetBrains Mono',monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
       </div>
     </div>
     <PmpPublishPanel d={d} u={u} projects={projects}/>
@@ -1234,25 +1234,25 @@ function UnreadMentions({allChats,projects,team,me,onOpenTask}){
     if(!repliedAfter) unread.push(m);
   });
   if(unread.length===0) return (
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
-      <div style={{fontSize:10,fontWeight:700,color:"#f97316",fontFamily:"monospace",marginBottom:8}}>💬 УПОМИНАНИЯ</div>
-      <div style={{textAlign:"center",color:"#9ca3af",fontSize:11,padding:"16px 0"}}>Нет непрочитанных упоминаний</div>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"14px"}}>
+      <div style={{fontSize:10,fontWeight:700,color:"#ff8c42",fontFamily:"'JetBrains Mono',monospace",marginBottom:8}}>💬 УПОМИНАНИЯ</div>
+      <div style={{textAlign:"center",color:"#8b8b9e",fontSize:11,padding:"16px 0"}}>Нет непрочитанных упоминаний</div>
     </div>
   );
   return(
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,padding:"14px"}}>
-      <div style={{fontSize:10,fontWeight:700,color:"#f97316",fontFamily:"monospace",marginBottom:10}}>💬 УПОМИНАНИЯ <span style={{fontSize:10,background:"#f97316",color:"#fff",borderRadius:10,padding:"1px 7px",marginLeft:5}}>{unread.length}</span></div>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,padding:"14px"}}>
+      <div style={{fontSize:10,fontWeight:700,color:"#ff8c42",fontFamily:"'JetBrains Mono',monospace",marginBottom:10}}>💬 УПОМИНАНИЯ <span style={{fontSize:10,background:"#ff8c42",color:"#fff",borderRadius:10,padding:"1px 7px",marginLeft:5}}>{unread.length}</span></div>
       <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:300,overflowY:"auto"}}>
         {unread.map((m,i)=>{
           const proj=projOf(m.taskProject,projects);
           const sender=team.find(x=>x.id===m.user);
-          return <div key={i} onClick={()=>onOpenTask&&onOpenTask(m.taskType,m.taskItem)} style={{background:"#111118",border:"1px solid #f9741620",borderLeft:"3px solid #f97316",borderRadius:8,padding:"8px 11px",cursor:"pointer"}}
-            onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
+          return <div key={i} onClick={()=>onOpenTask&&onOpenTask(m.taskType,m.taskItem)} style={{background:"#1e1e26",border:"1px solid #f9741620",borderLeft:"3px solid #f97316",borderRadius:8,padding:"8px 11px",cursor:"pointer"}}
+            onMouseEnter={e=>e.currentTarget.style.background="#23232c"} onMouseLeave={e=>e.currentTarget.style.background="#1e1e26"}>
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
-              <div style={{width:16,height:16,borderRadius:"50%",background:"#374151",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#fff"}}>{(sender?.name||"?")[0]}</div>
-              <span style={{fontSize:10,fontWeight:600,color:"#f0eee8"}}>@{sender?.name||"?"}</span>
-              <span style={{fontSize:9,color:"#9ca3af",marginLeft:"auto"}}>{proj.label}</span>
-              <button onClick={e=>{e.stopPropagation();setDismissed(p=>[...p,m.id]);}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:10,padding:"0 2px"}}>✕</button>
+              <div style={{width:16,height:16,borderRadius:"50%",background:"#32323e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#fff"}}>{(sender?.name||"?")[0]}</div>
+              <span style={{fontSize:10,fontWeight:600,color:"#f0f0f5"}}>@{sender?.name||"?"}</span>
+              <span style={{fontSize:9,color:"#8b8b9e",marginLeft:"auto"}}>{proj.label}</span>
+              <button onClick={e=>{e.stopPropagation();setDismissed(p=>[...p,m.id]);}} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:10,padding:"0 2px"}}>✕</button>
             </div>
             <div style={{fontSize:11,color:"#d1d5db",lineHeight:1.4}}>{m.text}</div>
             <div style={{fontSize:8,color:"#8b99a8",marginTop:3}}>в задаче «{m.taskTitle}»</div>
@@ -1306,7 +1306,7 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
   };
   const statusColor = t => {
     const allS = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
-    return allS.find(s=>s.id===t.status)?.c || "#6b7280";
+    return allS.find(s=>s.id===t.status)?.c || "#55556a";
   };
   const statusLabel = t => {
     const allS = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
@@ -1335,16 +1335,16 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
     const cust = custId ? team.find(t=>t.id===custId) : null;
     return (
       <div onClick={()=>onOpenTask&&onOpenTask(typeOf(item),item)}
-        style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:8,padding:"9px 11px",marginBottom:6,cursor:"pointer"}}
-        onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
-        onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
-        <div style={{fontWeight:700,fontSize:12,marginBottom:5,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+        style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:8,padding:"9px 11px",marginBottom:6,cursor:"pointer"}}
+        onMouseEnter={e=>e.currentTarget.style.background="#23232c"}
+        onMouseLeave={e=>e.currentTarget.style.background="#1e1e26"}>
+        <div style={{fontWeight:700,fontSize:12,marginBottom:5,color:"#f0f0f5"}}>{item.title||"Без названия"}</div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
-          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"monospace",background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44"}}>{tl}</span>
-          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"monospace",background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44"}}>{proj.label}</span>
-          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"monospace",background:sc+"20",color:sc,border:`1px solid ${sc}40`}}>{sl}</span>
+          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"'JetBrains Mono',monospace",background:"#1a1a20",color:"#8b8b9e",border:"1px solid #2a2a35"}}>{tl}</span>
+          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"'JetBrains Mono',monospace",background:"#1a1a20",color:"#8b8b9e",border:"1px solid #2a2a35"}}>{proj.label}</span>
+          <span style={{fontSize:9,padding:"1px 7px",borderRadius:10,fontFamily:"'JetBrains Mono',monospace",background:sc+"20",color:sc,border:`1px solid ${sc}40`}}>{sl}</span>
         </div>
-        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",display:"flex",gap:10,flexWrap:"wrap"}}>
+        <div style={{fontSize:9,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",display:"flex",gap:10,flexWrap:"wrap"}}>
           {cust&&<span>заказчик: {cust.name}</span>}
           {exec&&exec.id!==cust?.id&&<span>исполнитель: {exec.name}</span>}
           {date&&<span>📅 {date}</span>}
@@ -1358,14 +1358,14 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
 
       {/* Фильтр по сотруднику */}
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,color:"#6b7280",fontFamily:"monospace",fontWeight:700}}>СОТРУДНИК</span>
+        <span style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>СОТРУДНИК</span>
         <button onClick={()=>setMemberFilter("all")}
-          style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",background:memberFilter==="all"?"#1a1a2e":"transparent",border:`1px solid ${memberFilter==="all"?"#4b5563":"#2d2d44"}`,color:memberFilter==="all"?"#f0eee8":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:memberFilter==="all"?700:400}}>
+          style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",background:memberFilter==="all"?"#1a1a20":"transparent",border:`1px solid ${memberFilter==="all"?"#55556a":"#2a2a35"}`,color:memberFilter==="all"?"#f0f0f5":"#55556a",fontSize:11,fontFamily:"'Onest',sans-serif",fontWeight:memberFilter==="all"?700:400}}>
           Все
         </button>
         {team.map(m=>(
           <button key={m.id} onClick={()=>setMemberFilter(m.id)}
-            style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",background:memberFilter===m.id?"#1a1a2e":"transparent",border:`1px solid ${memberFilter===m.id?"#4b5563":"#2d2d44"}`,color:memberFilter===m.id?"#f0eee8":"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:memberFilter===m.id?700:400}}>
+            style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",background:memberFilter===m.id?"#1a1a20":"transparent",border:`1px solid ${memberFilter===m.id?"#55556a":"#2a2a35"}`,color:memberFilter===m.id?"#f0f0f5":"#55556a",fontSize:11,fontFamily:"'Onest',sans-serif",fontWeight:memberFilter===m.id?700:400}}>
             {m.name}
           </button>
         ))}
@@ -1374,17 +1374,17 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
       {/* Две колонки */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         <div>
-          <div style={{fontSize:10,fontWeight:800,fontFamily:"monospace",color:"#9ca3af",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #1e1e2e"}}>
+          <div style={{fontSize:10,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:"#8b8b9e",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #2a2a35"}}>
             ИСПОЛНИТЕЛЬ — {execList.length} задач{execList.length===1?"а":execList.length<5?"и":""}
           </div>
-          {execList.length===0&&<div style={{fontSize:11,color:"#4b5563",textAlign:"center",padding:"20px 0"}}>Нет задач</div>}
+          {execList.length===0&&<div style={{fontSize:11,color:"#55556a",textAlign:"center",padding:"20px 0"}}>Нет задач</div>}
           {execList.map(item=><TaskCard key={item.id} item={item}/>)}
         </div>
         <div>
-          <div style={{fontSize:10,fontWeight:800,fontFamily:"monospace",color:"#9ca3af",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #1e1e2e"}}>
+          <div style={{fontSize:10,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:"#8b8b9e",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #2a2a35"}}>
             ЗАКАЗЧИК — {custList.length} задач{custList.length===1?"а":custList.length<5?"и":""}
           </div>
-          {custList.length===0&&<div style={{fontSize:11,color:"#4b5563",textAlign:"center",padding:"20px 0"}}>Нет задач</div>}
+          {custList.length===0&&<div style={{fontSize:11,color:"#55556a",textAlign:"center",padding:"20px 0"}}>Нет задач</div>}
           {custList.map(item=><TaskCard key={item.id} item={item}/>)}
         </div>
       </div>
@@ -1453,35 +1453,35 @@ function AnalyticsView({pubItems,projects}){
   const totalAll = published.length;
   const totalKpi = projects.filter(p=>!p.archived).reduce((a,p)=>a+(parseInt(getKpi(p.id))||0),0);
 
-  const pctColor = p => p>=100?"#10b981":p>=60?"#f59e0b":"#ef4444";
+  const pctColor = p => p>=100?"#06d6a0":p>=60?"#ffd166":"#ff4d6d";
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
 
       {/* Фильтр месяца */}
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,color:"#6b7280",fontFamily:"monospace",fontWeight:700}}>ПЕРИОД</span>
+        <span style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>ПЕРИОД</span>
         <select value={`${selYear}-${selMonth}`} onChange={e=>{const[y,m]=e.target.value.split("-");setSelYear(Number(y));setSelMonth(Number(m));}}
-          style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"5px 10px",borderRadius:7,fontSize:12,fontFamily:"inherit"}}>
+          style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",padding:"5px 10px",borderRadius:7,fontSize:12,fontFamily:"'Onest',sans-serif"}}>
           {months.map(({m,y,label})=><option key={`${y}-${m}`} value={`${y}-${m}`}>{label}</option>)}
         </select>
-        <span style={{fontSize:10,color:"#4b5563",fontFamily:"monospace"}}>{totalAll} публикаций за период</span>
+        <span style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace"}}>{totalAll} публикаций за период</span>
       </div>
 
       {/* Таблица */}
-      <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,overflow:"hidden"}}>
-        <div style={{fontSize:10,fontWeight:800,color:"#6b7280",fontFamily:"monospace",padding:"12px 16px",borderBottom:"1px solid #1e1e2e",letterSpacing:"1px"}}>
+      <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,overflow:"hidden"}}>
+        <div style={{fontSize:10,fontWeight:800,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",padding:"12px 16px",borderBottom:"1px solid #2a2a35",letterSpacing:"1px"}}>
           ПУБЛИКАЦИИ ПО ПРОЕКТАМ
         </div>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead>
-            <tr style={{background:"#0a0a0f"}}>
-              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>ПРОЕКТ</th>
-              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>🎬 ВИДЕО / РИЛС</th>
-              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>🖼 КАРУСЕЛЬ</th>
-              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>ВСЕГО</th>
-              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>KPI ПЛАН</th>
-              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"monospace",color:"#4b5563",fontWeight:700,borderBottom:"1px solid #1e1e2e"}}>ВЫПОЛНЕНИЕ</th>
+            <tr style={{background:"#0f0f12"}}>
+              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",fontWeight:700,borderBottom:"1px solid #2a2a35"}}>ПРОЕКТ</th>
+              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",fontWeight:700,borderBottom:"1px solid #2a2a35"}}>🎬 ВИДЕО / РИЛС</th>
+              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",fontWeight:700,borderBottom:"1px solid #2a2a35"}}>🖼 КАРУСЕЛЬ</th>
+              <th style={{padding:"8px 16px",textAlign:"center",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",fontWeight:700,borderBottom:"1px solid #2a2a35"}}>ВСЕГО</th>
+              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",fontWeight:700,borderBottom:"1px solid #2a2a35"}}>KPI ПЛАН</th>
+              <th style={{padding:"8px 16px",textAlign:"left",fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",fontWeight:700,borderBottom:"1px solid #2a2a35"}}>ВЫПОЛНЕНИЕ</th>
             </tr>
           </thead>
           <tbody>
@@ -1494,53 +1494,53 @@ function AnalyticsView({pubItems,projects}){
               const pc = pctColor(pct);
               return (
                 <tr key={proj.id} style={{borderBottom:"1px solid #0d0d16"}}
-                  onMouseEnter={e=>{Array.from(e.currentTarget.cells).forEach(c=>c.style.background="#111118");}}
+                  onMouseEnter={e=>{Array.from(e.currentTarget.cells).forEach(c=>c.style.background="#1e1e26");}}
                   onMouseLeave={e=>{Array.from(e.currentTarget.cells).forEach(c=>c.style.background="");}}>
                   <td style={{padding:"10px 16px",color:"#d1d5db"}}>{proj.label}</td>
                   <td style={{padding:"10px 16px",textAlign:"center"}}>
-                    <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:v>0?"#f0eee8":"#2d2d44"}}>{v}</span>
+                    <span style={{fontSize:20,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:v>0?"#f0f0f5":"#2a2a35"}}>{v}</span>
                   </td>
                   <td style={{padding:"10px 16px",textAlign:"center"}}>
-                    <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:c>0?"#f0eee8":"#2d2d44"}}>{c}</span>
+                    <span style={{fontSize:20,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:c>0?"#f0f0f5":"#2a2a35"}}>{c}</span>
                   </td>
                   <td style={{padding:"10px 16px",textAlign:"center"}}>
-                    <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:tot>0?"#f0eee8":"#2d2d44"}}>{tot}</span>
+                    <span style={{fontSize:20,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:tot>0?"#f0f0f5":"#2a2a35"}}>{tot}</span>
                   </td>
                   <td style={{padding:"10px 16px"}}>
                     <input type="number" min="0" value={getKpi(proj.id)} onChange={e=>setKpi(proj.id, e.target.value)}
                       placeholder="—"
-                      style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"4px 8px",borderRadius:5,fontSize:12,width:60,textAlign:"center",fontFamily:"monospace",outline:"none"}}/>
+                      style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",padding:"4px 8px",borderRadius:5,fontSize:12,width:60,textAlign:"center",fontFamily:"'JetBrains Mono',monospace",outline:"none"}}/>
                   </td>
                   <td style={{padding:"10px 16px"}}>
                     {kpi>0?(
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{flex:1,height:5,background:"#1a1a2e",borderRadius:3,overflow:"hidden",minWidth:60}}>
+                        <div style={{flex:1,height:5,background:"#1a1a20",borderRadius:3,overflow:"hidden",minWidth:60}}>
                           <div style={{width:pct+"%",height:"100%",background:pc,borderRadius:3,transition:"width 0.3s"}}/>
                         </div>
-                        <span style={{fontSize:10,fontFamily:"monospace",fontWeight:700,color:pc,minWidth:34,textAlign:"right"}}>{pct}%</span>
+                        <span style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",fontWeight:700,color:pc,minWidth:34,textAlign:"right"}}>{pct}%</span>
                       </div>
-                    ):<span style={{fontSize:10,color:"#2d2d44",fontFamily:"monospace"}}>—</span>}
+                    ):<span style={{fontSize:10,color:"#2a2a35",fontFamily:"'JetBrains Mono',monospace"}}>—</span>}
                   </td>
                 </tr>
               );
             })}
             {/* Итого */}
-            <tr style={{background:"#0a0a0f",borderTop:"1px solid #2d2d44"}}>
-              <td style={{padding:"10px 16px",fontWeight:700,color:"#f0eee8",fontSize:11,fontFamily:"monospace"}}>ИТОГО</td>
+            <tr style={{background:"#0f0f12",borderTop:"1px solid #2a2a35"}}>
+              <td style={{padding:"10px 16px",fontWeight:700,color:"#f0f0f5",fontSize:11,fontFamily:"'JetBrains Mono',monospace"}}>ИТОГО</td>
               <td style={{padding:"10px 16px",textAlign:"center"}}>
-                <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:totalVideo>0?"#f0eee8":"#2d2d44"}}>{totalVideo}</span>
+                <span style={{fontSize:20,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:totalVideo>0?"#f0f0f5":"#2a2a35"}}>{totalVideo}</span>
               </td>
               <td style={{padding:"10px 16px",textAlign:"center"}}>
-                <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:totalCarousel>0?"#f0eee8":"#2d2d44"}}>{totalCarousel}</span>
+                <span style={{fontSize:20,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:totalCarousel>0?"#f0f0f5":"#2a2a35"}}>{totalCarousel}</span>
               </td>
               <td style={{padding:"10px 16px",textAlign:"center"}}>
-                <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",color:totalAll>0?"#10b981":"#2d2d44"}}>{totalAll}</span>
+                <span style={{fontSize:20,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:totalAll>0?"#06d6a0":"#2a2a35"}}>{totalAll}</span>
               </td>
               <td style={{padding:"10px 16px"}}>
-                <span style={{fontSize:10,color:"#4b5563",fontFamily:"monospace"}}>{totalKpi>0?"план: "+totalKpi:""}</span>
+                <span style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace"}}>{totalKpi>0?"план: "+totalKpi:""}</span>
               </td>
               <td style={{padding:"10px 16px"}}>
-                {totalKpi>0&&<span style={{fontSize:10,fontFamily:"monospace",fontWeight:700,color:pctColor(Math.round(totalAll/totalKpi*100))}}>
+                {totalKpi>0&&<span style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",fontWeight:700,color:pctColor(Math.round(totalAll/totalKpi*100))}}>
                   {Math.min(100,Math.round(totalAll/totalKpi*100))}%
                 </span>}
               </td>
@@ -1583,38 +1583,38 @@ function StarredReelsView({pubItems, projects}){
   const activeProjs = projects.filter(p=>!p.archived);
 
   return(
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:12,overflow:"hidden"}}>
-      <div style={{padding:"12px 16px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,fontWeight:800,color:"#6b7280",fontFamily:"monospace",letterSpacing:"1px"}}>★ ЗАЛЁТНЫЕ РИЛСЫ</span>
-        <span style={{fontSize:10,color:"#f59e0b",fontFamily:"monospace",fontWeight:700}}>{starred.length} шт.</span>
+    <div style={{background:"#1a1a20",border:"1px solid #2a2a35",borderRadius:10,overflow:"hidden"}}>
+      <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2a35",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,fontWeight:800,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"1px"}}>★ ЗАЛЁТНЫЕ РИЛСЫ</span>
+        <span style={{fontSize:10,color:"#ffd166",fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>{starred.length} шт.</span>
         <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
           <select value={projFilter} onChange={e=>setProjFilter(e.target.value)}
-            style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit"}}>
+            style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"'Onest',sans-serif"}}>
             <option value="all">Все проекты</option>
             {activeProjs.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
           <select value={selMonth} onChange={e=>setSelMonth(e.target.value)}
-            style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit"}}>
+            style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"'Onest',sans-serif"}}>
             <option value={-1}>Всё время</option>
             {months.map(({label,key})=><option key={key} value={key}>{label}</option>)}
           </select>
         </div>
       </div>
       {starred.length===0?(
-        <div style={{padding:"30px",textAlign:"center",color:"#4b5563",fontSize:11}}>Нет залётных рилсов за выбранный период</div>
+        <div style={{padding:"30px",textAlign:"center",color:"#55556a",fontSize:11}}>Нет залётных рилсов за выбранный период</div>
       ):(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:1}}>
           {starred.map(item=>{
             const proj = projects.find(p=>p.id===item.project);
             return(
               <div key={item.id} style={{padding:"10px 14px",borderBottom:"1px solid #0d0d16",display:"flex",gap:10,alignItems:"flex-start"}}>
-                <span style={{color:"#f59e0b",fontSize:16,flexShrink:0}}>★</span>
+                <span style={{color:"#ffd166",fontSize:16,flexShrink:0}}>★</span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:12,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title||"Без названия"}</div>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                    {proj&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44",fontFamily:"monospace"}}>{proj.label}</span>}
-                    <span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:"#1a1a2e",color:"#6b7280",border:"1px solid #2d2d44",fontFamily:"monospace"}}>{item.pub_type==="carousel"?"🖼 Карусель":"🎬 Видео/Рилс"}</span>
-                    {item.planned_date&&<span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{item.planned_date.slice(0,10)}</span>}
+                    {proj&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:"#1a1a20",color:"#8b8b9e",border:"1px solid #2a2a35",fontFamily:"'JetBrains Mono',monospace"}}>{proj.label}</span>}
+                    <span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:"#1a1a20",color:"#8b8b9e",border:"1px solid #2a2a35",fontFamily:"'JetBrains Mono',monospace"}}>{item.pub_type==="carousel"?"🖼 Карусель":"🎬 Видео/Рилс"}</span>
+                    {item.planned_date&&<span style={{fontSize:9,color:"#55556a",fontFamily:"'JetBrains Mono',monospace"}}>{item.planned_date.slice(0,10)}</span>}
                   </div>
                 </div>
               </div>
@@ -1636,10 +1636,10 @@ function BaseView({projects,setProjects,teamMembers,setTeamMembers,currentUser})
   ];
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <div style={{display:"flex",gap:6,borderBottom:"1px solid #1e1e2e",paddingBottom:0}}>
+      <div style={{display:"flex",gap:6,borderBottom:"1px solid #2a2a35",paddingBottom:0}}>
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>setSubTab(t.id)}
-            style={{padding:"7px 16px",borderRadius:"8px 8px 0 0",cursor:"pointer",background:subTab===t.id?"#111118":"transparent",border:subTab===t.id?"1px solid #2d2d44":"1px solid transparent",borderBottom:subTab===t.id?"1px solid #111118":"none",color:subTab===t.id?"#f0eee8":"#6b7280",fontSize:12,fontFamily:"inherit",fontWeight:subTab===t.id?700:400,marginBottom:-1}}>
+            style={{padding:"7px 16px",borderRadius:"8px 8px 0 0",cursor:"pointer",background:subTab===t.id?"#1e1e26":"transparent",border:subTab===t.id?"1px solid #2a2a35":"1px solid transparent",borderBottom:subTab===t.id?"1px solid #2a2a35":"none",color:subTab===t.id?"#f0f0f5":"#55556a",fontSize:12,fontFamily:"'Onest',sans-serif",fontWeight:subTab===t.id?700:400,marginBottom:-1}}>
             {t.label}
           </button>
         ))}
@@ -1682,12 +1682,12 @@ function TrainingView(){
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"flex",justifyContent:"flex-end"}}>
-        <button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"7px 14px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>+ Добавить материал</button>
+        <button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"7px 14px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Onest',sans-serif"}}>+ Добавить материал</button>
       </div>
 
       {adding&&(
-        <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:12,padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#06b6d4",marginBottom:2}}>+ Новый материал</div>
+        <div style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:12,padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#4cc9f0",marginBottom:2}}>+ Новый материал</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <Field label="НАЗВАНИЕ"><input value={form.title} onChange={e=>u("title",e.target.value)} placeholder="Название материала" style={SI}/></Field>
             <Field label="КАТЕГОРИЯ"><select value={form.category} onChange={e=>u("category",e.target.value)} style={SI}>
@@ -1698,14 +1698,14 @@ function TrainingView(){
           <Field label="ССЫЛКА"><input value={form.url} onChange={e=>u("url",e.target.value)} placeholder="https://..." style={SI}/></Field>
           <Field label="ОПИСАНИЕ"><textarea value={form.description} onChange={e=>u("description",e.target.value)} placeholder="Краткое описание..." style={{...SI,minHeight:60,resize:"vertical"}}/></Field>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
-            <button onClick={add} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Добавить</button>
+            <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"8px",color:"#8b8b9e",cursor:"pointer",fontFamily:"'Onest',sans-serif"}}>Отмена</button>
+            <button onClick={add} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"'Onest',sans-serif",fontWeight:700}}>Добавить</button>
           </div>
         </div>
       )}
 
       {items.length===0&&!adding&&(
-        <div style={{textAlign:"center",padding:"50px 0",color:"#4b5563"}}>
+        <div style={{textAlign:"center",padding:"50px 0",color:"#55556a"}}>
           <div style={{fontSize:36,marginBottom:8}}>📚</div>
           <div style={{fontSize:12}}>Добавьте обучающие материалы</div>
         </div>
@@ -1713,18 +1713,18 @@ function TrainingView(){
 
       {Object.entries(grouped).map(([cat,catItems])=>(
         <div key={cat}>
-          <div style={{fontSize:10,fontWeight:800,color:"#6b7280",fontFamily:"monospace",marginBottom:8,letterSpacing:"0.05em"}}>{cat.toUpperCase()}</div>
+          <div style={{fontSize:10,fontWeight:800,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginBottom:8,letterSpacing:"0.05em"}}>{cat.toUpperCase()}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
             {catItems.map(item=>(
-              <div key={item.id} style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:6}}>
+              <div key={item.id} style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:6}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:700,fontSize:13,marginBottom:3}}>{item.title}</div>
-                    {item.description&&<div style={{fontSize:11,color:"#6b7280",lineHeight:1.4}}>{item.description}</div>}
+                    {item.description&&<div style={{fontSize:11,color:"#55556a",lineHeight:1.4}}>{item.description}</div>}
                   </div>
-                  <button onClick={()=>remove(item.id)} style={{background:"transparent",border:"none",color:"#2d2d44",cursor:"pointer",fontSize:14,flexShrink:0,padding:0}} onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#2d2d44"}>×</button>
+                  <button onClick={()=>remove(item.id)} style={{background:"transparent",border:"none",color:"#2a2a35",cursor:"pointer",fontSize:14,flexShrink:0,padding:0}} onMouseEnter={e=>e.target.style.color="#ff4d6d"} onMouseLeave={e=>e.target.style.color="#2a2a35"}>×</button>
                 </div>
-                {item.url&&<a href={item.url} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {item.url}</a>}
+                {item.url&&<a href={item.url} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#4cc9f0",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {item.url}</a>}
               </div>
             ))}
           </div>
@@ -1752,27 +1752,27 @@ function ProjectsView({projects,setProjects}){
     return ()=>{cancelled=true;};
   },[]);
   const [adding,setAdding]=useState(false);
-  const [newP,setNewP]=useState({label:"",color:"#8b5cf6",description:"",links:[""]});
+  const [newP,setNewP]=useState({label:"",color:"#c8ff57",description:"",links:[""]});
   const visible=projects.filter(p=>showArchive?p.archived:!p.archived);
   async function addProject(){
     if(!newP.label.trim()) return;
     try {
       const created = await api.createProject({...newP, links:newP.links.filter(l=>l.trim())});
       setProjects(p=>[...p,{...created,links:created.links||[],archived:false}]);
-      setNewP({label:"",color:"#8b5cf6",description:"",links:[""]});
+      setNewP({label:"",color:"#c8ff57",description:"",links:[""]});
       setAdding(false);
     } catch(e){ alert("Ошибка: "+e.message); }
   }
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-      <h2 style={{fontSize:17,fontWeight:800,margin:0,color:"#f59e0b"}}>📁 Проекты</h2>
+      <h2 style={{fontSize:17,fontWeight:800,margin:0,color:"#ffd166"}}>📁 Проекты</h2>
       <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-        <button onClick={()=>setShowArchive(p=>!p)} style={{background:"transparent",border:`1px solid ${showArchive?"#f59e0b":"#2d2d44"}`,borderRadius:8,padding:"6px 12px",color:showArchive?"#f59e0b":"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>{showArchive?"← Активные":"🗄 Архив"}</button>
-        {!showArchive&&<button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"6px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>+ Добавить проект</button>}
+        <button onClick={()=>setShowArchive(p=>!p)} style={{background:"transparent",border:`1px solid ${showArchive?"#ffd166":"#2a2a35"}`,borderRadius:8,padding:"6px 12px",color:showArchive?"#ffd166":"#55556a",cursor:"pointer",fontSize:11,fontFamily:"'Onest',sans-serif"}}>{showArchive?"← Активные":"🗄 Архив"}</button>
+        {!showArchive&&<button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"6px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Onest',sans-serif"}}>+ Добавить проект</button>}
       </div>
     </div>
-    {adding&&<div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:12,padding:"16px",marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:700,marginBottom:12,color:"#f59e0b"}}>+ Новый проект</div>
+    {adding&&<div style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:12,padding:"16px",marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,marginBottom:12,color:"#ffd166"}}>+ Новый проект</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,marginBottom:10}}>
         <Field label="НАЗВАНИЕ"><input value={newP.label} onChange={e=>setNewP(p=>({...p,label:e.target.value}))} placeholder="Название клиента / бренда" style={SI}/></Field>
         <Field label="ЦВЕТ"><div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3}}>{AVATAR_COLORS.map(c=><div key={c} onClick={()=>setNewP(p=>({...p,color:c}))} style={{width:22,height:22,borderRadius:"50%",background:c,cursor:"pointer",border:newP.color===c?"3px solid #fff":"3px solid transparent"}}/>)}</div></Field>
@@ -1781,16 +1781,16 @@ function ProjectsView({projects,setProjects}){
       <Field label="ССЫЛКИ">
         {newP.links.map((l,i)=><div key={i} style={{display:"flex",gap:5,marginBottom:4}}>
           <input value={l} onChange={e=>setNewP(p=>({...p,links:p.links.map((x,j)=>j===i?e.target.value:x)}))} placeholder="https://..." style={{...SI,flex:1}}/>
-          <button onClick={()=>setNewP(p=>({...p,links:p.links.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
+          <button onClick={()=>setNewP(p=>({...p,links:p.links.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer"}}>×</button>
         </div>)}
-        <button onClick={()=>setNewP(p=>({...p,links:[...p.links,""]}))} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:6,padding:"4px 12px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>+ Ссылка</button>
+        <button onClick={()=>setNewP(p=>({...p,links:[...p.links,""]}))} style={{background:"transparent",border:"1px dashed #32323e",borderRadius:6,padding:"4px 12px",color:"#8b8b9e",cursor:"pointer",fontSize:11}}>+ Ссылка</button>
       </Field>
       <div style={{display:"flex",gap:8,marginTop:10}}>
-        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
-        <button onClick={addProject} style={{flex:2,background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Создать</button>
+        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"8px",color:"#8b8b9e",cursor:"pointer",fontFamily:"'Onest',sans-serif"}}>Отмена</button>
+        <button onClick={addProject} style={{flex:2,background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"'Onest',sans-serif",fontWeight:700}}>Создать</button>
       </div>
     </div>}
-    {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#9ca3af"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
+    {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#8b8b9e"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#8b8b9e"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
       {visible.map(proj=>(
         <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects} pmpProjects={pmpProjects} pmpLoading={pmpLoading}/>
@@ -1810,12 +1810,12 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
     api.updateProject(proj.id,{pmp_project_id:val}).catch(()=>{});
   }
 
-  return <div style={{background:"#111118",border:'1px solid #1e1e2e',borderTop:'3px solid #2d2d44',borderRadius:12,padding:"14px"}}>
+  return <div style={{background:"#1e1e26",border:"1px solid #2a2a35",borderTop:`3px solid ${proj.color||"#2a2a35"}`,borderRadius:10,padding:"14px",transition:"all .15s"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
 <div style={{width:34,height:34,borderRadius:9,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{(proj.label||"?")[0]}</div>
             <input value={proj.label} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,label:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{label:e.target.value}).catch(()=>{})} style={{...SI,flex:1,padding:"4px 8px",fontSize:13,fontWeight:700}}/>
-            <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
-            <button onClick={async()=>{if(!window.confirm("Удалить проект «"+proj.label+"»? Это действие нельзя отменить.")) return; try{await api.deleteProject(proj.id);setProjects(p=>p.filter(x=>x.id!==proj.id));}catch(e){alert("Ошибка: "+e.message);}}} style={{background:"transparent",border:"1px solid #ef444440",borderRadius:6,padding:"4px 8px",color:"#ef4444",cursor:"pointer",fontSize:11}}>🗑</button>
+            <button onClick={async()=>{ const v=!proj.archived; await api.updateProject(proj.id,{archived:v}); setProjects(p=>p.map(x=>x.id===proj.id?{...x,archived:v}:x)); }} style={{background:"transparent",border:"1px solid #2a2a35",borderRadius:6,padding:"4px 8px",color:"#8b8b9e",cursor:"pointer",fontSize:11}}>{showArchive?"↩":"🗄"}</button>
+            <button onClick={async()=>{if(!window.confirm("Удалить проект «"+proj.label+"»? Это действие нельзя отменить.")) return; try{await api.deleteProject(proj.id);setProjects(p=>p.filter(x=>x.id!==proj.id));}catch(e){alert("Ошибка: "+e.message);}}} style={{background:"transparent",border:"1px solid #ef444440",borderRadius:6,padding:"4px 8px",color:"#ff4d6d",cursor:"pointer",fontSize:11}}>🗑</button>
           </div>
           <textarea value={proj.description} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,description:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{description:e.target.value}).catch(()=>{})} placeholder="Описание проекта..." style={{...SI,minHeight:60,resize:"vertical",lineHeight:1.5,marginBottom:8,fontSize:11}}/>
 
@@ -1824,29 +1824,29 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
             <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
               <span style={{fontSize:11}}>📡</span>
               <span style={{fontSize:10,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
-              {proj.pmp_project_id&&<span style={{fontSize:9,background:"#10b98115",color:"#10b981",border:"1px solid #10b98130",borderRadius:10,padding:"1px 7px",fontFamily:"monospace"}}>✅ привязан</span>}
+              {proj.pmp_project_id&&<span style={{fontSize:9,background:"#10b98115",color:"#06d6a0",border:"1px solid #10b98130",borderRadius:10,padding:"1px 7px",fontFamily:"'JetBrains Mono',monospace"}}>✅ привязан</span>}
             </div>
             {loadingPmp
-              ? <div style={{fontSize:10,color:"#6b7280"}}>⏳ Загружаю проекты PMP...</div>
+              ? <div style={{fontSize:10,color:"#55556a"}}>⏳ Загружаю проекты PMP...</div>
               : pmpErr
-                ? <div style={{fontSize:10,color:"#6b7280"}}>{pmpErr}</div>
+                ? <div style={{fontSize:10,color:"#55556a"}}>{pmpErr}</div>
                 : pmpProjects.length>0
                   ? <select value={proj.pmp_project_id||""} onChange={e=>savePmpId(e.target.value)} style={{...SI,fontSize:11}}>
                       <option value="">— не привязан —</option>
                       {pmpProjects.map(p=><option key={p.id} value={p.id}>{p.name||p.title||("Проект "+p.id)}</option>)}
                     </select>
-                  : <div style={{fontSize:10,color:"#4b5563"}}>Нет проектов (проверь POSTMYPOST_TOKEN)</div>
+                  : <div style={{fontSize:10,color:"#55556a"}}>Нет проектов (проверь POSTMYPOST_TOKEN)</div>
             }
           </div>
 
           <span style={LB}>ДОКУМЕНТЫ И ССЫЛКИ</span>
           {proj.links.filter(l=>l).map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
-            <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
-            <button onClick={()=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:x.links.filter((_,j)=>j!==i)}:x))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:11}}>×</button>
+            <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:12,color:"#c8ff57",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>🔗 {l}</a>
+            <button onClick={()=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:x.links.filter((_,j)=>j!==i)}:x))} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:11}}>×</button>
           </div>)}
           <div style={{display:"flex",gap:5,marginTop:4}}>
             <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1,fontSize:11,padding:"5px 8px"}} onKeyDown={e=>{if(e.key==="Enter"&&nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}}/>
-            <button onClick={()=>{if(nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:6,padding:"0 10px",color:"#a78bfa",cursor:"pointer",fontSize:15}}>+</button>
+            <button onClick={()=>{if(nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:6,padding:"0 10px",color:"#c8ff57",cursor:"pointer",fontSize:15}}>+</button>
           </div>
         </div>;
 }
@@ -1855,22 +1855,22 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
 function TeamView({teamMembers,setTeamMembers,currentUser}){
   const isDirector = currentUser?.role==="Директор";
   const [adding,setAdding]=useState(false);
-  const [newM,setNewM]=useState({name:"",role:ROLES_LIST[0],telegram:"",color:"#8b5cf6",note:""});
+  const [newM,setNewM]=useState({name:"",role:ROLES_LIST[0],telegram:"",color:"#c8ff57",note:""});
   async function addMember(){
     if(!newM.name.trim()) return;
     try {
       const created = await api.register({...newM, password: "vinogradov", invite_password: "vinograd2026"});
       setTeamMembers(p=>[...p,{...created, note:""}]);
-      setNewM({name:"",role:ROLES_LIST[0],telegram:"",color:"#8b5cf6",note:""});
+      setNewM({name:"",role:ROLES_LIST[0],telegram:"",color:"#c8ff57",note:""});
       setAdding(false);
     } catch(e){ alert("Ошибка добавления: "+e.message); }
   }
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-      <h2 style={{fontSize:17,fontWeight:800,margin:0,color:"#06b6d4"}}>👥 Команда</h2>
-      {isDirector&&<button onClick={()=>setAdding(true)} style={{marginLeft:"auto",background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"6px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>+ Добавить сотрудника</button>}
+      <h2 style={{fontSize:17,fontWeight:800,margin:0,color:"#4cc9f0"}}>👥 Команда</h2>
+      {isDirector&&<button onClick={()=>setAdding(true)} style={{marginLeft:"auto",background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"6px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Onest',sans-serif"}}>+ Добавить сотрудника</button>}
     </div>
-    {adding&&<div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:12,padding:"16px",marginBottom:14}}>
+    {adding&&<div style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:12,padding:"16px",marginBottom:14}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <Field label="ИМЯ"><input value={newM.name} onChange={e=>setNewM(p=>({...p,name:e.target.value}))} placeholder="Имя Фамилия" style={SI}/></Field>
         <Field label="ДОЛЖНОСТЬ"><select value={newM.role} onChange={e=>setNewM(p=>({...p,role:e.target.value}))} style={SI}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select></Field>
@@ -1879,24 +1879,24 @@ function TeamView({teamMembers,setTeamMembers,currentUser}){
       </div>
       <Field label="ЗАМЕТКИ"><textarea value={newM.note} onChange={e=>setNewM(p=>({...p,note:e.target.value}))} placeholder="Специализация, контакты..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
       <div style={{display:"flex",gap:8,marginTop:10}}>
-        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
-        <button onClick={addMember} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Добавить</button>
+        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"8px",color:"#8b8b9e",cursor:"pointer",fontFamily:"'Onest',sans-serif"}}>Отмена</button>
+        <button onClick={addMember} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"'Onest',sans-serif",fontWeight:700}}>Добавить</button>
       </div>
     </div>}
-    {teamMembers.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>👥</div><div style={{fontSize:12,color:"#9ca3af"}}>Нет сотрудников</div></div>}
+    {teamMembers.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#8b8b9e"}}><div style={{fontSize:36,marginBottom:8}}>👥</div><div style={{fontSize:12,color:"#8b8b9e"}}>Нет сотрудников</div></div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
-      {teamMembers.map(m=><div key={m.id} style={{background:"#111118",border:`1px solid ${m.color}25`,borderTop:`3px solid ${m.color}`,borderRadius:12,padding:"14px"}}>
+      {teamMembers.map(m=><div key={m.id} style={{background:"#1e1e26",border:`1px solid ${m.color}25`,borderTop:`3px solid ${m.color}`,borderRadius:12,padding:"14px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
 <div style={{width:40,height:40,borderRadius:"50%",background:`linear-gradient(135deg,${m.color},${m.color}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>{((m.name||"?")[0]).toUpperCase()}</div>
           <div style={{flex:1}}>
             <input value={m.name} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,name:e.target.value}:x))} onBlur={e=>isDirector&&api.updateUser(m.id,{name:e.target.value}).catch(()=>{})} readOnly={!isDirector} style={{...SI,padding:"3px 7px",fontSize:13,fontWeight:700,marginBottom:3,opacity:isDirector?1:0.7}}/>
             <select value={m.role} onChange={e=>isDirector&&setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,role:e.target.value}:x))} disabled={!isDirector} style={{...SI,padding:"2px 7px",fontSize:10,opacity:isDirector?1:0.7}}>{ROLES_LIST.map(r=><option key={r} value={r}>{r}</option>)}</select>
           </div>
-          {isDirector&&<button onClick={async()=>{ await api.deleteUser(m.id).catch(()=>{}); setTeamMembers(p=>p.filter(x=>x.id!==m.id)); }} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14,alignSelf:"flex-start"}}>×</button>}
+          {isDirector&&<button onClick={async()=>{ await api.deleteUser(m.id).catch(()=>{}); setTeamMembers(p=>p.filter(x=>x.id!==m.id)); }} style={{background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:14,alignSelf:"flex-start"}}>×</button>}
         </div>
         <input value={m.telegram} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,telegram:e.target.value}:x))} placeholder="@telegram" style={{...SI,marginBottom:6,fontSize:11}}/>
         <textarea value={m.note} onChange={e=>setTeamMembers(p=>p.map(x=>x.id===m.id?{...x,note:e.target.value}:x))} placeholder="Заметки..." style={{...SI,minHeight:50,resize:"vertical",fontSize:11,lineHeight:1.4,marginBottom:8}}/>
-        {(()=>{const la=Number(m.last_active);return la>1000000000?<div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(la).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>:<div style={{fontSize:9,color:"#2d2d44",fontFamily:"monospace",textAlign:"right",marginTop:4}}>🕐 не заходил</div>;})()}
+        {(()=>{const la=Number(m.last_active);return la>1000000000?<div style={{fontSize:9,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",textAlign:"right",marginTop:4}}>🕐 {new Date(la).toLocaleString("ru",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>:<div style={{fontSize:9,color:"#2a2a35",fontFamily:"'JetBrains Mono',monospace",textAlign:"right",marginTop:4}}>🕐 не заходил</div>;})()}
 
       </div>)}
     </div>
@@ -1914,12 +1914,12 @@ class ErrorBoundary extends React.Component {
       const msg = this.state.error?.message || "Неизвестная ошибка";
       const stack = this.state.info?.componentStack || "";
       return (
-        <div style={{padding:24,color:"#f0eee8",fontFamily:"monospace",background:"#0d0d14",minHeight:"100vh",display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{padding:24,color:"#f0f0f5",fontFamily:"'JetBrains Mono',monospace",background:"#141418",minHeight:"100vh",display:"flex",flexDirection:"column",gap:12}}>
           <div style={{fontSize:20}}>⚠️</div>
-          <div style={{fontSize:14,fontWeight:700,color:"#ef4444"}}>Ошибка приложения</div>
-          <div style={{fontSize:11,color:"#9ca3af",background:"#111118",padding:12,borderRadius:8,wordBreak:"break-all"}}>{msg}</div>
-          <button onClick={()=>{ localStorage.removeItem("vg_user"); window.location.reload(); }} style={{background:"#ef444420",border:"1px solid #ef444440",borderRadius:8,padding:"10px 16px",color:"#ef4444",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>🔄 Выйти и перезайти</button>
-          <button onClick={()=>window.location.reload()} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:8,padding:"10px 16px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>↩ Перезагрузить</button>
+          <div style={{fontSize:14,fontWeight:700,color:"#ff4d6d"}}>Ошибка приложения</div>
+          <div style={{fontSize:11,color:"#8b8b9e",background:"#1e1e26",padding:12,borderRadius:8,wordBreak:"break-all"}}>{msg}</div>
+          <button onClick={()=>{ localStorage.removeItem("vg_user"); window.location.reload(); }} style={{background:"#ef444420",border:"1px solid #ef444440",borderRadius:8,padding:"10px 16px",color:"#ff4d6d",cursor:"pointer",fontFamily:"'Onest',sans-serif",fontSize:12,fontWeight:700}}>🔄 Выйти и перезайти</button>
+          <button onClick={()=>window.location.reload()} style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:8,padding:"10px 16px",color:"#8b8b9e",cursor:"pointer",fontFamily:"'Onest',sans-serif",fontSize:12}}>↩ Перезагрузить</button>
         </div>
       );
     }
@@ -2102,9 +2102,9 @@ function MainApp({currentUser, onLogout}){
   const [showArchivedPub,setShowArchivedPub]=useState(false);
 
   if (loading) return (
-    <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,background:"#0a0a0f"}}>
+    <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,background:"#0f0f12"}}>
       <div style={{fontSize:48}}>🍇</div>
-      <div style={{fontSize:12,color:"#9ca3af",fontFamily:"monospace"}}>Загрузка...</div>
+      <div style={{fontSize:12,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",letterSpacing:".05em"}}>Загрузка...</div>
     </div>
   );
 
@@ -2249,34 +2249,34 @@ function MainApp({currentUser, onLogout}){
     const dateStr=item.deadline||item.shoot_date?.slice(0,10)||item.planned_date?.slice(0,10)||item.post_deadline||"";
     const daysLeft=dateStr?Math.ceil((new Date(dateStr).getTime()-Date.now())/86400000):null;
     const urgent=daysLeft!==null&&daysLeft<=2;
-    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${item.starred?"#f59e0b50":urgent?"#ef444450":"#1e1e2e"}`,borderLeft:`3px solid ${item.starred?"#f59e0b":urgent?"#ef4444":"#374151"}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
-      onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
+    return <div onClick={()=>openEdit(type,item)} style={{background:"#1e1e26",border:`1px solid ${item.starred?"rgba(255,209,102,.3)":urgent?"rgba(255,77,109,.3)":"#2a2a35"}`,borderLeft:`3px solid ${item.starred?"#ffd166":urgent?"#ff4d6d":"#32323e"}`,borderRadius:8,padding:"11px 12px",cursor:"pointer",transition:"all .15s",marginBottom:6,position:"relative",overflow:"hidden"}}
+      onMouseEnter={e=>{e.currentTarget.style.background="#23232c";e.currentTarget.style.borderColor=item.starred?"rgba(255,209,102,.5)":urgent?"rgba(255,77,109,.5)":"#32323e";}} onMouseLeave={e=>{e.currentTarget.style.background="#1e1e26";e.currentTarget.style.borderColor=item.starred?"rgba(255,209,102,.3)":urgent?"rgba(255,77,109,.3)":"#2a2a35";}}>
       <div style={{display:"flex",alignItems:"flex-start",gap:5,marginBottom:5}}>
-        <div style={{fontWeight:700,fontSize:12,flex:1}}>{item.title||"Без названия"}</div>
+        <div style={{fontWeight:600,fontSize:12,flex:1,lineHeight:1.4}}>{item.title||"Без названия"}</div>
         {type==="pub"&&<button onClick={e=>{e.stopPropagation();toggleStar(type,item);}} title="Залётный рилс"
-          style={{background:"transparent",border:"none",cursor:"pointer",fontSize:15,padding:0,flexShrink:0,color:item.starred?"#f59e0b":"#2d2d44",lineHeight:1}}
-          onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#6b7280"}
-          onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#f59e0b":"#2d2d44"}>★</button>}
+          style={{background:"transparent",border:"none",cursor:"pointer",fontSize:15,padding:0,flexShrink:0,color:item.starred?"#ffd166":"#2a2a35",lineHeight:1}}
+          onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#55556a"}
+          onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#ffd166":"#2a2a35"}>★</button>}
       </div>
       <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
-        <Badge color="#374151">{proj.label}</Badge>
-        {type==="pub"&&<Badge color={item.pub_type==="carousel"?"#a78bfa":"#3b82f6"}>{item.pub_type==="carousel"?"🖼 Карусель":"🎬 Видео/Рилс"}</Badge>}
-        {type==="post_reels"&&<Badge color="#ec4899">🎞 Рилс</Badge>}
-        {type==="post_video"&&<Badge color="#3b82f6">🎬 Видео</Badge>}
-        {type==="post_carousel"&&<Badge color="#a78bfa">🖼 Карусель</Badge>}
-        {type==="post_carousel"&&item.slides&&item.slides.length>0&&<Badge color="#4b5563">📋 {item.slides.length} сл.</Badge>}
+        <Badge color="#32323e">{proj.label}</Badge>
+        {type==="pub"&&<Badge color={item.pub_type==="carousel"?"#c8ff57":"#4cc9f0"}>{item.pub_type==="carousel"?"🖼 Карусель":"🎬 Видео/Рилс"}</Badge>}
+        {type==="post_reels"&&<Badge color="#ff4d6d">🎞 Рилс</Badge>}
+        {type==="post_video"&&<Badge color="#4cc9f0">🎬 Видео</Badge>}
+        {type==="post_carousel"&&<Badge color="#c8ff57">🖼 Карусель</Badge>}
+        {type==="post_carousel"&&item.slides&&item.slides.length>0&&<Badge color="#55556a">📋 {item.slides.length} сл.</Badge>}
       </div>
       {/* Заказчик → Исполнитель */}
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,fontSize:9,color:"#9ca3af"}}>
-        <span style={{background:"#1a1a2e",borderRadius:4,padding:"2px 7px",color:cust?"#a0aec0":"#2d2d44",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90}}>{cust?cust.name:"заказчик"}</span>
-        <span style={{color:"#9ca3af",flexShrink:0}}>→</span>
-        <span style={{background:"#1a1a2e",borderRadius:4,padding:"2px 7px",color:exec?"#a0aec0":"#2d2d44",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90}}>{exec?exec.name:"исполнитель"}</span>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,fontSize:9,color:"#8b8b9e"}}>
+        <span style={{background:"#1a1a20",borderRadius:4,padding:"2px 7px",color:cust?"#8b8b9e":"#32323e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90,fontSize:10,fontWeight:600}}>{cust?cust.name:"заказчик"}</span>
+        <span style={{color:"#8b8b9e",flexShrink:0}}>→</span>
+        <span style={{background:"#1a1a20",borderRadius:4,padding:"2px 7px",color:exec?"#8b8b9e":"#32323e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:90,fontSize:10,fontWeight:600}}>{exec?exec.name:"исполнитель"}</span>
       </div>
       {/* Дедлайн */}
-      {item.completed_at&&item.status==="done"&&<div style={{fontSize:9,fontFamily:"monospace",color:"#10b981"}}>✅ Выполнено {item.completed_at}</div>}
-      {!item.completed_at&&dateStr&&<div style={{fontSize:9,fontFamily:"monospace",color:urgent?"#ef4444":"#4b5563"}}>📅 {dateStr}{daysLeft!==null&&` (${daysLeft>0?daysLeft+"д":"сегодня"})`}</div>}
+      {item.completed_at&&item.status==="done"&&<div style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#06d6a0"}}>✅ Выполнено {item.completed_at}</div>}
+      {!item.completed_at&&dateStr&&<div style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",fontWeight:600,color:urgent?"#ff4d6d":"#55556a"}}>📅 {dateStr}{daysLeft!==null&&` (${daysLeft>0?daysLeft+"д":"сегодня"})`}</div>}
       <div style={{display:"flex",gap:6,marginTop:5,alignItems:"center"}}>
-        {chatCount>0&&<span style={{fontSize:9,color:"#9ca3af"}}>💬 {chatCount}</span>}
+        {chatCount>0&&<span style={{fontSize:9,color:"#8b8b9e"}}>💬 {chatCount}</span>}
         {(type==="post_reels"||type==="post_video"||type==="post_carousel")&&item.status==="done"&&<button onClick={e=>{
           e.stopPropagation();
           // Mark post task as done
@@ -2292,9 +2292,9 @@ function MainApp({currentUser, onLogout}){
             slides:isCarousel?(item.slides||[]):[],
           });
           setModal({type:"pub",item:pubItem});
-        }} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#10b981",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
-        {item.archived&&<Badge color="#4b5563">📦 архив</Badge>}
-        <button onClick={e=>{e.stopPropagation();archiveTask(type,item.id);}} title={item.archived?"Разархивировать":"Архивировать"} style={{marginLeft:"auto",background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:10,padding:"0 2px"}}>{item.archived?"↩":"📦"}</button>
+        }} style={{background:"transparent",border:"1px dashed #10b98140",borderRadius:5,padding:"2px 7px",color:"#06d6a0",cursor:"pointer",fontSize:9}}>🚀 → Публ.</button>}
+        {item.archived&&<Badge color="#55556a">📦 архив</Badge>}
+        <button onClick={e=>{e.stopPropagation();archiveTask(type,item.id);}} title={item.archived?"Разархивировать":"Архивировать"} style={{marginLeft:"auto",background:"transparent",border:"none",color:"#8b8b9e",cursor:"pointer",fontSize:10,padding:"0 2px"}}>{item.archived?"↩":"📦"}</button>
       </div>
     </div>;
   }
@@ -2311,31 +2311,67 @@ function MainApp({currentUser, onLogout}){
 
   if(isMobile) return <ErrorBoundary key="mobile"><MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/></ErrorBoundary>;
 
-  return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-    {/* TOP NAV — no filters, no add button */}
-    <div style={{borderBottom:"1px solid #1a1a2e",background:"#0d0d16",flexShrink:0,padding:"0 16px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:2,height:52}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginRight:12}}>
-          <div style={{width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🍇</div>
-          <div><div style={{fontSize:14,fontWeight:800}}>{APP_NAME}</div><div style={{fontSize:8,color:"#9ca3af",fontFamily:"monospace"}}>production system</div></div>
+  return <div style={{fontFamily:"'Onest',sans-serif",height:"100vh",background:"#0f0f12",color:"#f0f0f5",display:"flex",overflow:"hidden"}}>
+    {/* SIDEBAR */}
+    <nav style={{width:224,background:"#141418",borderRight:"1px solid #2a2a35",display:"flex",flexDirection:"column",flexShrink:0}}>
+      {/* Logo */}
+      <div style={{height:56,display:"flex",alignItems:"center",padding:"0 18px",gap:10,borderBottom:"1px solid #2a2a35"}}>
+        <div style={{width:28,height:28,borderRadius:7,background:"#c8ff57",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:"#0f0f12",flexShrink:0}}>В</div>
+        <span style={{fontSize:15,fontWeight:800,letterSpacing:"-.3px"}}>{APP_NAME}</span>
+      </div>
+      {/* Nav */}
+      <div style={{flex:1,overflowY:"auto",padding:8}}>
+        <div style={{fontSize:"9.5px",fontWeight:700,color:"#55556a",letterSpacing:".1em",textTransform:"uppercase",padding:"10px 10px 4px",fontFamily:"'JetBrains Mono',monospace"}}>Задачи</div>
+        {TABS.filter(t=>!["summary","analytics","base"].includes(t.id)).map(t=>(
+          <div key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#f0f0f5":"#8b8b9e",fontWeight:tab===t.id?600:500,fontSize:13,transition:"all .15s",background:tab===t.id?"#1e1e26":"transparent",position:"relative",userSelect:"none",marginBottom:2}}>
+            {tab===t.id&&<div style={{position:"absolute",left:0,top:"25%",bottom:"25%",width:2,background:"#c8ff57",borderRadius:"0 2px 2px 0"}}/>}
+            <div style={{width:18,height:18,borderRadius:5,background:t.color+"25",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,opacity:tab===t.id?1:.7}}>✦</div>
+            {t.label}
+            {!["summary","analytics","base"].includes(t.id)&&<span style={{marginLeft:"auto",fontSize:10,fontWeight:700,color:tab===t.id?"#c8ff57":"#55556a",background:tab===t.id?"rgba(200,255,87,.15)":"#1a1a20",padding:"1px 7px",borderRadius:20,fontFamily:"'JetBrains Mono',monospace"}}>{cnt[t.id]}</span>}
+          </div>
+        ))}
+        <div style={{fontSize:"9.5px",fontWeight:700,color:"#55556a",letterSpacing:".1em",textTransform:"uppercase",padding:"10px 10px 4px",fontFamily:"'JetBrains Mono',monospace",marginTop:4}}>Обзор</div>
+        {TABS.filter(t=>["summary","analytics","base"].includes(t.id)).map(t=>(
+          <div key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#f0f0f5":"#8b8b9e",fontWeight:tab===t.id?600:500,fontSize:13,transition:"all .15s",background:tab===t.id?"#1e1e26":"transparent",position:"relative",userSelect:"none",marginBottom:2}}>
+            {tab===t.id&&<div style={{position:"absolute",left:0,top:"25%",bottom:"25%",width:2,background:"#c8ff57",borderRadius:"0 2px 2px 0"}}/>}
+            <div style={{width:18,height:18,borderRadius:5,background:"rgba(255,255,255,.07)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,opacity:tab===t.id?1:.7}}>◈</div>
+            {t.label}
+          </div>
+        ))}
+      </div>
+      {/* User footer */}
+      <div style={{borderTop:"1px solid #2a2a35",padding:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:9,padding:"7px 9px",borderRadius:8,cursor:"pointer"}}>
+          <div style={{width:30,height:30,borderRadius:8,background:"#c8ff57",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"#0f0f12",flexShrink:0}}>{(currentUser.name||currentUser.telegram||"?")[0].toUpperCase()}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{currentUser.name||("@"+currentUser.telegram)}</div>
+            <div style={{fontSize:10,color:"#55556a"}}>{currentUser.role||"Участник"}</div>
+          </div>
+          <div style={{width:7,height:7,borderRadius:"50%",background:"#06d6a0",flexShrink:0}}/>
         </div>
-        {TABS.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,cursor:"pointer",background:tab===t.id?t.color+"15":"transparent",border:tab===t.id?`1px solid ${t.color}40`:"1px solid transparent",color:tab===t.id?t.color:"#9ca3af",fontFamily:"inherit",fontWeight:tab===t.id?700:500,fontSize:12}}>
-          <span style={{fontSize:13}}>{t.icon}</span>{t.label}
-          {!["summary","analytics","base"].includes(t.id)&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#9ca3af",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
-        </button>)}
+      </div>
+    </nav>
+
+    {/* MAIN COLUMN */}
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+    {/* TOP BAR */}
+    <div style={{height:56,background:"#141418",borderBottom:"1px solid #2a2a35",display:"flex",alignItems:"center",padding:"0 24px",gap:8,flexShrink:0}}>
+      <span style={{fontSize:17,fontWeight:800,letterSpacing:"-.4px"}}>{ct?.label||""}</span>
+      {!["summary","analytics","base"].includes(tab)&&<span style={{fontSize:12,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginLeft:1}}>·{cnt[tab]}</span>}
+      <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8,position:"relative"}}>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,position:"relative"}}>
           {/* 🔔 Bell */}
           <div style={{position:"relative"}}>
-            <button onClick={()=>setShowNotifs(p=>!p)} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px",color:"#9ca3af",cursor:"pointer",fontSize:16,position:"relative"}}>
+            <button onClick={()=>setShowNotifs(p=>!p)} style={{background:"transparent",border:"1px solid #2a2a35",borderRadius:20,padding:"5px 11px",color:"#8b8b9e",cursor:"pointer",fontSize:15,position:"relative",fontFamily:"'Onest',sans-serif"}}>
               🔔
-              {notifs.filter(n=>!n.read).length>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#ef4444",color:"#fff",borderRadius:"50%",fontSize:9,width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{notifs.filter(n=>!n.read).length}</span>}
+              {notifs.filter(n=>!n.read).length>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#ff4d6d",color:"#fff",borderRadius:"50%",fontSize:9,width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{notifs.filter(n=>!n.read).length}</span>}
             </button>
-            {showNotifs&&<div style={{position:"absolute",top:36,right:0,width:320,background:"#111118",border:"1px solid #2d2d44",borderRadius:12,boxShadow:"0 8px 32px #00000080",zIndex:1000,maxHeight:420,overflowY:"auto"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid #1e1e2e"}}>
-                <span style={{fontSize:11,fontWeight:700,color:"#f0eee8"}}>🔔 Уведомления</span>
-                {notifs.length>0&&<button onClick={()=>{setNotifs([]);fetch("/api/notifications/read",{method:"POST",headers:{"Content-Type":"application/json","x-user-id":currentUser.id},body:JSON.stringify({})}).catch(()=>{});}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:10}}>Очистить все</button>}
+            {showNotifs&&<div style={{position:"absolute",top:40,right:0,width:320,background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,.7)",zIndex:1000,maxHeight:420,overflowY:"auto"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid #2a2a35"}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#f0f0f5"}}>🔔 Уведомления</span>
+                {notifs.length>0&&<button onClick={()=>{setNotifs([]);fetch("/api/notifications/read",{method:"POST",headers:{"Content-Type":"application/json","x-user-id":currentUser.id},body:JSON.stringify({})}).catch(()=>{});}} style={{background:"transparent",border:"none",color:"#55556a",cursor:"pointer",fontSize:10}}>Очистить все</button>}
               </div>
-              {notifs.length===0&&<div style={{padding:"24px 14px",textAlign:"center",color:"#4b5563",fontSize:11}}>Нет уведомлений</div>}
+              {notifs.length===0&&<div style={{padding:"24px 14px",textAlign:"center",color:"#55556a",fontSize:11}}>Нет уведомлений</div>}
               {notifs.map(n=>{
                 const taskType=n.taskType||"pre";
                 const typeLabel=taskType==="pre"?"Препродакшн":taskType==="prod"?"Продакшн":taskType==="pub"?"Публикация":"Постпродакшн";
@@ -2351,52 +2387,50 @@ function MainApp({currentUser, onLogout}){
                     if(found) openEdit(type,found);
                   }
                   setShowNotifs(false);
-                }} style={{padding:"10px 14px",borderBottom:"1px solid #0d0d16",cursor:"pointer",background:n.read?"transparent":"#0d0d16",display:"flex",gap:10,alignItems:"flex-start"}}
-                onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
-                onMouseLeave={e=>e.currentTarget.style.background=n.read?"transparent":"#0d0d16"}>
+                }} style={{padding:"10px 14px",borderBottom:"1px solid #0d0d16",cursor:"pointer",background:n.read?"transparent":"#141418",display:"flex",gap:10,alignItems:"flex-start"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#23232c"}
+                onMouseLeave={e=>e.currentTarget.style.background=n.read?"transparent":"#141418"}>
                   <span style={{fontSize:16,flexShrink:0}}>{n.kind==="chat_message"?"💬":"📋"}</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.title}</div>
-                    {n.text&&<div style={{fontSize:10,color:"#9ca3af",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.text}</div>}
-                    <div style={{fontSize:9,color:"#4b5563",marginTop:3,fontFamily:"monospace"}}>{typeLabel} · {Number(n.ts)>1000000000?new Date(Number(n.ts)).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:"#f0f0f5",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.title}</div>
+                    {n.text&&<div style={{fontSize:10,color:"#8b8b9e",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.text}</div>}
+                    <div style={{fontSize:9,color:"#55556a",marginTop:3,fontFamily:"'JetBrains Mono',monospace"}}>{typeLabel} · {Number(n.ts)>1000000000?new Date(Number(n.ts)).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}):""}</div>
                   </div>
-                  {!n.read&&<div style={{width:6,height:6,borderRadius:"50%",background:"#8b5cf6",flexShrink:0,marginTop:4}}/>}
+                  {!n.read&&<div style={{width:6,height:6,borderRadius:"50%",background:"rgba(200,255,87,.8)",flexShrink:0,marginTop:4}}/>}
                 </div>;
               })}
             </div>}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:6,background:"#111118",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px"}}>
-            <div style={{width:20,height:20,borderRadius:"50%",background:`linear-gradient(135deg,${currentUser.color||"#8b5cf6"},#7c3aed)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff"}}>{(currentUser.name||currentUser.telegram||"?")[0].toUpperCase()}</div>
-            <span style={{fontSize:11,fontWeight:600}}>@{currentUser.telegram}</span>
-          </div>
-          <button onClick={onLogout} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:20,padding:"4px 10px",color:"#9ca3af",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>Выйти</button>
+          <button onClick={onLogout} style={{background:"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"5px 12px",color:"#8b8b9e",cursor:"pointer",fontSize:12,fontFamily:"'Onest',sans-serif",fontWeight:600,transition:"all .15s"}}>Выйти</button>
         </div>
       </div>
     </div>
 
+      </div>
+    </div>
     {/* Click outside to close notifs */}
     {showNotifs&&<div onClick={()=>setShowNotifs(false)} style={{position:"fixed",inset:0,zIndex:999}}/>}
     {/* CONTENT */}
-    <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+    <div style={{flex:1,overflowY:"auto",padding:"16px 24px"}}>
 
       {/* PRE */}
       {tab==="pre"&&<>
         <FilterBar pf={preFilt.pf} setPf={v=>setPreFilt(p=>({...p,pf:v}))} member={preFilt.member} setMember={v=>setPreFilt(p=>({...p,member:v}))} sortBy={preFilt.sortBy} setSortBy={v=>setPreFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Сценарий" onAdd={()=>openNew("pre")} showArchived={showArchivedPre} onArchiveToggle={()=>setShowArchivedPre(p=>!p)}/>
         <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[{id:"kanban",l:"Канбан"},{id:"calendar",l:"Календарь"}].map(v=><button key={v.id} onClick={()=>setViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:viewMode===v.id?"#8b5cf620":"transparent",border:viewMode===v.id?"1px solid #8b5cf640":"1px solid #1e1e2e",color:viewMode===v.id?"#8b5cf6":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
+          {[{id:"kanban",l:"Канбан"},{id:"calendar",l:"Календарь"}].map(v=><button key={v.id} onClick={()=>setViewMode(v.id)} style={{padding:"5px 12px",borderRadius:6,cursor:"pointer",background:viewMode===v.id?"#1e1e26":"transparent",border:viewMode===v.id?"1px solid #32323e":"1px solid transparent",color:viewMode===v.id?"#f0f0f5":"#8b8b9e",fontSize:12,fontFamily:"'Onest',sans-serif",fontWeight:viewMode===v.id?600:500,transition:"all .15s"}}>{v.l}</button>)}
         </div>
         {viewMode==="kanban"&&<Kanban statuses={PRE_STATUSES} items={filtPre} renderCard={x=>mkCard(x,"pre")} onDrop={(id,st)=>drop("pre",id,st)} onAddClick={st=>openNew("pre",{status:st})}/>}
-        {viewMode==="calendar"&&<CalView items={filtPre} dateField="deadline" onDayClick={d=>openNew("pre",{deadline:d})} color="#8b5cf6" onMoveToDay={(id,day)=>{ setPreItems(p=>p.map(x=>x.id===id?{...x,deadline:day}:x)); const item=preItems.find(x=>x.id===id); if(item){const{id:_,project,status,title,chat,...rest}=item;api.updateTask(id,{data:{...rest,deadline:day}}).catch(()=>{});}}} renderChip={x=>{const p=projOf(x.project,projects);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pre",x);}} style={{background:p.color+"18",border:`1px solid ${p.color}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:p.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
+        {viewMode==="calendar"&&<CalView items={filtPre} dateField="deadline" onDayClick={d=>openNew("pre",{deadline:d})} color="#c8ff57" onMoveToDay={(id,day)=>{ setPreItems(p=>p.map(x=>x.id===id?{...x,deadline:day}:x)); const item=preItems.find(x=>x.id===id); if(item){const{id:_,project,status,title,chat,...rest}=item;api.updateTask(id,{data:{...rest,deadline:day}}).catch(()=>{});}}} renderChip={x=>{const p=projOf(x.project,projects);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pre",x);}} style={{background:p.color+"18",border:`1px solid ${p.color}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:p.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
       </>}
 
       {/* PROD */}
       {tab==="prod"&&<>
         <FilterBar pf={prodFilt.pf} setPf={v=>setProdFilt(p=>({...p,pf:v}))} member={prodFilt.member} setMember={v=>setProdFilt(p=>({...p,member:v}))} sortBy={prodFilt.sortBy} setSortBy={v=>setProdFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Съёмка" onAdd={()=>openNew("prod")} showArchived={showArchivedProd} onArchiveToggle={()=>setShowArchivedProd(p=>!p)}/>
         <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[{id:"kanban",l:"Канбан"},{id:"calendar",l:"Съёмки"}].map(v=><button key={v.id} onClick={()=>setViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:viewMode===v.id?"#3b82f620":"transparent",border:viewMode===v.id?"1px solid #3b82f640":"1px solid #1e1e2e",color:viewMode===v.id?"#3b82f6":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
+          {[{id:"kanban",l:"Канбан"},{id:"calendar",l:"Съёмки"}].map(v=><button key={v.id} onClick={()=>setViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:viewMode===v.id?"rgba(76,201,240,.12)":"transparent",border:viewMode===v.id?"1px solid #3b82f640":"1px solid #2a2a35",color:viewMode===v.id?"#4cc9f0":"#55556a",fontSize:11,fontFamily:"'Onest',sans-serif"}}>{v.l}</button>)}
         </div>
         {viewMode==="kanban"&&<Kanban statuses={PROD_STATUSES} items={filtProd} renderCard={x=>mkCard(x,"prod")} onDrop={(id,st)=>drop("prod",id,st)} onAddClick={st=>openNew("prod",{status:st})}/>}
-        {viewMode==="calendar"&&<CalView items={filtProd} dateField="shoot_date" onDayClick={d=>openNew("prod",{shoot_date:d+"T10:00"})} color="#3b82f6" onMoveToDay={(id,day)=>moveToDay("prod",id,day+"T10:00")} renderChip={x=>{const p=projOf(x.project,projects);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("prod",x);}} style={{background:p.color+"18",border:`1px solid ${p.color}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:p.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🎬 {x.title}</div>;}}/>}
+        {viewMode==="calendar"&&<CalView items={filtProd} dateField="shoot_date" onDayClick={d=>openNew("prod",{shoot_date:d+"T10:00"})} color="#4cc9f0" onMoveToDay={(id,day)=>moveToDay("prod",id,day+"T10:00")} renderChip={x=>{const p=projOf(x.project,projects);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("prod",x);}} style={{background:p.color+"18",border:`1px solid ${p.color}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:p.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🎬 {x.title}</div>;}}/>}
       </>}
 
       {/* POST */}
@@ -2405,7 +2439,7 @@ function MainApp({currentUser, onLogout}){
           addLabel={postSubTab==="reels"?"Рилс":postSubTab==="video"?"Видео":"Карусель"}
           onAdd={()=>openNew(postSubTab==="reels"?"post_reels":postSubTab==="video"?"post_video":"post_carousel")} showArchived={showArchivedPost} onArchiveToggle={()=>setShowArchivedPost(p=>!p)}/>
         <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[["reels","🎞️ Рилсы","#ec4899"],["video","🎬 Видео","#3b82f6"],["carousel","🖼 Карусели","#a78bfa"]].map(([id,l,c])=><button key={id} onClick={()=>setPostSubTab(id)} style={{padding:"4px 11px",borderRadius:6,cursor:"pointer",background:postSubTab===id?c+"20":"transparent",border:postSubTab===id?`1px solid ${c}40`:"1px solid #1e1e2e",color:postSubTab===id?c:"#6b7280",fontSize:11,fontFamily:"inherit",fontWeight:600}}>{l}</button>)}
+          {[["reels","🎞️ Рилсы","#ff4d6d"],["video","🎬 Видео","#4cc9f0"],["carousel","🖼 Карусели","#c8ff57"]].map(([id,l,c])=><button key={id} onClick={()=>setPostSubTab(id)} style={{padding:"4px 11px",borderRadius:6,cursor:"pointer",background:postSubTab===id?c+"20":"transparent",border:postSubTab===id?`1px solid ${c}50`:"1px solid #2a2a35",color:postSubTab===id?c:"#55556a",fontSize:12,fontFamily:"'Onest',sans-serif",fontWeight:600,transition:"all .15s"}}>{l}</button>)}
         </div>
         {postSubTab==="reels"&&<Kanban statuses={POST_STATUSES} items={filtPostReels} renderCard={x=>mkCard(x,"post_reels")} onDrop={(id,st)=>drop("post_reels",id,st)} onAddClick={st=>openNew("post_reels",{status:st})}/>}
         {postSubTab==="video"&&<Kanban statuses={POST_STATUSES} items={filtPostVideo} renderCard={x=>mkCard(x,"post_video")} onDrop={(id,st)=>drop("post_video",id,st)} onAddClick={st=>openNew("post_video",{status:st})}/>}
@@ -2416,10 +2450,10 @@ function MainApp({currentUser, onLogout}){
       {tab==="pub"&&<>
         <FilterBar pf={pubFilt.pf} setPf={v=>setPubFilt(p=>({...p,pf:v}))} member={pubFilt.member} setMember={v=>setPubFilt(p=>({...p,member:v}))} sortBy={pubFilt.sortBy} setSortBy={v=>setPubFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Публикацию" onAdd={()=>openNew("pub")} showArchived={showArchivedPub} onArchiveToggle={()=>setShowArchivedPub(p=>!p)}/>
         <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[{id:"week",l:"Неделя"},{id:"calendar",l:"Месяц"},{id:"status",l:"По статусам"}].map(v=><button key={v.id} onClick={()=>setPubViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:pubViewMode===v.id?"#10b98120":"transparent",border:pubViewMode===v.id?"1px solid #10b98140":"1px solid #1e1e2e",color:pubViewMode===v.id?"#10b981":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
+          {[{id:"week",l:"Неделя"},{id:"calendar",l:"Месяц"},{id:"status",l:"По статусам"}].map(v=><button key={v.id} onClick={()=>setPubViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:pubViewMode===v.id?"#1e1e26":"transparent",border:pubViewMode===v.id?"1px solid #32323e":"1px solid transparent",color:pubViewMode===v.id?"#f0f0f5":"#55556a",fontSize:12,fontFamily:"'Onest',sans-serif"}}>{v.l}</button>)}
         </div>
         {pubViewMode==="week"&&<WeekView items={filtPub} onItemClick={x=>openEdit("pub",x)} onDayClick={dt=>openNew("pub",{planned_date:dt})} projects={projects} onMoveToDay={(id,dt)=>moveToDay("pub",id,dt)}/>}
-        {pubViewMode==="calendar"&&<CalView items={filtPub} dateField="planned_date" onDayClick={d=>openNew("pub",{planned_date:d+"T12:00"})} color="#10b981" onMoveToDay={(id,day)=>moveToDay("pub",id,day+"T12:00")} renderChip={x=>{const sc=stColor(PUB_STATUSES,x.status);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pub",x);}} style={{background:sc+"18",border:`1px solid ${sc}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
+        {pubViewMode==="calendar"&&<CalView items={filtPub} dateField="planned_date" onDayClick={d=>openNew("pub",{planned_date:d+"T12:00"})} color="#06d6a0" onMoveToDay={(id,day)=>moveToDay("pub",id,day+"T12:00")} renderChip={x=>{const sc=stColor(PUB_STATUSES,x.status);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pub",x);}} style={{background:sc+"18",border:`1px solid ${sc}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
         {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES} items={filtPub} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>mkCard(x,"pub")}/>}
       </>}
 
@@ -2428,13 +2462,14 @@ function MainApp({currentUser, onLogout}){
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
 
+    </div>{/* /main column */}
     {/* MODALS */}
-    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
-    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#c8ff57" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#4cc9f0" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ff4d6d" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#4cc9f0" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#c8ff57" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#06d6a0" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
   </div>;
 }
 
@@ -2443,42 +2478,42 @@ function MainApp({currentUser, onLogout}){
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const M = {
-  screen: { position:"absolute", inset:0, display:"flex", flexDirection:"column", background:"#0d0d14", transform:"translateX(100%)", transition:"transform 0.28s cubic-bezier(0.4,0,0.2,1)" },
+  screen: { position:"absolute", inset:0, display:"flex", flexDirection:"column", background:"#0f0f12", transform:"translateX(100%)", transition:"transform 0.28s cubic-bezier(0.4,0,0.2,1)" },
   screenActive: { transform:"translateX(0)" },
   screenPrev: { transform:"translateX(-25%)" },
-  sh: { background:"#0d0d14", padding:"10px 16px 8px", flexShrink:0, borderBottom:"1px solid #111118" },
+  sh: { background:"#141418", padding:"10px 16px 8px", flexShrink:0, borderBottom:"1px solid #2a2a35" },
   shRow: { display:"flex", alignItems:"center", gap:8 },
-  title: { fontSize:17, fontWeight:800, color:"#f0eee8", flex:1 },
-  sub: { fontSize:10, color:"#4b5563", fontFamily:"monospace", marginTop:2 },
-  back: { width:32, height:32, borderRadius:10, background:"#111118", border:"1px solid #1e1e2e", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:18, color:"#9ca3af", flexShrink:0 },
-  actionBtn: { background:"#8b5cf620", border:"1px solid #8b5cf640", borderRadius:10, padding:"6px 13px", fontSize:11, fontWeight:700, color:"#a78bfa", cursor:"pointer", fontFamily:"inherit", flexShrink:0 },
+  title: { fontSize:17, fontWeight:800, color:"#f0f0f5", flex:1, letterSpacing:"-.3px" },
+  sub: { fontSize:10, color:"#55556a", fontFamily:"'JetBrains Mono',monospace", marginTop:2 },
+  back: { width:32, height:32, borderRadius:9, background:"#1e1e26", border:"1px solid #2a2a35", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:18, color:"#8b8b9e", flexShrink:0 },
+  actionBtn: { background:"#c8ff57", border:"none", borderRadius:9, padding:"6px 14px", fontSize:12, fontWeight:700, color:"#0f0f12", cursor:"pointer", fontFamily:"'Onest',sans-serif", flexShrink:0, letterSpacing:".01em" },
   scroll: { flex:1, overflowY:"auto", overflowX:"hidden", WebkitOverflowScrolling:"touch" },
   pad: { padding:"14px 16px" },
-  card: { background:"#111118", border:"1px solid #1a1a2e", borderRadius:14, padding:"12px 14px", marginBottom:8, cursor:"pointer", position:"relative", overflow:"hidden" },
-  cardTitle: { fontSize:13, fontWeight:700, color:"#f0eee8", marginBottom:7, lineHeight:1.3 },
-  tags: { display:"flex", gap:5, flexWrap:"wrap", marginBottom:7 },
-  tag: { fontSize:9, padding:"2px 8px", borderRadius:8, fontFamily:"monospace", fontWeight:700, background:"#1a1a2e", color:"#6b7280", border:"1px solid #242438" },
+  card: { background:"#1e1e26", border:"1px solid #2a2a35", borderRadius:12, padding:"12px 14px", marginBottom:6, cursor:"pointer", position:"relative", overflow:"hidden", transition:"all .15s" },
+  cardTitle: { fontSize:13, fontWeight:600, color:"#f0f0f5", marginBottom:8, lineHeight:1.4 },
+  tags: { display:"flex", gap:5, flexWrap:"wrap", marginBottom:8 },
+  tag: { fontSize:10, padding:"2px 9px", borderRadius:5, fontFamily:"'JetBrains Mono',monospace", fontWeight:600, background:"#1a1a20", color:"#8b8b9e", border:"1px solid #2a2a35" },
   cfoot: { display:"flex", alignItems:"center", justifyContent:"space-between" },
   avs: { display:"flex" },
-  av: { width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:800, color:"#fff", border:"2px solid #0d0d14", marginLeft:-5, flexShrink:0 },
+  av: { width:22, height:22, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:800, color:"#0f0f12", border:"2px solid #141418", marginLeft:-5, flexShrink:0 },
   secH: { display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 },
-  secT: { fontSize:10, fontWeight:800, color:"#4b5563", fontFamily:"monospace", letterSpacing:"0.08em" },
-  chip: { flexShrink:0, padding:"6px 13px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", background:"#111118", border:"1px solid #1e1e2e", color:"#4b5563", fontFamily:"inherit" },
-  chipOn: { background:"#8b5cf615", borderColor:"#8b5cf650", color:"#a78bfa" },
+  secT: { fontSize:10, fontWeight:700, color:"#55556a", fontFamily:"'JetBrains Mono',monospace", letterSpacing:"0.07em" },
+  chip: { flexShrink:0, padding:"6px 14px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", background:"#1a1a20", border:"1px solid #2a2a35", color:"#55556a", fontFamily:"'Onest',sans-serif", transition:"all .15s" },
+  chipOn: { background:"rgba(200,255,87,.1)", borderColor:"rgba(200,255,87,.35)", color:"#c8ff57" },
 };
 
 function MTag({children, color}){
-  const colorMap = { grey:{bg:"#6b728012",c:"#6b7280",b:"#6b728025"}, yellow:{bg:"#f59e0b12",c:"#f59e0b",b:"#f59e0b25"}, purple:{bg:"#8b5cf612",c:"#a78bfa",b:"#8b5cf625"}, green:{bg:"#10b98112",c:"#10b981",b:"#10b98125"}, blue:{bg:"#3b82f612",c:"#60a5fa",b:"#3b82f625"}, red:{bg:"#ef444412",c:"#ef4444",b:"#ef444425"} };
+  const colorMap = { grey:{bg:"#6b728012",c:"#55556a",b:"#6b728025"}, yellow:{bg:"rgba(255,209,102,.07)",c:"#ffd166",b:"rgba(255,209,102,.15)"}, purple:{bg:"rgba(200,255,87,.07)",c:"#c8ff57",b:"rgba(200,255,87,.15)"}, green:{bg:"rgba(6,214,160,.07)",c:"#06d6a0",b:"rgba(6,214,160,.15)"}, blue:{bg:"rgba(76,201,240,.07)",c:"#60a5fa",b:"rgba(76,201,240,.15)"}, red:{bg:"#ef444412",c:"#ff4d6d",b:"#ef444425"} };
   const col = colorMap[color] || {};
   return <span style={{...M.tag, background:col.bg, color:col.c, borderColor:col.b}}>{children}</span>;
 }
 
 function MCard({item, type, color, projects, onOpen}){
-  const proj = projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
-  const accentColor = color || proj.color || "#6b7280";
+  const proj = projects.find(p=>p.id===item.project)||{label:"",color:"#55556a"};
+  const accentColor = color || proj.color || "#55556a";
   const ALL_STATUSES = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
-  const st = ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
-  const stColorKey = st.c==="#10b981"?"green":st.c==="#f59e0b"?"yellow":st.c==="#8b5cf6"?"purple":st.c==="#3b82f6"?"blue":"grey";
+  const st = ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#55556a"};
+  const stColorKey = st.c==="#06d6a0"?"green":st.c==="#ffd166"?"yellow":st.c==="#c8ff57"?"purple":st.c==="#4cc9f0"?"blue":"grey";
   const typeLabel = type==="pre"?"✍️ Сценарий":type==="prod"?"🎬 Съёмка":type==="post_reels"?"🎞 Рилс":type==="post_video"?"🎬 Видео":type==="post_carousel"?"🖼 Карусель":"🚀 Публикация";
   const dateStr = item.deadline||item.shoot_date||item.planned_date||item.post_deadline||"";
   const memberIds = ["producer","editor","scriptwriter","operator","designer","customer","executor"].map(f=>item[f]).filter(Boolean);
@@ -2497,18 +2532,18 @@ function MCard({item, type, color, projects, onOpen}){
             return <div key={i} style={{...M.av, background:accentColor, marginLeft:i===0?0:-6}}>{uid[0]?.toUpperCase()||"?"}</div>;
           })}
         </div>
-        <span style={{fontSize:9, color:"#374151", fontFamily:"monospace"}}>{dateStr?`📅 ${dateStr}`:"—"}</span>
+        <span style={{fontSize:9, color:"#32323e", fontFamily:"'JetBrains Mono',monospace"}}>{dateStr?`📅 ${dateStr}`:"—"}</span>
       </div>
     </div>
   );
 }
 
 function MCardFull({item, type, color, projects, team, onOpen}){
-  const proj = projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
-  const accentColor = color || proj.color || "#6b7280";
+  const proj = projects.find(p=>p.id===item.project)||{label:"",color:"#55556a"};
+  const accentColor = color || proj.color || "#55556a";
   const ALL_STATUSES = [...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES,...PUB_STATUSES];
-  const st = ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
-  const stColorKey = st.c==="#10b981"?"green":st.c==="#f59e0b"?"yellow":st.c==="#8b5cf6"?"purple":st.c==="#3b82f6"?"blue":"grey";
+  const st = ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#55556a"};
+  const stColorKey = st.c==="#06d6a0"?"green":st.c==="#ffd166"?"yellow":st.c==="#c8ff57"?"purple":st.c==="#4cc9f0"?"blue":"grey";
   const typeLabel = type==="pre"?"✍️ Сценарий":type==="prod"?"🎬 Съёмка":type==="post_reels"?"🎞 Рилс":type==="post_video"?"🎬 Видео":type==="post_carousel"?"🖼 Карусель":"🚀 Публикация";
   const dateStr = item.deadline||item.shoot_date||item.planned_date||item.post_deadline||"";
   const execFields = ["editor","scriptwriter","operator","designer","executor"];
@@ -2529,7 +2564,7 @@ function MCardFull({item, type, color, projects, team, onOpen}){
             <div key={m.id} style={{...M.av, background:m.color||accentColor, marginLeft:i===0?0:-6}}>{(m.name||"?")[0].toUpperCase()}</div>
           ))}
         </div>
-        <span style={{fontSize:9, color:"#374151", fontFamily:"monospace"}}>{dateStr?`📅 ${dateStr}`:"—"}</span>
+        <span style={{fontSize:9, color:"#32323e", fontFamily:"'JetBrains Mono',monospace"}}>{dateStr?`📅 ${dateStr}`:"—"}</span>
       </div>
     </div>
   );
@@ -2538,12 +2573,12 @@ function MCardFull({item, type, color, projects, team, onOpen}){
 function MTasksScreen({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,onOpen,onAdd}){
   const [filter,setFilter] = useState("all");
   const sections = [
-    {id:"post_reels", label:"ПОСТПРОДАКШН · РИЛСЫ", color:"#ec4899", items:postReels, show:filter==="all"||filter==="post"},
-    {id:"post_video", label:"ПОСТПРОДАКШН · ВИДЕО", color:"#3b82f6", items:postVideo, show:filter==="all"||filter==="post"},
-    {id:"post_carousel", label:"ПОСТПРОДАКШН · КАРУСЕЛИ", color:"#a78bfa", items:postCarousels, show:filter==="all"||filter==="post"},
-    {id:"pre", label:"ПРЕПРОДАКШН", color:"#8b5cf6", items:preItems, show:filter==="all"||filter==="pre"},
-    {id:"prod", label:"ПРОДАКШН · СЪЁМКИ", color:"#3b82f6", items:prodItems, show:filter==="all"||filter==="prod"},
-    {id:"pub", label:"ПУБЛИКАЦИИ", color:"#10b981", items:pubItems, show:filter==="all"||filter==="pub"},
+    {id:"post_reels", label:"ПОСТПРОДАКШН · РИЛСЫ", color:"#ff4d6d", items:postReels, show:filter==="all"||filter==="post"},
+    {id:"post_video", label:"ПОСТПРОДАКШН · ВИДЕО", color:"#4cc9f0", items:postVideo, show:filter==="all"||filter==="post"},
+    {id:"post_carousel", label:"ПОСТПРОДАКШН · КАРУСЕЛИ", color:"#c8ff57", items:postCarousels, show:filter==="all"||filter==="post"},
+    {id:"pre", label:"ПРЕПРОДАКШН", color:"#c8ff57", items:preItems, show:filter==="all"||filter==="pre"},
+    {id:"prod", label:"ПРОДАКШН · СЪЁМКИ", color:"#4cc9f0", items:prodItems, show:filter==="all"||filter==="prod"},
+    {id:"pub", label:"ПУБЛИКАЦИИ", color:"#06d6a0", items:pubItems, show:filter==="all"||filter==="pub"},
   ];
   const total = [...preItems,...prodItems,...postReels,...postVideo,...postCarousels,...pubItems].filter(x=>!x.archived).length;
   const chips = [{id:"all",l:"Все"},{id:"post",l:"Постпродакшн"},{id:"pre",l:"Препродакшн"},{id:"prod",l:"Продакшн"},{id:"pub",l:"Публикации"}];
@@ -2560,13 +2595,13 @@ function MTasksScreen({preItems,prodItems,postReels,postVideo,postCarousels,pubI
     <div style={{...M.scroll,...M.pad}}>
       {sections.filter(s=>s.show&&s.items.filter(x=>!x.archived).length>0).map(s=>(
         <div key={s.id} style={{marginBottom:16}}>
-          <div style={M.secH}><span style={M.secT}>{s.label}</span><span style={{fontSize:10,color:"#374151",fontFamily:"monospace"}}>{s.items.filter(x=>!x.archived).length}</span></div>
+          <div style={M.secH}><span style={M.secT}>{s.label}</span><span style={{fontSize:10,color:"#32323e",fontFamily:"'JetBrains Mono',monospace"}}>{s.items.filter(x=>!x.archived).length}</span></div>
           {s.items.filter(x=>!x.archived).map(item=>(
             <MCardFull key={item.id} item={item} type={s.id} color={s.color} projects={projects} team={team} onOpen={onOpen}/>
           ))}
         </div>
       ))}
-      {total===0&&<div style={{textAlign:"center",color:"#374151",fontSize:12,padding:"40px 0"}}>Нет активных задач</div>}
+      {total===0&&<div style={{textAlign:"center",color:"#32323e",fontSize:12,padding:"40px 0"}}>Нет активных задач</div>}
     </div>
   </>;
 }
@@ -2598,20 +2633,20 @@ function MPubScreen({pubItems,projects,team,onOpen,onAdd}){
                   <div style={M.cardTitle}>{item.title||"Без названия"}</div>
                   <div style={M.tags}>
                     <span style={M.tag}>{projects.find(p=>p.id===item.project)?.label||""}</span>
-                    <MTag color={s.c==="#10b981"?"green":s.c==="#f59e0b"?"yellow":s.c==="#3b82f6"?"blue":"grey"}>{s.l}</MTag>
+                    <MTag color={s.c==="#06d6a0"?"green":s.c==="#ffd166"?"yellow":s.c==="#4cc9f0"?"blue":"grey"}>{s.l}</MTag>
                     {item.pub_type&&<span style={M.tag}>{item.pub_type==="video"?"🎬 Видео":item.pub_type==="carousel"?"🖼 Карусель":"📝 Пост"}</span>}
                   </div>
                 </div>
-                <span style={{color:item.starred?"#f59e0b":"#2d2d44",fontSize:20,cursor:"pointer",lineHeight:1}}>★</span>
+                <span style={{color:item.starred?"#ffd166":"#2a2a35",fontSize:20,cursor:"pointer",lineHeight:1}}>★</span>
               </div>
               <div style={M.cfoot}>
-                <span style={{fontSize:9,color:"#374151",fontFamily:"monospace"}}>{item.planned_date||"—"}</span>
+                <span style={{fontSize:9,color:"#32323e",fontFamily:"'JetBrains Mono',monospace"}}>{item.planned_date||"—"}</span>
               </div>
             </div>
           ))}
         </div>
       ))}
-      {active.length===0&&<div style={{textAlign:"center",color:"#374151",fontSize:12,padding:"40px 0"}}>Нет публикаций</div>}
+      {active.length===0&&<div style={{textAlign:"center",color:"#32323e",fontSize:12,padding:"40px 0"}}>Нет публикаций</div>}
     </div>
   </>;
 }
@@ -2630,8 +2665,8 @@ function MSummaryScreen({preItems,prodItems,postReels,postVideo,postCarousels,pu
   const filtered = member==="all" ? allItems : allItems.filter(x=>[...execFields,...custFields].some(f=>x[f]===member));
   const asExec = filtered.filter(x=>execFields.some(f=>member==="all"?x[f]:x[f]===member));
   const asCust = filtered.filter(x=>custFields.some(f=>member==="all"?x[f]:x[f]===member));
-  const colorMap = {"#ec4899":"pink","#3b82f6":"blue","#8b5cf6":"purple","#10b981":"green","#f59e0b":"yellow"};
-  const typeColor = {pre:"#8b5cf6",prod:"#3b82f6",post_reels:"#ec4899",post_video:"#3b82f6",post_carousel:"#a78bfa"};
+  const colorMap = {"#ff4d6d":"pink","#4cc9f0":"blue","#c8ff57":"purple","#06d6a0":"green","#ffd166":"yellow"};
+  const typeColor = {pre:"#c8ff57",prod:"#4cc9f0",post_reels:"#ff4d6d",post_video:"#4cc9f0",post_carousel:"#c8ff57"};
   return <>
     <div style={M.sh}>
       <div style={M.shRow}><div style={M.title}>Сводка</div></div>
@@ -2645,38 +2680,38 @@ function MSummaryScreen({preItems,prodItems,postReels,postVideo,postCarousels,pu
     <div style={{...M.scroll,...M.pad}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div>
-          <div style={{fontSize:9,fontWeight:800,fontFamily:"monospace",color:"#4b5563",marginBottom:8,paddingBottom:6,borderBottom:"1px solid #111118"}}>ИСПОЛНИТЕЛЬ · {asExec.length}</div>
+          <div style={{fontSize:9,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",marginBottom:8,paddingBottom:6,borderBottom:"1px solid #2a2a35"}}>ИСПОЛНИТЕЛЬ · {asExec.length}</div>
           {asExec.map(item=>{
-            const proj=projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
-            const c=typeColor[item._type]||"#6b7280";
+            const proj=projects.find(p=>p.id===item.project)||{label:"",color:"#55556a"};
+            const c=typeColor[item._type]||"#55556a";
             const ALL_STATUSES=[...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES];
-            const st=ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
+            const st=ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#55556a"};
             return <div key={item.id} style={{...M.card,padding:"10px 11px",marginBottom:6,borderLeft:`3px solid ${c}`}} onClick={()=>onOpen(item._type,item)}>
-              <div style={{fontSize:11,fontWeight:700,marginBottom:5,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+              <div style={{fontSize:11,fontWeight:700,marginBottom:5,color:"#f0f0f5"}}>{item.title||"Без названия"}</div>
               <div style={{display:"flex",gap:4,marginBottom:4,flexWrap:"wrap"}}>
                 <span style={{...M.tag,fontSize:8}}>{proj.label}</span>
                 <span style={{...M.tag,fontSize:8,background:st.c+"12",color:st.c,borderColor:st.c+"25"}}>{st.l}</span>
               </div>
             </div>;
           })}
-          {asExec.length===0&&<div style={{fontSize:11,color:"#374151",padding:"8px 0"}}>Нет задач</div>}
+          {asExec.length===0&&<div style={{fontSize:11,color:"#32323e",padding:"8px 0"}}>Нет задач</div>}
         </div>
         <div>
-          <div style={{fontSize:9,fontWeight:800,fontFamily:"monospace",color:"#4b5563",marginBottom:8,paddingBottom:6,borderBottom:"1px solid #111118"}}>ЗАКАЗЧИК · {asCust.length}</div>
+          <div style={{fontSize:9,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:"#55556a",marginBottom:8,paddingBottom:6,borderBottom:"1px solid #2a2a35"}}>ЗАКАЗЧИК · {asCust.length}</div>
           {asCust.map(item=>{
-            const proj=projects.find(p=>p.id===item.project)||{label:"",color:"#6b7280"};
-            const c=typeColor[item._type]||"#6b7280";
+            const proj=projects.find(p=>p.id===item.project)||{label:"",color:"#55556a"};
+            const c=typeColor[item._type]||"#55556a";
             const ALL_STATUSES=[...PRE_STATUSES,...PROD_STATUSES,...POST_STATUSES];
-            const st=ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#6b7280"};
+            const st=ALL_STATUSES.find(s=>s.id===item.status)||{l:item.status,c:"#55556a"};
             return <div key={item.id} style={{...M.card,padding:"10px 11px",marginBottom:6,borderLeft:`3px solid ${c}`}} onClick={()=>onOpen(item._type,item)}>
-              <div style={{fontSize:11,fontWeight:700,marginBottom:5,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+              <div style={{fontSize:11,fontWeight:700,marginBottom:5,color:"#f0f0f5"}}>{item.title||"Без названия"}</div>
               <div style={{display:"flex",gap:4,marginBottom:4,flexWrap:"wrap"}}>
                 <span style={{...M.tag,fontSize:8}}>{proj.label}</span>
                 <span style={{...M.tag,fontSize:8,background:st.c+"12",color:st.c,borderColor:st.c+"25"}}>{st.l}</span>
               </div>
             </div>;
           })}
-          {asCust.length===0&&<div style={{fontSize:11,color:"#374151",padding:"8px 0"}}>Нет задач</div>}
+          {asCust.length===0&&<div style={{fontSize:11,color:"#32323e",padding:"8px 0"}}>Нет задач</div>}
         </div>
       </div>
     </div>
@@ -2695,20 +2730,20 @@ function MAnalyticsScreen({pubItems,projects}){
     <div style={M.sh}>
       <div style={M.shRow}>
         <div style={{flex:1}}><div style={M.title}>Аналитика</div></div>
-        <select style={{background:"#111118",border:"1px solid #1e1e2e",color:"#f0eee8",padding:"5px 8px",borderRadius:8,fontSize:11,fontFamily:"inherit",outline:"none"}} value={month} onChange={e=>setMonth(Number(e.target.value))}>
+        <select style={{background:"#1e1e26",border:"1px solid #2a2a35",color:"#f0f0f5",padding:"5px 8px",borderRadius:8,fontSize:11,fontFamily:"'Onest',sans-serif",outline:"none"}} value={month} onChange={e=>setMonth(Number(e.target.value))}>
           {MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
         </select>
       </div>
     </div>
     <div style={{...M.scroll,...M.pad}}>
       <div style={{...M.secH,marginBottom:10}}><span style={M.secT}>ПУБЛИКАЦИИ ПО ПРОЕКТАМ</span></div>
-      <div style={{background:"#111118",border:"1px solid #1a1a2e",borderRadius:14,overflow:"hidden",marginBottom:16}}>
+      <div style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:14,overflow:"hidden",marginBottom:16}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-          <thead><tr style={{background:"#0a0a0f"}}>
-            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 10px",textAlign:"left",borderBottom:"1px solid #1a1a2e"}}>ПРОЕКТ</th>
-            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #1a1a2e"}}>🎬</th>
-            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #1a1a2e"}}>🖼</th>
-            <th style={{fontSize:8,color:"#374151",fontFamily:"monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #1a1a2e"}}>Всего</th>
+          <thead><tr style={{background:"#0f0f12"}}>
+            <th style={{fontSize:8,color:"#32323e",fontFamily:"'JetBrains Mono',monospace",padding:"8px 10px",textAlign:"left",borderBottom:"1px solid #2a2a35"}}>ПРОЕКТ</th>
+            <th style={{fontSize:8,color:"#32323e",fontFamily:"'JetBrains Mono',monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #2a2a35"}}>🎬</th>
+            <th style={{fontSize:8,color:"#32323e",fontFamily:"'JetBrains Mono',monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #2a2a35"}}>🖼</th>
+            <th style={{fontSize:8,color:"#32323e",fontFamily:"'JetBrains Mono',monospace",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #2a2a35"}}>Всего</th>
           </tr></thead>
           <tbody>
             {projects.filter(p=>!p.archived).map(proj=>{
@@ -2716,11 +2751,11 @@ function MAnalyticsScreen({pubItems,projects}){
               const vids=pp.filter(x=>x.pub_type==="video").length;
               const cars=pp.filter(x=>x.pub_type==="carousel").length;
               const total=pp.length;
-              return <tr key={proj.id} style={{borderBottom:"1px solid #111118"}}>
+              return <tr key={proj.id} style={{borderBottom:"1px solid #2a2a35"}}>
                 <td style={{padding:"8px 10px",color:"#d1d5db",fontSize:11}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:proj.color,marginRight:6}}></span>{proj.label}</td>
-                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"monospace",color:vids?"#f0eee8":"#2d2d44"}}>{vids}</td>
-                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"monospace",color:cars?"#f0eee8":"#2d2d44"}}>{cars}</td>
-                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"monospace",color:total?"#f0eee8":"#2d2d44"}}>{total}</td>
+                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"'JetBrains Mono',monospace",color:vids?"#f0f0f5":"#2a2a35"}}>{vids}</td>
+                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"'JetBrains Mono',monospace",color:cars?"#f0f0f5":"#2a2a35"}}>{cars}</td>
+                <td style={{padding:"8px 6px",textAlign:"center",fontSize:14,fontWeight:900,fontFamily:"'JetBrains Mono',monospace",color:total?"#f0f0f5":"#2a2a35"}}>{total}</td>
               </tr>;
             })}
           </tbody>
@@ -2731,9 +2766,9 @@ function MAnalyticsScreen({pubItems,projects}){
         {starred.map(item=>(
           <div key={item.id} style={{...M.card,borderLeft:"3px solid #10b981"}}>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <span style={{color:"#f59e0b",fontSize:18}}>★</span>
+              <span style={{color:"#ffd166",fontSize:18}}>★</span>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:"#f0eee8"}}>{item.title||"Без названия"}</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#f0f0f5"}}>{item.title||"Без названия"}</div>
                 <div style={{display:"flex",gap:5,marginTop:4}}>
                   <span style={M.tag}>{projects.find(p=>p.id===item.project)?.label||""}</span>
                   <span style={M.tag}>{item.planned_date||""}</span>
@@ -2761,21 +2796,21 @@ function MBaseScreen({projects,setProjects,teamMembers,setTeamMembers,currentUse
     </div>
     <div style={{...M.scroll,...M.pad}}>
       {sub==="projects"&&projects.filter(p=>!p.archived).map(proj=>(
-        <div key={proj.id} style={{background:"#111118",border:"1px solid #1a1a2e",borderRadius:14,padding:14,marginBottom:8}}>
+        <div key={proj.id} style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:14,padding:14,marginBottom:8}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
             <div style={{width:36,height:36,borderRadius:10,background:proj.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:900,color:"#fff",flexShrink:0}}>{(proj.label||"?")[0]}</div>
-            <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"#f0eee8"}}>{proj.label}</div></div>
+            <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"#f0f0f5"}}>{proj.label}</div></div>
           </div>
-          <div style={{fontSize:11,color:"#4b5563",lineHeight:1.4}}>{proj.description||"Нет описания"}</div>
+          <div style={{fontSize:11,color:"#55556a",lineHeight:1.4}}>{proj.description||"Нет описания"}</div>
         </div>
       ))}
       {sub==="team"&&teamMembers.map(m=>(
-        <div key={m.id} style={{background:"#111118",border:"1px solid #1a1a2e",borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:44,height:44,borderRadius:14,background:`linear-gradient(135deg,${m.color||"#6b7280"},${m.color||"#6b7280"}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,color:"#fff",flexShrink:0}}>{(m.name||"?")[0].toUpperCase()}</div>
+        <div key={m.id} style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:44,height:44,borderRadius:14,background:`linear-gradient(135deg,${m.color||"#55556a"},${m.color||"#55556a"}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,color:"#fff",flexShrink:0}}>{(m.name||"?")[0].toUpperCase()}</div>
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:800,color:"#f0eee8"}}>{m.name}</div>
-            <div style={{fontSize:10,color:"#4b5563",fontFamily:"monospace",marginTop:2}}>{m.role}</div>
-            {m.telegram&&<div style={{fontSize:10,color:"#3b82f6",marginTop:2}}>@{m.telegram}</div>}
+            <div style={{fontSize:13,fontWeight:800,color:"#f0f0f5"}}>{m.name}</div>
+            <div style={{fontSize:10,color:"#55556a",fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>{m.role}</div>
+            {m.telegram&&<div style={{fontSize:10,color:"#4cc9f0",marginTop:2}}>@{m.telegram}</div>}
           </div>
         </div>
       ))}
@@ -2816,22 +2851,22 @@ function MobileApp({currentUser,onLogout,stores}){
   function handleAdd(){ openNew("post_reels"); }
 
   return (
-    <div style={{height:"100vh",background:"#0d0d14",color:"#f0eee8",display:"flex",flexDirection:"column",fontFamily:"'Syne','Inter',sans-serif",overflow:"hidden",position:"relative"}}>
+    <div style={{height:"100vh",background:"#141418",color:"#f0f0f5",display:"flex",flexDirection:"column",fontFamily:"'Onest',sans-serif",overflow:"hidden",position:"relative"}}>
 
       {/* TOP BAR */}
-      <div style={{background:"#0d0d14",borderBottom:"1px solid #111118",padding:"10px 16px 8px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
-        <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🍇</div>
+      <div style={{background:"#141418",borderBottom:"1px solid #2a2a35",padding:"10px 16px 8px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:28,height:28,borderRadius:8,background:"#c8ff57",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🍇</div>
         <div style={{flex:1}}>
           <div style={{fontSize:15,fontWeight:800}}>Виноград</div>
-          <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>@{currentUser.telegram}</div>
+          <div style={{fontSize:9,color:"#55556a",fontFamily:"'JetBrains Mono',monospace"}}>@{currentUser.telegram}</div>
         </div>
         <div style={{position:"relative"}}>
-          <button onClick={()=>setNotifOpen(p=>!p)} style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,position:"relative"}}>
+          <button onClick={()=>setNotifOpen(p=>!p)} style={{background:"#1e1e26",border:"1px solid #2a2a35",borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,position:"relative"}}>
             🔔
-            {unread>0&&<span style={{position:"absolute",top:3,right:3,width:8,height:8,borderRadius:"50%",background:"#ef4444",border:"2px solid #0d0d14"}}/>}
+            {unread>0&&<span style={{position:"absolute",top:3,right:3,width:8,height:8,borderRadius:"50%",background:"#ff4d6d",border:"2px solid #141418"}}/>}
           </button>
         </div>
-        <button onClick={onLogout} style={{background:"transparent",border:"1px solid #1e1e2e",borderRadius:8,padding:"5px 10px",color:"#4b5563",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>Выйти</button>
+        <button onClick={onLogout} style={{background:"transparent",border:"1px solid #2a2a35",borderRadius:8,padding:"5px 10px",color:"#55556a",cursor:"pointer",fontSize:10,fontFamily:"'Onest',sans-serif"}}>Выйти</button>
       </div>
 
       {/* SCREENS */}
@@ -2854,14 +2889,14 @@ function MobileApp({currentUser,onLogout,stores}){
       </div>
 
       {/* BOTTOM NAV */}
-      <div style={{height:76,background:"#0d0d14",borderTop:"1px solid #111118",display:"flex",alignItems:"flex-start",paddingTop:10,flexShrink:0}}>
+      <div style={{height:76,background:"#141418",borderTop:"1px solid #2a2a35",display:"flex",alignItems:"flex-start",paddingTop:10,flexShrink:0}}>
         {tabs.map(t=>(
           <div key={t.id} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",padding:"2px 0"}} onClick={()=>setTab(t.id)}>
             <div style={{position:"relative"}}>
               <span style={{fontSize:22,lineHeight:1}}>{t.icon}</span>
-              {t.badge&&<span style={{position:"absolute",top:-3,right:-9,background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 4px",borderRadius:8,fontFamily:"monospace"}}>{t.badge}</span>}
+              {t.badge&&<span style={{position:"absolute",top:-3,right:-9,background:"#ff4d6d",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 4px",borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{t.badge}</span>}
             </div>
-            <span style={{fontSize:9,fontFamily:"monospace",fontWeight:700,color:tab===t.id?"#8b5cf6":"#374151"}}>{t.label}</span>
+            <span style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",fontWeight:700,color:tab===t.id?"#c8ff57":"#32323e"}}>{t.label}</span>
           </div>
         ))}
       </div>
@@ -2869,16 +2904,16 @@ function MobileApp({currentUser,onLogout,stores}){
       {/* NOTIF OVERLAY */}
       {notifOpen&&<>
         <div onClick={()=>setNotifOpen(false)} style={{position:"absolute",inset:0,background:"#00000080",zIndex:30}}/>
-        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"#111118",borderRadius:"22px 22px 0 0",borderTop:"1px solid #1e1e2e",padding:"14px 16px",zIndex:31,maxHeight:"60%",overflowY:"auto"}}>
-          <div style={{width:36,height:4,background:"#2d2d44",borderRadius:2,margin:"0 auto 14px"}}/>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"#1e1e26",borderRadius:"22px 22px 0 0",borderTop:"1px solid #2a2a35",padding:"14px 16px",zIndex:31,maxHeight:"60%",overflowY:"auto"}}>
+          <div style={{width:36,height:4,background:"#2a2a35",borderRadius:2,margin:"0 auto 14px"}}/>
           <div style={{fontSize:15,fontWeight:800,marginBottom:12}}>🔔 Уведомления</div>
-          {notifs.length===0&&<div style={{color:"#4b5563",fontSize:12,textAlign:"center",padding:"20px 0"}}>Нет уведомлений</div>}
+          {notifs.length===0&&<div style={{color:"#55556a",fontSize:12,textAlign:"center",padding:"20px 0"}}>Нет уведомлений</div>}
           {notifs.map(n=>(
-            <div key={n.id} style={{display:"flex",gap:10,padding:"10px 0",borderBottom:"1px solid #1a1a2e",alignItems:"flex-start"}}>
-              <div style={{width:7,height:7,borderRadius:"50%",background:n.read?"#374151":"#8b5cf6",marginTop:4,flexShrink:0}}/>
+            <div key={n.id} style={{display:"flex",gap:10,padding:"10px 0",borderBottom:"1px solid #2a2a35",alignItems:"flex-start"}}>
+              <div style={{width:7,height:7,borderRadius:"50%",background:n.read?"#32323e":"#c8ff57",marginTop:4,flexShrink:0}}/>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:"#f0eee8"}}>{n.title}</div>
-                {n.text&&<div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{n.text}</div>}
+                <div style={{fontSize:12,fontWeight:700,color:"#f0f0f5"}}>{n.title}</div>
+                {n.text&&<div style={{fontSize:10,color:"#55556a",marginTop:2}}>{n.text}</div>}
               </div>
             </div>
           ))}
@@ -2886,12 +2921,12 @@ function MobileApp({currentUser,onLogout,stores}){
       </>}
 
       {/* MODALS — same as desktop */}
-      {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)}           onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)}          onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)}    onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)}    onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={team} currentUser={currentUser}/></Modal>}
-      {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)}           onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={team} currentUser={currentUser}/></Modal>}
+      {modal?.type==="pre"          &&<Modal title="✍️ Препродакшн — Сценарий"  color="#c8ff57" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)}           onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="prod"         &&<Modal title="🎬 Продакшн — Съёмка"       color="#4cc9f0" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)}          onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="post_reels"   &&<Modal title="🎞️ Постпродакшн — Рилс"    color="#ff4d6d" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)}    onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="post_video"   &&<Modal title="🎬 Постпродакшн — Видео"    color="#4cc9f0" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)}    onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="post_carousel"&&<Modal title="🖼 Постпродакшн — Карусель" color="#c8ff57" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={team} currentUser={currentUser}/></Modal>}
+      {modal?.type==="pub"          &&<Modal title="🚀 Публикация"               color="#06d6a0" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)}           onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={team} currentUser={currentUser}/></Modal>}
     </div>
   );
 }
