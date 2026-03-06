@@ -987,6 +987,173 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
   </div>;
 }
 
+// ── PmpPublishPanel ─────────────────────────────────────────────────────────
+function PmpPublishPanel({d, u, projects}){
+  const [open,        setOpen]        = useState(false);
+  const [pmpProjects, setPmpProjects] = useState([]); // [{id,name}]
+  const [channels,    setChannels]    = useState([]); // [{id,name,platform}]
+  const [selChannels, setSelChannels] = useState([]); // selected channel ids
+  const [loading,     setLoading]     = useState(false);
+  const [status,      setStatus]      = useState(""); // status message
+  const [error,       setError]       = useState("");
+
+  // Find PMP project id from current Виноград project
+  const vinProj = projects.find(p => p.id === d.project);
+  const pmpProjId = d.pmp_project_id || vinProj?.pmp_project_id || "";
+
+  // Load PMP projects on first open
+  async function loadProjects(){
+    setLoading(true); setError("");
+    try {
+      const r = await fetch("/api/pmp/projects");
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Ошибка");
+      const list = data?.data || data?.items || data || [];
+      setPmpProjects(Array.isArray(list) ? list : []);
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  // Load channels for selected PMP project
+  async function loadChannels(pid){
+    if (!pid) return;
+    setLoading(true); setError("");
+    try {
+      const r = await fetch("/api/pmp/channels?project_id=" + pid);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Ошибка");
+      const list = data?.data || data?.items || data || [];
+      setChannels(Array.isArray(list) ? list : []);
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  // Toggle channel selection
+  function toggleCh(id){
+    setSelChannels(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
+  }
+
+  // Full publish flow: upload file → create publication
+  async function publish(){
+    const pid = pmpProjId || d.pmp_project_id;
+    if (!pid) { setError("Укажи PMP Project ID в настройках проекта или в поле ниже"); return; }
+    if (!selChannels.length) { setError("Выбери хотя бы один канал"); return; }
+    setLoading(true); setError(""); setStatus("");
+
+    try {
+      let file_ids = [];
+
+      // Step 1: Upload file if we have one
+      const fileUrl = d.file_url || d.final_file_url || "";
+      if (fileUrl) {
+        setStatus("📤 Загружаю файл в Post My Post...");
+        const upR = await fetch("/api/pmp/upload", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ file_url: fileUrl, file_name: d.file_name||d.final_file_name||"media", pmp_project_id: pid }),
+        });
+        const upData = await upR.json();
+        if (!upR.ok) throw new Error("Upload: " + upData.error);
+        file_ids = [upData.file_id];
+        setStatus("✅ Файл загружен (ID: " + upData.file_id + ")");
+      }
+
+      // Step 2: Create publication
+      setStatus("🚀 Создаю публикацию...");
+      const pubR = await fetch("/api/pmp/publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          pmp_project_id: Number(pid),
+          channel_ids: selChannels,
+          post_at: d.planned_date ? new Date(d.planned_date).toISOString() : null,
+          text: d.caption || d.title || "",
+          hashtags: d.hashtags || "",
+          file_ids,
+          pub_type: d.pub_type || "video",
+        }),
+      });
+      const pubData = await pubR.json();
+      if (!pubR.ok) throw new Error("Publish: " + pubData.error);
+
+      setStatus("✅ Опубликовано! ID: " + (pubData.publication_id || "?"));
+      u("pmp_published", true);
+      u("pmp_publication_id", pubData.publication_id);
+    } catch(e) {
+      setError(e.message);
+      setStatus("");
+    }
+    setLoading(false);
+  }
+
+  const PLATFORM_ICONS = { instagram:"📸", tiktok:"🎵", facebook:"📘", vk:"💙", youtube:"▶️", telegram:"✈️", twitter:"🐦", linkedin:"💼" };
+
+  return (
+    <div style={{background:"#0a0f1a",border:"1px solid #1e3a5f",borderRadius:10,overflow:"hidden"}}>
+      <button onClick={()=>{ setOpen(p=>!p); if(!open&&!pmpProjects.length) loadProjects(); }}
+        style={{width:"100%",background:"transparent",border:"none",padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",color:"#f0eee8"}}>
+        <span style={{fontSize:13}}>📡</span>
+        <span style={{fontSize:11,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
+        {d.pmp_published && <span style={{fontSize:9,background:"#10b98120",color:"#10b981",border:"1px solid #10b98140",borderRadius:10,padding:"1px 8px"}}>✅ опубликовано</span>}
+        <span style={{marginLeft:"auto",color:"#4b5563",fontSize:12}}>{open?"▲":"▼"}</span>
+      </button>
+
+      {open && <div style={{padding:"12px 14px",borderTop:"1px solid #1e3a5f",display:"flex",flexDirection:"column",gap:10}}>
+
+        {/* PMP Project ID override */}
+        <Field label="PMP PROJECT ID (из URL проекта в postmypost.io)">
+          <input value={pmpProjId} onChange={e=>u("pmp_project_id",e.target.value)}
+            onBlur={e=>{ if(e.target.value) loadChannels(e.target.value); }}
+            placeholder={pmpProjId||"123456"} style={{...SI,fontFamily:"monospace"}}/>
+        </Field>
+
+        {/* PMP Projects dropdown (optional — auto-fill project id) */}
+        {pmpProjects.length>0 && <Field label="ИЛИ ВЫБЕРИ ПРОЕКТ ИЗ СПИСКА">
+          <select onChange={e=>{ u("pmp_project_id",e.target.value); loadChannels(e.target.value); }} style={SI} value={pmpProjId||""}>
+            <option value="">— выбрать —</option>
+            {pmpProjects.map(p=><option key={p.id} value={p.id}>{p.name||p.title||p.id}</option>)}
+          </select>
+        </Field>}
+
+        {/* Channel selector */}
+        {channels.length>0 && <div>
+          <span style={LB}>КАНАЛЫ (куда публиковать)</span>
+          <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:4}}>
+            {channels.map(ch=>{
+              const icon = PLATFORM_ICONS[ch.platform?.toLowerCase()] || "📲";
+              const sel = selChannels.includes(ch.id);
+              return <div key={ch.id} onClick={()=>toggleCh(ch.id)}
+                style={{display:"flex",alignItems:"center",gap:8,background:sel?"#1e3a5f":"#111118",border:`1px solid ${sel?"#38bdf8":"#2d2d44"}`,borderRadius:7,padding:"7px 10px",cursor:"pointer"}}>
+                <span>{icon}</span>
+                <span style={{fontSize:11,color:sel?"#38bdf8":"#9ca3af",flex:1}}>{ch.name||ch.username||ch.id}</span>
+                <span style={{fontSize:9,color:"#6b7280",fontFamily:"monospace"}}>{ch.platform}</span>
+                <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?"#38bdf8":"#4b5563"}`,background:sel?"#38bdf8":"transparent",flexShrink:0}}/>
+              </div>;
+            })}
+          </div>
+        </div>}
+
+        {!channels.length && pmpProjId && !loading && (
+          <button onClick={()=>loadChannels(pmpProjId)} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:7,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>
+            🔄 Загрузить каналы
+          </button>
+        )}
+
+        {/* Status / Error */}
+        {loading && <div style={{fontSize:11,color:"#38bdf8",fontFamily:"monospace"}}>⏳ {status||"Загрузка..."}</div>}
+        {!loading && status && <div style={{fontSize:11,color:"#10b981",fontFamily:"monospace"}}>{status}</div>}
+        {error && <div style={{fontSize:11,color:"#ef4444",background:"#1a0000",border:"1px solid #ef444430",borderRadius:6,padding:"6px 10px"}}>{error}</div>}
+
+        {/* Publish button */}
+        <button onClick={publish} disabled={loading||!selChannels.length}
+          style={{background:loading||!selChannels.length?"#1a1a2e":"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:8,padding:"10px",color:loading||!selChannels.length?"#4b5563":"#fff",cursor:loading||!selChannels.length?"not-allowed":"pointer",fontSize:12,fontWeight:700}}>
+          {loading?"⏳ Публикую...":"🚀 Опубликовать в Post My Post"}
+        </button>
+      </div>}
+    </div>
+  );
+}
+
 function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
   const fileRef=useRef(null);
@@ -1029,7 +1196,7 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       {d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.file_name}</span>
-            {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700}}>⬇ Скачать</a>}
+            {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700}}>↓</a>}
             <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
           </div>
         :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
@@ -1041,70 +1208,11 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
       </div>
     </div>
+    <PmpPublishPanel d={d} u={u} projects={projects}/>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     
   </div>;
 }
-
-// ── AdminForm ────────────────────────────────────────────────────────────────
-function AdminForm({item, onSave, onDelete, onClose, projects, team, currentUser, saveFnRef}) {
-  const [d, setD] = useState({status:"new", priority:"normal", refs:[], ...item});
-  const u = (k,v) => setD(p => ({...p, [k]:v}));
-  useEffect(() => { if(saveFnRef) saveFnRef.current = () => onSave(d); }, [d]);
-  return <div style={{display:"flex",flexDirection:"column",gap:11}}>
-    <div style={{display:"flex",gap:10}}>
-      <div style={{flex:1}}>
-        <label style={LB}>НАЗВАНИЕ</label>
-        <input value={d.title||""} onChange={e=>u("title",e.target.value)} style={SI} placeholder="Название задачи"/>
-      </div>
-      <div style={{width:160}}>
-        <label style={LB}>ПРОЕКТ</label>
-        <select value={d.project||""} onChange={e=>u("project",e.target.value)} style={SI}>
-          <option value="">— без проекта —</option>
-          {projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
-      </div>
-    </div>
-    <StatusRow statuses={ADMIN_STATUSES} value={d.status} onChange={v=>u("status",v)}/>
-    <div style={{display:"flex",gap:10}}>
-      <div style={{flex:1}}>
-        <label style={LB}>ДЕДЛАЙН</label>
-        <input type="date" value={d.deadline||""} onChange={e=>u("deadline",e.target.value)} style={SI}/>
-      </div>
-      <div style={{flex:1}}>
-        <label style={LB}>ПРИОРИТЕТ</label>
-        <select value={d.priority||"normal"} onChange={e=>u("priority",e.target.value)} style={SI}>
-          <option value="low">Низкий</option>
-          <option value="normal">Обычный</option>
-          <option value="high">Высокий</option>
-          <option value="urgent">Срочно</option>
-        </select>
-      </div>
-    </div>
-    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div>
-          <div style={{fontSize:9,color:"#8b5cf6",fontFamily:"monospace",marginBottom:4}}>◀ ЗАКАЗЧИК</div>
-          <TeamSelect label="" value={d.customer||""} onChange={v=>u("customer",v)} team={team}/>
-        </div>
-        <div>
-          <div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div>
-          <TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/>
-        </div>
-      </div>
-    </div>
-    <div>
-      <label style={LB}>ТЗ / ОПИСАНИЕ</label>
-      <textarea value={d.description||""} onChange={e=>u("description",e.target.value)}
-        placeholder="Подробное описание задачи..."
-        style={{...SI, minHeight:90, resize:"vertical", lineHeight:1.5}}/>
-    </div>
-    {item?.id && <MiniChat taskId={item.id} team={team} currentUser={currentUser}/>}
-    <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item?.id ? ()=>onDelete(item.id) : undefined}/>
-  </div>;
-}
-
 
 // ── Summary View ──────────────────────────────────────────────────────────────
 // ── Unread @mentions ─────────────────────────────────────────────────────────
@@ -1157,7 +1265,7 @@ function UnreadMentions({allChats,projects,team,me,onOpenTask}){
   );
 }
 
-function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,adminItems=[],projects,team,currentUser,onOpenTask}){
+function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,team,currentUser,onOpenTask}){
   const ME = currentUser?.id || "";
   const [memberFilter, setMemberFilter] = useState("all");
 
@@ -1632,6 +1740,7 @@ function TrainingView(){
 // ── Projects View ─────────────────────────────────────────────────────────────
 function ProjectsView({projects,setProjects}){
   const [showArchive,setShowArchive]=useState(false);
+  const [pmpProjects,setPmpProjects]=useState([]);
   const [pmpLoading,setPmpLoading]=useState(false);
   // Load PMP projects ONCE for all cards
   useEffect(()=>{
@@ -1699,7 +1808,7 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
   const pmpErr="";
 
   function savePmpId(val){
-    
+    setProjects(p=>p.map(x=>x.id===proj.id?{...x,pmp_project_id:val}:x));
     api.updateProject(proj.id,{pmp_project_id:val}).catch(()=>{});
   }
 
@@ -1712,7 +1821,35 @@ function ProjectCard({proj, showArchive, setProjects, pmpProjects=[], pmpLoading
           </div>
           <textarea value={proj.description} onChange={e=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,description:e.target.value}:x))} onBlur={e=>api.updateProject(proj.id,{description:e.target.value}).catch(()=>{})} placeholder="Описание проекта..." style={{...SI,minHeight:60,resize:"vertical",lineHeight:1.5,marginBottom:8,fontSize:11}}/>
 
+          {/* ── Post My Post linking ── */}
+          <div style={{background:"#0a0f1a",border:"1px solid #1e3a5f",borderRadius:8,padding:"9px 11px",marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+              <span style={{fontSize:11}}>📡</span>
+              <span style={{fontSize:10,fontWeight:700,color:"#38bdf8"}}>Post My Post</span>
+              {proj.pmp_project_id&&<span style={{fontSize:9,background:"#10b98115",color:"#10b981",border:"1px solid #10b98130",borderRadius:10,padding:"1px 7px",fontFamily:"monospace"}}>✅ привязан</span>}
+            </div>
+            {loadingPmp
+              ? <div style={{fontSize:10,color:"#6b7280"}}>⏳ Загружаю проекты PMP...</div>
+              : pmpErr
+                ? <div style={{fontSize:10,color:"#6b7280"}}>{pmpErr}</div>
+                : pmpProjects.length>0
+                  ? <select value={proj.pmp_project_id||""} onChange={e=>savePmpId(e.target.value)} style={{...SI,fontSize:11}}>
+                      <option value="">— не привязан —</option>
+                      {pmpProjects.map(p=><option key={p.id} value={p.id}>{p.name||p.title||("Проект "+p.id)}</option>)}
+                    </select>
+                  : <div style={{fontSize:10,color:"#4b5563"}}>Нет проектов (проверь POSTMYPOST_TOKEN)</div>
+            }
+          </div>
 
+          <span style={LB}>ДОКУМЕНТЫ И ССЫЛКИ</span>
+          {proj.links.filter(l=>l).map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+            <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
+            <button onClick={()=>setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:x.links.filter((_,j)=>j!==i)}:x))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:11}}>×</button>
+          </div>)}
+          <div style={{display:"flex",gap:5,marginTop:4}}>
+            <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1,fontSize:11,padding:"5px 8px"}} onKeyDown={e=>{if(e.key==="Enter"&&nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}}/>
+            <button onClick={()=>{if(nl){setProjects(p=>p.map(x=>x.id===proj.id?{...x,links:[...x.links,nl]}:x));setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:6,padding:"0 10px",color:"#a78bfa",cursor:"pointer",fontSize:15}}>+</button>
+          </div>
         </div>;
 }
 
@@ -2340,7 +2477,7 @@ function MainApp({currentUser, onLogout}){
         <FilterBar pf={adminFilt.pf} setPf={v=>setAdminFilt(p=>({...p,pf:v}))} member={adminFilt.member} setMember={v=>setAdminFilt(p=>({...p,member:v}))} sortBy={adminFilt.sortBy} setSortBy={v=>setAdminFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Задачу" onAdd={()=>openNew("admin")} showArchived={showArchivedAdmin} onArchiveToggle={()=>setShowArchivedAdmin(p=>!p)}/>
         <Kanban statuses={ADMIN_STATUSES} items={filtAdmin} renderCard={x=>mkCard(x,"admin")} onDrop={(id,st)=>drop("admin",id,st)} onAddClick={st=>openNew("admin",{status:st})}/>
       </>}
-            {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
+            {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects}/>}
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
