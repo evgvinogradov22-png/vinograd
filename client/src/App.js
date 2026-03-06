@@ -2849,64 +2849,6 @@ function MobileApp({currentUser,onLogout,stores}){
   );
 }
 
-function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
-  const [base,setBase]=useState(()=>{const d=new Date(2026,2,2);const dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1));return d;});
-  const [dragId,setDragId]=useState(null); const [overDay,setOverDay]=useState(null);
-  const days=Array.from({length:7},(_,i)=>{const d=new Date(base);d.setDate(d.getDate()+i);return d;});
-  const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  const byDay={};items.forEach(x=>{if(x.planned_date){const k=x.planned_date.slice(0,10);(byDay[k]=byDay[k]||[]).push(x);}});
-  const todayStr=fmt(new Date());
-  return(
-    <div>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()-7);setBase(d);}} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>‹</button>
-        <span style={{fontSize:13,fontWeight:700}}>{days[0].getDate()} {MONTHS[days[0].getMonth()]} — {days[6].getDate()} {MONTHS[days[6].getMonth()]} {days[0].getFullYear()}</span>
-        <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()+7);setBase(d);}} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
-        {days.map(d=>{
-          const k=fmt(d); const its=byDay[k]||[]; const isToday=k===todayStr; const isOver=overDay===k;
-          return <div key={k}
-            onDragOver={e=>{e.preventDefault();setOverDay(k);}}
-            onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverDay(null);}}
-            onDrop={e=>{e.preventDefault();if(dragId){onMoveToDay(dragId,k+"T12:00");setDragId(null);setOverDay(null);}}}
-            onClick={()=>onDayClick(k+"T12:00")}
-            style={{background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?"1px solid #7c3aed":isToday?"1px solid #7c3aed":"1px solid #1e1e2e",borderRadius:10,padding:"8px 7px",minHeight:130,cursor:"pointer",transition:"all 0.1s"}}
-            onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#3d3d5c";}}
-            onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
-            <div style={{textAlign:"center",marginBottom:6}}>
-              <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>{WDAYS[days.indexOf(d)]}</div>
-              <div style={{fontSize:15,fontWeight:800,color:isToday?"#a78bfa":"#f0eee8"}}>{d.getDate()}</div>
-              {(()=>{const mm=String(d.getMonth()+1).padStart(2,"0");const dd=String(d.getDate()).padStart(2,"0");const h=RU_HOLIDAYS[`${mm}-${dd}`];return h?<div style={{fontSize:7,color:"#f59e0b",fontFamily:"monospace",marginTop:2,lineHeight:1.3,padding:"1px 3px",background:"#f59e0b10",borderRadius:3}}>{h}</div>:null;})()}
-            </div>
-            {its.map(x=>{
-              const sc=stColor(PUB_STATUSES,x.status);
-              const st=PUB_STATUSES.find(s=>s.id===x.status);
-              const proj=projects.find(p=>p.id===x.project);
-              const bg=sc+"18";
-              const border=sc+"50";
-              return(
-              <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
-                onClick={e=>{e.stopPropagation();onItemClick(x);}}
-                style={{background:bg,border:`1px solid ${border}`,borderRadius:5,padding:"5px 7px",marginBottom:4,cursor:"grab"}}>
-                <div style={{display:"flex",alignItems:"flex-start",gap:3,marginBottom:3}}>
-                  <div style={{fontSize:9,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,lineHeight:1.3}}>{x.title||"Без названия"}</div>
-                  <span style={{fontSize:11,color:x.starred?"#f59e0b":"#2d2d44",flexShrink:0,lineHeight:1,cursor:"pointer"}}
-                    onClick={e=>{e.stopPropagation();onItemClick({...x,_toggleStar:true});}}>★</span>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
-                  {proj&&<span style={{fontSize:7,color:proj.color,fontFamily:"monospace",background:proj.color+"18",borderRadius:3,padding:"1px 4px",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
-                  {st&&<span style={{fontSize:7,color:sc,fontFamily:"monospace",background:sc+"18",borderRadius:3,padding:"1px 4px"}}>{st.l}</span>}
-                  <span style={{fontSize:7,color:"#6b7280",marginLeft:"auto"}}>{x.pub_type==="carousel"?"🖼":`🎬${(x.reels_count||1)>1?" ×"+(x.reels_count||1):""}`}</span>
-                </div>
-              </div>
-            );})}
-          </div>;
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function Modal({title,color,onClose,onSave,onDelete,children}){
