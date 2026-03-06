@@ -460,14 +460,25 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
               <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace"}}>{WDAYS[days.indexOf(d)]}</div>
               <div style={{fontSize:15,fontWeight:800,color:isToday?"#a78bfa":"#f0eee8"}}>{d.getDate()}</div>
             </div>
-            {its.map(x=>{const sc=stColor(PUB_STATUSES,x.status);const proj=projects.find(p=>p.id===x.project);return(
+            {its.map(x=>{
+              const sc=stColor(PUB_STATUSES,x.status);
+              const st=PUB_STATUSES.find(s=>s.id===x.status);
+              const proj=projects.find(p=>p.id===x.project);
+              const bg=proj?proj.color+"18":"#1e1e2e";
+              const border=proj?proj.color+"50":sc+"40";
+              return(
               <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
                 onClick={e=>{e.stopPropagation();onItemClick(x);}}
-                style={{background:sc+"18",border:`1px solid ${sc}40`,borderRadius:5,padding:"4px 6px",marginBottom:3,cursor:"grab"}}>
-                <div style={{fontSize:9,fontWeight:700,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title||"Без названия"}</div>
-                <div style={{display:"flex",gap:3,marginTop:2}}>
-                  <span style={{fontSize:8,color:"#6b7280",fontFamily:"monospace"}}>{x.pub_type==="carousel"?"🖼":"🎬"}</span>
-                  {proj&&<span style={{fontSize:8,color:proj.color,fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
+                style={{background:bg,border:`1px solid ${border}`,borderRadius:5,padding:"5px 7px",marginBottom:4,cursor:"grab"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:3,marginBottom:3}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,lineHeight:1.3}}>{x.title||"Без названия"}</div>
+                  <span style={{fontSize:11,color:x.starred?"#f59e0b":"#2d2d44",flexShrink:0,lineHeight:1,cursor:"pointer"}}
+                    onClick={e=>{e.stopPropagation();onItemClick({...x,_toggleStar:true});}}>★</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
+                  {proj&&<span style={{fontSize:7,color:proj.color,fontFamily:"monospace",background:proj.color+"18",borderRadius:3,padding:"1px 4px",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
+                  {st&&<span style={{fontSize:7,color:sc,fontFamily:"monospace",background:sc+"18",borderRadius:3,padding:"1px 4px"}}>{st.l}</span>}
+                  <span style={{fontSize:7,color:"#6b7280",marginLeft:"auto"}}>{x.pub_type==="carousel"?"🖼":"🎬"}</span>
                 </div>
               </div>
             );})}
@@ -991,6 +1002,8 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
 
 function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
+  const [uploadProgress,setUploadProgress]=useState(0);
+  const [uploading,setUploading]=useState(false);
   const fileRef=useRef(null);
   const dRefPV=useRef(d);
   const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; dRefPV.current=next; return next; });
@@ -1027,14 +1040,23 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
     </div>
     <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"monospace",fontSize:11}}/></Field>
     <Field label="ФАЙЛ / МЕДИА">
-      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files[0];if(f){u("file_name",f.name);const fd=new FormData();fd.append("file",f);const r=await fetch("/api/upload",{method:"POST",body:fd}).catch(()=>null);if(r?.ok){const upD=await r.json();const k=upD.key||"";u("file_url",k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upD.url);}}}}/>
-      {d.file_name
+      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(!f)return;u("file_name",f.name);setUploading(true);setUploadProgress(0);const fd=new FormData();fd.append("file",f);const xhr=new XMLHttpRequest();xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setUploadProgress(Math.round(ev.loaded/ev.total*100));};xhr.onload=()=>{setUploading(false);if(xhr.status===200){const upD=JSON.parse(xhr.responseText);const k=upD.key||"";u("file_url",k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upD.url);}};xhr.onerror=()=>{setUploading(false);alert("Ошибка загрузки");};xhr.open("POST","/api/upload");xhr.send(fd);}}/>
+      {uploading&&<div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:8,padding:"10px 12px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:11,color:"#9ca3af"}}>{d.file_name}</span>
+          <span style={{fontSize:11,color:"#06b6d4",fontFamily:"monospace",fontWeight:700}}>{uploadProgress}%</span>
+        </div>
+        <div style={{background:"#1e1e2e",borderRadius:4,height:6,overflow:"hidden"}}>
+          <div style={{width:`${uploadProgress}%`,height:"100%",background:"linear-gradient(90deg,#06b6d4,#8b5cf6)",borderRadius:4,transition:"width 0.1s"}}/>
+        </div>
+      </div>}
+      {!uploading&&d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-            <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1}}>{d.file_name}</span>
-            {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700}}>↓</a>}
+            <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.file_name}</span>
+            {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>⬇ Скачать</a>}
             <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
           </div>
-        :<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
+        :!uploading&&<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
     </Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
       <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
@@ -1997,6 +2019,7 @@ function MainApp({currentUser, onLogout}){
 
   function openNew(type,extra={}){ setModal({type,item:defItem(type,extra)}); }
   function openEdit(type,item){
+    if(item._toggleStar){ toggleStar(type,item); return; }
     const safe={
       refs:         item.refs         ?? [],
       equipment:    item.equipment    ?? [],
@@ -2102,7 +2125,7 @@ function MainApp({currentUser, onLogout}){
     const dateStr=item.deadline||item.shoot_date?.slice(0,10)||item.planned_date?.slice(0,10)||item.post_deadline||"";
     const daysLeft=dateStr?Math.ceil((new Date(dateStr).getTime()-Date.now())/86400000):null;
     const urgent=daysLeft!==null&&daysLeft<=2;
-    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",border:`1px solid ${item.starred?"#f59e0b50":urgent?"#ef444450":"#1e1e2e"}`,borderLeft:`3px solid ${item.starred?"#f59e0b":urgent?"#ef4444":"#374151"}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
+    return <div onClick={()=>openEdit(type,item)} style={{background:"#111118",borderTop:`1px solid ${item.starred?"#f59e0b50":urgent?"#ef444450":"#1e1e2e"}`,borderRight:`1px solid ${item.starred?"#f59e0b50":urgent?"#ef444450":"#1e1e2e"}`,borderBottom:`1px solid ${item.starred?"#f59e0b50":urgent?"#ef444450":"#1e1e2e"}`,borderLeft:`3px solid ${item.starred?"#f59e0b":urgent?"#ef4444":"#374151"}`,borderRadius:8,padding:"10px 11px",cursor:"pointer"}}
       onMouseEnter={e=>e.currentTarget.style.background="#16161f"} onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
       <div style={{display:"flex",alignItems:"flex-start",gap:5,marginBottom:5}}>
         <div style={{fontWeight:700,fontSize:12,flex:1}}>{item.title||"Без названия"}</div>
