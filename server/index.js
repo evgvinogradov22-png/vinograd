@@ -434,6 +434,11 @@ app.patch("/api/tasks/:id", async (req, res) => {
   try {
     const { title, project_id, status, data, archived, completed_at } = req.body;
     const now = Date.now();
+    const reqUser = req.headers["x-user-id"] || "";
+
+    // Fetch old task before update for change log
+    const oldTask = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.id]);
+
     // Build dynamic update to avoid overwriting fields not passed
     const sets = ["updated_at=$1"];
     const vals = [now];
@@ -448,6 +453,69 @@ app.patch("/api/tasks/:id", async (req, res) => {
     await q(`UPDATE tasks SET ${sets.join(",")} WHERE id=$${i}`, vals);
     const updated = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.id]);
     res.json(updated);
+
+    // ── Change log in chat ─────────────────────────────────────────────────
+    try {
+      if (reqUser && oldTask) {
+        const actor = await q1("SELECT name FROM users WHERE id=$1", [reqUser]);
+        const actorName = actor?.name || "Кто-то";
+        const changes = [];
+
+        // Status change
+        if (status !== undefined && status !== oldTask.status) {
+          const STATUS_LABELS = {
+            idea:"Идея", brief:"Бриф", script:"Сценарий", approved:"Утверждено",
+            planned:"Запланировано", shooting:"Съёмка", editing:"Монтаж", done:"Готово",
+            not_started:"Не начат", in_progress:"В монтаже", review:"На проверке",
+            corrections:"Правки", published:"Опубликовано", draft:"Черновик",
+            ready:"Готово к публикации", scheduled:"Запланировано",
+            new:"Новая", waiting:"Ожидание", cancelled:"Отменено"
+          };
+          const from = STATUS_LABELS[oldTask.status] || oldTask.status;
+          const to = STATUS_LABELS[status] || status;
+          changes.push(`статус: «${from}» → «${to}»`);
+        }
+
+        // Title change
+        if (title !== undefined && title !== oldTask.title) {
+          changes.push(`название: «${oldTask.title}» → «${title}»`);
+        }
+
+        // Archived change
+        if (archived !== undefined && archived !== oldTask.archived) {
+          changes.push(archived ? "задача архивирована" : "задача восстановлена из архива");
+        }
+
+        // Data field changes
+        if (data !== undefined && oldTask.data) {
+          const oldD = oldTask.data || {};
+          const newD = data || {};
+          const FIELD_LABELS = {
+            deadline:"дедлайн", shoot_date:"дата съёмки", planned_date:"дата публикации",
+            producer:"заказчик", executor:"исполнитель", editor:"монтажёр",
+            scriptwriter:"сценарист", operator:"оператор", designer:"дизайнер",
+            customer:"заказчик", post_deadline:"дедлайн поста"
+          };
+          for (const [field, label] of Object.entries(FIELD_LABELS)) {
+            if (newD[field] !== undefined && newD[field] !== oldD[field]) {
+              if (newD[field]) {
+                changes.push(`${label} изменён`);
+              }
+            }
+          }
+        }
+
+        if (changes.length > 0) {
+          const logText = `✏️ ${actorName} изменил: ${changes.join(", ")}`;
+          const logId = "log_" + require("crypto").randomBytes(5).toString("hex");
+          await q(
+            "INSERT INTO chat_messages(id,task_id,user_id,text,file_url,file_name,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)",
+            [logId, req.params.id, reqUser, logText, "", "__log__", now]
+          );
+          broadcast(req.params.id, { type: "message", msg: { id: logId, task_id: req.params.id, user_id: reqUser, text: logText, file_url: "", file_name: "__log__", created_at: now }});
+        }
+      }
+    } catch(le) { console.warn("Change log error:", le.message); }
 
     // Smart notifications
     const reqUser = req.headers["x-user-id"] || "";

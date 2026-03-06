@@ -86,6 +86,7 @@ function MiniChat({taskId, team, currentUser}){
           ts:    r.created_at || Date.now(),
           fname: r.file_name || "",
           furl:  r.file_url  || "",
+          isLog: r.file_name === "__log__",
         })));
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
       })
@@ -105,7 +106,7 @@ function MiniChat({taskId, team, currentUser}){
       });
       if (!r.ok) throw new Error(await r.text());
       const m = await r.json();
-      setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: m.text||t, ts: m.created_at||Date.now(), fname: "", furl: "" }]);
+      setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: m.text||t, ts: m.created_at||Date.now(), fname: "", furl: "", isLog: m.file_name==="__log__" }]);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
     } catch(e) { setErr("Ошибка: " + e.message); }
   }
@@ -261,6 +262,20 @@ function MiniChat({taskId, team, currentUser}){
       <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,minHeight:0}}>
         {msgs.length===0 && <div style={{textAlign:"center",color:"#6b7280",fontSize:10,paddingTop:20}}>Начните обсуждение</div>}
         {msgs.map(m => {
+          // ── Log entry ──
+          if (m.isLog) {
+            const t = Number(m.ts);
+            const timeStr = t > 1000000000 ? new Date(t).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}) : "";
+            const actorName = nm(m.user);
+            return <div key={m.id} style={{display:"flex",alignItems:"center",gap:6,margin:"4px 0",padding:"0 8px"}}>
+              <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
+              <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"center",whiteSpace:"nowrap",maxWidth:"80%"}}>
+                {timeStr && <span style={{color:"#374151"}}>{timeStr} </span>}
+                <span style={{color:"#6b7280"}}>{m.text}</span>
+              </div>
+              <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
+            </div>;
+          }
           const isMe = m.user === myId;
           const rawName = nm(m.user);
           const safeName = rawName && rawName.length > 0 ? rawName : "?";
@@ -464,8 +479,8 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
               const sc=stColor(PUB_STATUSES,x.status);
               const st=PUB_STATUSES.find(s=>s.id===x.status);
               const proj=projects.find(p=>p.id===x.project);
-              const bg=proj?proj.color+"18":"#1e1e2e";
-              const border=proj?proj.color+"50":sc+"40";
+              const bg=sc+"18";
+              const border=sc+"50";
               return(
               <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
                 onClick={e=>{e.stopPropagation();onItemClick(x);}}
@@ -2100,6 +2115,7 @@ function MainApp({currentUser, onLogout}){
     const patch={status:newStatus};
     if(completedAt) patch.completed_at=completedAt;
     api.updateTask(id, patch).catch(e=>console.error("Drop error:",e));
+    if(type==="pub" && newStatus==="published") setPubViewMode("published");
   }
 
   function moveToDay(type,id,newDate){
@@ -2334,11 +2350,12 @@ function MainApp({currentUser, onLogout}){
       {tab==="pub"&&<>
         <FilterBar pf={pubFilt.pf} setPf={v=>setPubFilt(p=>({...p,pf:v}))} member={pubFilt.member} setMember={v=>setPubFilt(p=>({...p,member:v}))} sortBy={pubFilt.sortBy} setSortBy={v=>setPubFilt(p=>({...p,sortBy:v}))} projects={projects} team={teamMembers} addLabel="Публикацию" onAdd={()=>openNew("pub")} showArchived={showArchivedPub} onArchiveToggle={()=>setShowArchivedPub(p=>!p)}/>
         <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[{id:"week",l:"Неделя"},{id:"calendar",l:"Месяц"},{id:"status",l:"По статусам"}].map(v=><button key={v.id} onClick={()=>setPubViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:pubViewMode===v.id?"#10b98120":"transparent",border:pubViewMode===v.id?"1px solid #10b98140":"1px solid #1e1e2e",color:pubViewMode===v.id?"#10b981":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
+          {[{id:"week",l:"Неделя"},{id:"calendar",l:"Месяц"},{id:"status",l:"По статусам"},{id:"published",l:"Опубликованные"}].map(v=><button key={v.id} onClick={()=>setPubViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:pubViewMode===v.id?"#10b98120":"transparent",border:pubViewMode===v.id?"1px solid #10b98140":"1px solid #1e1e2e",color:pubViewMode===v.id?"#10b981":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
         </div>
         {pubViewMode==="week"&&<WeekView items={filtPub} onItemClick={x=>openEdit("pub",x)} onDayClick={dt=>openNew("pub",{planned_date:dt})} projects={projects} onMoveToDay={(id,dt)=>moveToDay("pub",id,dt)}/>}
         {pubViewMode==="calendar"&&<CalView items={filtPub} dateField="planned_date" onDayClick={d=>openNew("pub",{planned_date:d+"T12:00"})} color="#10b981" onMoveToDay={(id,day)=>moveToDay("pub",id,day+"T12:00")} renderChip={x=>{const sc=stColor(PUB_STATUSES,x.status);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pub",x);}} style={{background:sc+"18",border:`1px solid ${sc}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
-        {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES} items={filtPub} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>mkCard(x,"pub")}/>}
+        {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES.filter(s=>s.id!=="published")} items={filtPub.filter(x=>x.status!=="published")} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>mkCard(x,"pub")}/>}
+        {pubViewMode==="published"&&<PublishedView items={pubItems} projects={projects} onOpen={x=>openEdit("pub",x)}/>}
       </>}
 
       {tab==="admin"&&<>
