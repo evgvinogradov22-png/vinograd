@@ -518,7 +518,6 @@ app.patch("/api/tasks/:id", async (req, res) => {
     } catch(le) { console.warn("Change log error:", le.message); }
 
     // Smart notifications
-    const reqUser = req.headers["x-user-id"] || "";
     try {
       const taskData = updated?.data || {};
       const custId = taskData.producer || taskData.customer || "";
