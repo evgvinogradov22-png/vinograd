@@ -409,11 +409,12 @@ app.get("/api/tasks", async (req, res) => {
 app.post("/api/tasks", async (req, res) => {
   try {
     const { type, title, project_id, status, data } = req.body;
-    if (!type || !project_id) return res.status(400).json({ error: "type и project_id обязательны" });
+    if (!type) return res.status(400).json({ error: "type обязателен" });
+    const effectiveProjectId = project_id || "none";
     const id = "t_" + uuidv4().replace(/-/g, "").slice(0, 10);
     const now = Date.now();
     await q("INSERT INTO tasks(id,type,title,project_id,status,data,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-      [id, type, title || "", project_id, status || "idea", JSON.stringify(data || {}), now, now]);
+      [id, type, title || "", effectiveProjectId, status || "idea", JSON.stringify(data || {}), now, now]);
     const saved = await q1("SELECT * FROM tasks WHERE id=$1", [id]);
     // Notify assignees about new task
     if (saved) {

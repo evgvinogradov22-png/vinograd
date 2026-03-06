@@ -987,8 +987,7 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
   </div>;
 }
 
-// ── PmpPublishPanel ─────────────────────────────────────────────────────────
-function PmpPublishPanel({d, u, projects}){
+// ── PmpPublishPanel ─────────────────────────────────────────────────────────){
   const [open,        setOpen]        = useState(false);
   const [pmpProjects, setPmpProjects] = useState([]); // [{id,name}]
   const [channels,    setChannels]    = useState([]); // [{id,name,platform}]
@@ -1208,7 +1207,6 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
       </div>
     </div>
-    <PmpPublishPanel d={d} u={u} projects={projects}/>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     
   </div>;
@@ -1272,7 +1270,6 @@ function AdminForm({item, onSave, onDelete, onClose, projects, team, currentUser
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item?.id ? ()=>onDelete(item.id) : undefined}/>
   </div>;
 }
-
 
 // ── Summary View ──────────────────────────────────────────────────────────────
 // ── Unread @mentions ─────────────────────────────────────────────────────────
@@ -2254,7 +2251,7 @@ function MainApp({currentUser, onLogout}){
   async function save(type,d){
     try {
       const { id, project, status, title, chat, archived, ...rest } = d;
-      const payload = { type, title: title||"", project_id: project, status, archived: archived||false, data: rest };
+      const payload = { type, title: title||"", project_id: project||"none", status, archived: archived||false, data: rest };
       // Check if item exists already
       const [getter, setter] = useTaskStore(type, stores);
       const exists = getter.find(x=>x.id===id);
