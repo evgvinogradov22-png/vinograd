@@ -28,6 +28,39 @@ const WDAYS  = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 const AVATAR_COLORS = ["#ef4444","#3b82f6","#ec4899","#10b981","#f59e0b","#8b5cf6","#06b6d4","#f97316"];
 
 
+// ── XHR upload with progress ──────────────────────────────────────────────────
+function xhrUpload(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData(); fd.append("file", file);
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = ev => { if (ev.lengthComputable) onProgress(Math.round(ev.loaded/ev.total*100)); };
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const up = JSON.parse(xhr.responseText);
+        const k = up.key||"";
+        resolve(k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(file.name)}` : up.url);
+      } else { reject(new Error("Ошибка " + xhr.status)); }
+    };
+    xhr.onerror = () => reject(new Error("Ошибка сети"));
+    xhr.open("POST", "/api/upload");
+    xhr.send(fd);
+  });
+}
+
+// ── ProgressBar ───────────────────────────────────────────────────────────────
+function UploadProgress({progress, fileName}) {
+  return <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:8,padding:"10px 12px"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+      <span style={{fontSize:11,color:"#9ca3af",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:8}}>{fileName}</span>
+      <span style={{fontSize:12,color:"#06b6d4",fontFamily:"monospace",fontWeight:700,flexShrink:0}}>{progress}%</span>
+    </div>
+    <div style={{background:"#1e1e2e",borderRadius:4,height:6,overflow:"hidden"}}>
+      <div style={{width:`${progress}%`,height:"100%",background:"linear-gradient(90deg,#06b6d4,#8b5cf6)",borderRadius:4,transition:"width 0.15s"}}/>
+    </div>
+  </div>;
+}
+
+
 const genId = () => Math.random().toString(36).slice(2,9);
 const dim=(y,m)=>new Date(y,m+1,0).getDate();
 const fd=(y,m)=>{const d=new Date(y,m,1).getDay();return d===0?6:d-1;};
@@ -705,6 +738,7 @@ function FinalFileOrLink({d,u,fileRef}){
   const _ownRef=useRef(null);
   const fRef=fileRef||_ownRef;
   const [uploading,setUploading]=useState(false);
+  const [uploadProgress,setUploadProgress]=useState(0);
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
       <span style={LB}>ФИНАЛЬНОЕ ВИДЕО</span>
@@ -720,14 +754,10 @@ function FinalFileOrLink({d,u,fileRef}){
     {mode==="file"&&<>
       <input ref={fRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={async e=>{
         const f=e.target.files[0]; if(!f) return;
-        setUploading(true); u("final_file_name",f.name); u("final_file_url","");
+        setUploading(true); setUploadProgress(0); u("final_file_name",f.name); u("final_file_url","");
         try{
-          const fd=new FormData(); fd.append("file",f);
-          const r=await fetch("/api/upload",{method:"POST",body:fd});
-          if(!r.ok) throw new Error(await r.text());
-          const up=await r.json();
-          const k=up.key||"";
-          u("final_file_url", k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:up.url);
+          const url = await xhrUpload(f, p=>setUploadProgress(p));
+          u("final_file_url", url);
         }catch(e){alert("Ошибка: "+e.message);}
         setUploading(false); e.target.value="";
       }}/>
@@ -746,13 +776,15 @@ function FinalFileOrLink({d,u,fileRef}){
                 <source src={d.final_file_url}/>
               </video>}
           </div>
-        :<button onClick={()=>fRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:uploading?"#f59e0b":"#9ca3af",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 Загрузить финальное видео"}</button>}
+        :<>{uploading?<UploadProgress progress={uploadProgress} fileName={d.final_file_name}/>:<button onClick={()=>fRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить финальное видео</button>}</>
     </>}
   </div>;
 }
 
 // ── SourceInputs — upload files OR paste links ──────────────────────────────
 function SourceInputs({d, u}){
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingName, setUploadingName] = useState("");
   const [mode, setMode] = useState(d.source_url||d.source_name ? "file" : d.source_link ? "link" : "file");
   const [nl, setNl] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -763,20 +795,16 @@ function SourceInputs({d, u}){
   async function addFile(e) {
     const files = Array.from(e.target.files); e.target.value = "";
     if (!files.length) return;
-    setUploading(true); setUploadErr("");
+    setUploadErr("");
     for (const f of files) {
       try {
-        const fd = new FormData(); fd.append("file", f);
-        const r = await fetch("/api/upload", {method:"POST", body:fd});
-        if (!r.ok) throw new Error(await r.text());
-        const up = await r.json();
-        const k = up.key||"";
-        const dlurl = k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}` : up.url;
+        setUploading(true); setUploadProgress(0); setUploadingName(f.name);
+        const dlurl = await xhrUpload(f, p=>setUploadProgress(p));
         const newSources = [...sources, {name:f.name, url:dlurl}];
         u("sources", newSources);
-        // Back-compat: set source_name/source_url to first file
         if (newSources.length === 1) { u("source_name", f.name); u("source_url", dlurl); }
       } catch(e) { setUploadErr(e.message); }
+      setUploading(false);
     }
     setUploading(false);
   }
@@ -1857,7 +1885,7 @@ function useTaskStore(type, stores) {
 }
 
 // ── PublishedView ─────────────────────────────────────────────────────────────
-function PublishedView({items, projects, onOpen}) {
+function PublishedView({items, projects, onOpen, onToggleStar}) {
   function getWeekKey(dateStr) {
     if (!dateStr) return null;
     const d = new Date(dateStr);
@@ -1883,39 +1911,69 @@ function PublishedView({items, projects, onOpen}) {
   });
   const weeks = Object.keys(grouped).filter(k=>k!=="unknown").sort((a,b)=>b.localeCompare(a));
   if (grouped["unknown"]) weeks.push("unknown");
+
   if (published.length === 0) return <div style={{textAlign:"center",padding:"60px 0",color:"#4b5563"}}>
     <div style={{fontSize:36,marginBottom:8}}>📭</div>
     <div style={{fontSize:12}}>Нет опубликованных материалов</div>
   </div>;
-  return <div style={{display:"flex",flexDirection:"column",gap:20}}>
+
+  const TH = ({children, w}) => <th style={{textAlign:"left",padding:"6px 10px",fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700,borderBottom:"1px solid #1e1e2e",whiteSpace:"nowrap",width:w}}>{children}</th>;
+
+  return <div style={{display:"flex",flexDirection:"column",gap:24}}>
     {weeks.map(wk => {
       const wItems = grouped[wk];
       const label = wk === "unknown" ? "Без даты" : getWeekLabel(wk);
       const weekTotal = wItems.reduce((s,x)=>s+pubCount(x),0);
+      const starredCount = wItems.filter(x=>x.starred).reduce((s,x)=>s+pubCount(x),0);
       return <div key={wk}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#10b981",fontFamily:"monospace"}}>{label}</div>
-          <div style={{fontSize:9,background:"#10b98120",color:"#10b981",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>{weekTotal} публ.</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#10b981",fontFamily:"monospace"}}>{label}</span>
+          <span style={{fontSize:9,background:"#10b98120",color:"#10b981",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>{weekTotal} публ.</span>
+          {starredCount>0&&<span style={{fontSize:9,background:"#f59e0b20",color:"#f59e0b",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>★ {starredCount} залетевших</span>}
           <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-          {wItems.map(item => {
-            const proj = projects.find(p=>p.id===item.project);
-            const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
-            return <div key={item.id} onClick={()=>onOpen(item)}
-              style={{background:"#111118",border:"1px solid #10b98130",borderLeft:"3px solid #10b981",borderRadius:8,padding:"9px 12px",cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
-              onMouseLeave={e=>e.currentTarget.style.background="#111118"}>
-              <div style={{fontSize:11,fontWeight:700,color:"#f0eee8",marginBottom:4,lineHeight:1.3}}>{item.title||"Без названия"}</div>
-              <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                {proj&&<span style={{fontSize:8,color:proj.color,background:proj.color+"18",borderRadius:3,padding:"1px 5px",fontFamily:"monospace"}}>{proj.label}</span>}
-                <span style={{fontSize:8,color:"#6b7280",fontFamily:"monospace"}}>{item.pub_type==="carousel"?"🖼 Карусель":`🎬${(item.reels_count||1)>1?" ×"+(item.reels_count||1):""} Рилс`}</span>
-                {item.starred&&<span style={{fontSize:10,color:"#f59e0b"}}>★</span>}
-              </div>
-              {dateStr&&<div style={{fontSize:8,color:"#10b981",fontFamily:"monospace",marginTop:4}}>✅ {dateStr}</div>}
-            </div>;
-          })}
-        </div>
+        <table style={{width:"100%",borderCollapse:"collapse",background:"#111118",borderRadius:10,overflow:"hidden",border:"1px solid #1e1e2e"}}>
+          <thead>
+            <tr style={{background:"#0d0d16"}}>
+              <TH w={28}>★</TH>
+              <TH>НАЗВАНИЕ</TH>
+              <TH w={130}>ПРОЕКТ</TH>
+              <TH w={100}>ТИП</TH>
+              <TH w={90}>КОЛ-ВО</TH>
+              <TH w={100}>ДАТА</TH>
+            </tr>
+          </thead>
+          <tbody>
+            {wItems.map((item,i) => {
+              const proj = projects.find(p=>p.id===item.project);
+              const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
+              const cnt = pubCount(item);
+              return <tr key={item.id}
+                style={{borderTop: i===0?"none":"1px solid #1e1e2e", cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <td style={{padding:"8px 10px",textAlign:"center"}} onClick={e=>{e.stopPropagation();onToggleStar&&onToggleStar(item);}}>
+                  <span style={{fontSize:14,color:item.starred?"#f59e0b":"#2d2d44",cursor:"pointer",transition:"color 0.1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#6b7280"}
+                    onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#f59e0b":"#2d2d44"}>★</span>
+                </td>
+                <td style={{padding:"8px 10px",fontSize:12,fontWeight:600,color:"#f0eee8"}} onClick={()=>onOpen(item)}>{item.title||"Без названия"}</td>
+                <td style={{padding:"8px 10px"}} onClick={()=>onOpen(item)}>
+                  {proj&&<span style={{fontSize:9,color:proj.color,background:proj.color+"18",borderRadius:4,padding:"2px 6px",fontFamily:"monospace"}}>{proj.label}</span>}
+                </td>
+                <td style={{padding:"8px 10px",fontSize:9,color:"#6b7280",fontFamily:"monospace"}} onClick={()=>onOpen(item)}>
+                  {item.pub_type==="carousel"?"🖼 Карусель":"🎬 Рилс"}
+                </td>
+                <td style={{padding:"8px 10px",fontSize:11,fontFamily:"monospace",fontWeight:700,color:cnt>1?"#a78bfa":"#6b7280"}} onClick={()=>onOpen(item)}>
+                  {cnt>1?`× ${cnt}`:"—"}
+                </td>
+                <td style={{padding:"8px 10px",fontSize:9,color:"#10b981",fontFamily:"monospace"}} onClick={()=>onOpen(item)}>
+                  {dateStr||"—"}
+                </td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
       </div>;
     })}
   </div>;
@@ -2431,7 +2489,7 @@ function MainApp({currentUser, onLogout}){
         {pubViewMode==="week"&&<WeekView items={filtPub} onItemClick={x=>openEdit("pub",x)} onDayClick={dt=>openNew("pub",{planned_date:dt})} projects={projects} onMoveToDay={(id,dt)=>moveToDay("pub",id,dt)}/>}
         {pubViewMode==="calendar"&&<CalView items={filtPub} dateField="planned_date" onDayClick={d=>openNew("pub",{planned_date:d+"T12:00"})} color="#10b981" onMoveToDay={(id,day)=>moveToDay("pub",id,day+"T12:00")} renderChip={x=>{const sc=stColor(PUB_STATUSES,x.status);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pub",x);}} style={{background:sc+"18",border:`1px solid ${sc}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
         {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES.filter(s=>s.id!=="published")} items={filtPub.filter(x=>x.status!=="published")} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>mkCard(x,"pub")}/>}
-        {pubViewMode==="published"&&<PublishedView items={pubItems} projects={projects} onOpen={x=>openEdit("pub",x)}/>}
+        {pubViewMode==="published"&&<PublishedView items={pubItems} projects={projects} onOpen={x=>openEdit("pub",x)} onToggleStar={x=>toggleStar("pub",x)}/>}
       </>}
 
       {tab==="admin"&&<>
