@@ -518,9 +518,11 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay,onToggleSta
               const bg=sc+"18";
               const border=sc+"50";
               return(
-              <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
-                onClick={e=>{e.stopPropagation();onItemClick(x);}}
-                style={{background:bg,border:`1px solid ${border}`,borderRadius:4,padding:"4px 5px",marginBottom:3,cursor:"grab"}}>
+              <div key={x.id} draggable
+                onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
+                onDragEnd={()=>setDragId(null)}
+                onClick={e=>{e.stopPropagation();if(!dragId)onItemClick(x);}}
+                style={{background:bg,border:`1px solid ${border}`,borderRadius:4,padding:"4px 5px",marginBottom:3,cursor:"pointer"}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:3,marginBottom:3}}>
                   <div style={{fontSize:8,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,lineHeight:1.3}}>{x.title||"Без названия"}</div>
                   <span style={{fontSize:11,color:x.starred?"#f59e0b":"#2d2d44",flexShrink:0,lineHeight:1,cursor:"pointer"}}
@@ -1068,7 +1070,7 @@ function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [editing, setEditing] = useState(!reelUrl);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     if (taskId) loadHistory();
