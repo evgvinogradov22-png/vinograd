@@ -856,6 +856,65 @@ function scheduleMorningDigest() {
 }
 scheduleMorningDigest();
 
+// ── Daily reel-stats auto-refresh (7:00 Moscow = 04:00 UTC) ──────────────────
+async function refreshAllReelStats() {
+  console.log("[REEL-CRON] Starting daily reel stats refresh...");
+  try {
+    // Get all published pub tasks with reel_url (not carousels)
+    const tasks = await q(
+      `SELECT * FROM tasks WHERE type='pub' AND status='published' AND archived=false`
+    );
+    let updated = 0, failed = 0;
+    for (const task of tasks) {
+      try {
+        const data = typeof task.data === "string" ? JSON.parse(task.data) : (task.data || {});
+        // Support multi-reel: reel_url, reel_url_1, reel_url_2...
+        const urlKeys = Object.keys(data).filter(k => k === "reel_url" || k.match(/^reel_url_\d+$/));
+        if (!urlKeys.length) continue;
+        for (const urlKey of urlKeys) {
+          const url = data[urlKey];
+          if (!url) continue;
+          try {
+            const stats = await fetchReelStats(url);
+            const id = uuidv4();
+            await pool.query(
+              `INSERT INTO reel_stats (id, task_id, reel_url, views, likes, comments, shares, reach)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [id, task.id, url, stats.views, stats.likes, stats.comments, stats.shares, stats.reach]
+            );
+            updated++;
+          } catch(e) {
+            console.warn(`[REEL-CRON] Failed ${task.id}/${urlKey}: ${e.message}`);
+            failed++;
+          }
+          // Pause between requests to avoid rate-limiting
+          await new Promise(r => setTimeout(r, 1200));
+        }
+      } catch(e) {
+        console.warn(`[REEL-CRON] Skip task ${task.id}: ${e.message}`);
+        failed++;
+      }
+    }
+    console.log(`[REEL-CRON] Done: ${updated} updated, ${failed} failed`);
+  } catch(e) {
+    console.error("[REEL-CRON] Fatal error:", e.message);
+  }
+}
+
+function scheduleReelStatsCron() {
+  const now = new Date();
+  const next = new Date();
+  next.setUTCHours(4, 0, 0, 0); // 07:00 Moscow (UTC+3)
+  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+  const msUntil = next - now;
+  console.log(`[REEL-CRON] Next auto-refresh in ${Math.round(msUntil/60000)} min (at 07:00 MSK)`);
+  setTimeout(() => {
+    refreshAllReelStats();
+    setInterval(refreshAllReelStats, 24 * 60 * 60 * 1000);
+  }, msUntil);
+}
+scheduleReelStatsCron();
+
 // Build rich task notification text
 async function taskNotifyText(taskId, action, fromUserId) {
   try {

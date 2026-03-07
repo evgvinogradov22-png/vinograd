@@ -2110,26 +2110,31 @@ function useTaskStore(type, stores) {
 // ── PublishedView ─────────────────────────────────────────────────────────────
 function PublishedView({items, projects, onOpen, onToggleStar}) {
   const [stats, setStats] = useState({});
+  const [groupBy, setGroupBy] = useState("week"); // "week" | "month"
+  const [view, setView] = useState("list"); // "list" | "dashboard"
+
   useEffect(() => {
     const ids = items.filter(x=>x.status==="published").map(x=>x.id);
     if (!ids.length) return;
     fetch("/api/reel-stats/latest", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
+      method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({task_ids: ids})
     }).then(r=>r.json()).then(setStats).catch(()=>{});
   }, [items]);
 
   function fmt(n) {
-    if (!n) return null;
+    if (!n && n !== 0) return null;
     if (n >= 1000000) return (n/1000000).toFixed(1)+"M";
     if (n >= 1000) return (n/1000).toFixed(1)+"K";
     return String(n);
   }
+  function fmtFull(n) {
+    if (!n) return "—";
+    return n.toLocaleString("ru");
+  }
   function getWeekKey(dateStr) {
     if (!dateStr) return null;
-    const d = new Date(dateStr);
-    if (isNaN(d)) return null;
+    const d = new Date(dateStr); if (isNaN(d)) return null;
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const mon = new Date(d); mon.setDate(diff);
@@ -2138,19 +2143,49 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
   function getWeekLabel(monStr) {
     const mon = new Date(monStr);
     const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-    const fmt = d => d.toLocaleDateString("ru", {day:"numeric", month:"short"});
-    return `${fmt(mon)} — ${fmt(sun)}`;
+    const f = d => d.toLocaleDateString("ru", {day:"numeric", month:"short"});
+    return `${f(mon)} — ${f(sun)}`;
   }
+  function getMonthKey(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr); if (isNaN(d)) return null;
+    return d.toISOString().slice(0, 7);
+  }
+  function getMonthLabel(key) {
+    const [y, m] = key.split("-");
+    return new Date(+y, +m-1, 1).toLocaleDateString("ru", {month:"long", year:"numeric"});
+  }
+
   const published = items.filter(x => x.status === "published");
+
+  // Group
   const grouped = {};
   published.forEach(item => {
     const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
-    const k = getWeekKey(dateStr) || "unknown";
+    const k = groupBy === "week" ? (getWeekKey(dateStr)||"unknown") : (getMonthKey(dateStr)||"unknown");
     if (!grouped[k]) grouped[k] = [];
     grouped[k].push(item);
   });
-  const weeks = Object.keys(grouped).filter(k=>k!=="unknown").sort((a,b)=>b.localeCompare(a));
-  if (grouped["unknown"]) weeks.push("unknown");
+  const keys = Object.keys(grouped).filter(k=>k!=="unknown").sort((a,b)=>b.localeCompare(a));
+  if (grouped["unknown"]) keys.push("unknown");
+
+  // Totals for dashboard
+  const totalViews    = Object.values(stats).reduce((s,x)=>s+(x?.views||0),0);
+  const totalLikes    = Object.values(stats).reduce((s,x)=>s+(x?.likes||0),0);
+  const totalComments = Object.values(stats).reduce((s,x)=>s+(x?.comments||0),0);
+  const hasStats      = totalViews + totalLikes + totalComments > 0;
+
+  // Per-period totals for dashboard bars
+  const periodData = keys.filter(k=>k!=="unknown").map(k => {
+    const pItems = grouped[k] || [];
+    const views    = pItems.reduce((s,x)=>s+(stats[x.id]?.views||0),0);
+    const likes    = pItems.reduce((s,x)=>s+(stats[x.id]?.likes||0),0);
+    const comments = pItems.reduce((s,x)=>s+(stats[x.id]?.comments||0),0);
+    const label    = groupBy === "week" ? getWeekLabel(k) : getMonthLabel(k);
+    return { k, label, views, likes, comments, count: pItems.length };
+  });
+
+  const maxViews = Math.max(...periodData.map(d=>d.views), 1);
 
   if (published.length === 0) return <div style={{textAlign:"center",padding:"60px 0",color:"#4b5563"}}>
     <div style={{fontSize:36,marginBottom:8}}>📭</div>
@@ -2159,76 +2194,188 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
 
   const TH = ({children, w}) => <th style={{textAlign:"left",padding:"6px 10px",fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700,borderBottom:"1px solid #1e1e2e",whiteSpace:"nowrap",width:w}}>{children}</th>;
 
-  return <div style={{display:"flex",flexDirection:"column",gap:24}}>
-    {weeks.map(wk => {
-      const wItems = grouped[wk];
-      const label = wk === "unknown" ? "Без даты" : getWeekLabel(wk);
-      const weekTotal = wItems.reduce((s,x)=>s+pubCount(x),0);
-      const starredCount = wItems.filter(x=>x.starred).reduce((s,x)=>s+pubCount(x),0);
-      return <div key={wk}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#10b981",fontFamily:"monospace"}}>{label}</span>
-          <span style={{fontSize:9,background:"#10b98120",color:"#10b981",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>{weekTotal} публ.</span>
-          {starredCount>0&&<span style={{fontSize:9,background:"#f59e0b20",color:"#f59e0b",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>★ {starredCount} залетевших</span>}
-          <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
-        </div>
-        <table style={{width:"100%",borderCollapse:"collapse",background:"#111118",borderRadius:10,overflow:"hidden",border:"1px solid #1e1e2e"}}>
-          <thead>
-            <tr style={{background:"#0d0d16"}}>
-              <TH w={28}>★</TH>
-              <TH>НАЗВАНИЕ</TH>
-              <TH w={130}>ПРОЕКТ</TH>
-              <TH w={100}>ТИП</TH>
-              <TH w={90}>КОЛ-ВО</TH>
-              <TH w={100}>ДАТА</TH>
-              <TH w={80}>👁 ПРОСМ.</TH>
-              <TH w={70}>❤️ ЛАЙКИ</TH>
-              <TH w={70}>💬 КОММ.</TH>
-            </tr>
-          </thead>
-          <tbody>
-            {wItems.map((item,i) => {
-              const proj = projects.find(p=>p.id===item.project);
-              const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
-              const cnt = pubCount(item);
-              return <tr key={item.id}
-                onClick={()=>onOpen(item)}
-                style={{borderTop: i===0?"none":"1px solid #1e1e2e", cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <td style={{padding:"8px 10px",textAlign:"center"}} onClick={e=>{e.stopPropagation();onToggleStar&&onToggleStar(item);}}>
-                  <span style={{fontSize:14,color:item.starred?"#f59e0b":"#2d2d44",cursor:"pointer",transition:"color 0.1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#6b7280"}
-                    onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#f59e0b":"#2d2d44"}>★</span>
-                </td>
-                <td style={{padding:"8px 10px",fontSize:12,fontWeight:600,color:"#f0eee8"}}>{item.title||"Без названия"}</td>
-                <td style={{padding:"8px 10px"}}>
-                  {proj&&<span style={{fontSize:9,color:proj.color,background:proj.color+"18",borderRadius:4,padding:"2px 6px",fontFamily:"monospace"}}>{proj.label}</span>}
-                </td>
-                <td style={{padding:"8px 10px",fontSize:9,color:"#6b7280",fontFamily:"monospace"}}>
-                  {item.pub_type==="carousel"?"🖼 Карусель":"🎬 Рилс"}
-                </td>
-                <td style={{padding:"8px 10px",fontSize:11,fontFamily:"monospace",fontWeight:700,color:cnt>1?"#a78bfa":"#6b7280"}}>
-                  {cnt>1?`× ${cnt}`:"—"}
-                </td>
-                <td style={{padding:"8px 10px",fontSize:9,color:"#10b981",fontFamily:"monospace"}}>
-                  {dateStr||"—"}
-                </td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#06b6d4",fontSize:11}}>
-                  {fmt(stats[item.id]?.views)||"—"}
-                </td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#ec4899",fontSize:11}}>
-                  {fmt(stats[item.id]?.likes)||"—"}
-                </td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#8b5cf6",fontSize:11}}>
-                  {fmt(stats[item.id]?.comments)||"—"}
-                </td>
-              </tr>;
-            })}
-          </tbody>
-        </table>
+  const Toolbar = () => <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+    {/* View toggle */}
+    <div style={{display:"flex",background:"#111118",borderRadius:8,border:"1px solid #1e1e2e",overflow:"hidden"}}>
+      {[["list","📋 Список"],["dashboard","📊 Дашборд"]].map(([v,l])=>
+        <button key={v} onClick={()=>setView(v)} style={{padding:"5px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:600,
+          background:view===v?"#1e1e2e":"transparent",color:view===v?"#f0eee8":"#4b5563"}}>
+          {l}
+        </button>
+      )}
+    </div>
+    {/* Group toggle */}
+    <div style={{display:"flex",background:"#111118",borderRadius:8,border:"1px solid #1e1e2e",overflow:"hidden"}}>
+      {[["week","По неделям"],["month","По месяцам"]].map(([v,l])=>
+        <button key={v} onClick={()=>setGroupBy(v)} style={{padding:"5px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:600,
+          background:groupBy===v?"#10b98130":"transparent",color:groupBy===v?"#10b981":"#4b5563"}}>
+          {l}
+        </button>
+      )}
+    </div>
+    <div style={{flex:1}}/>
+    <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{published.length} публикаций · обновление в 07:00</span>
+  </div>;
+
+  // ── DASHBOARD VIEW ──────────────────────────────────────────────────────────
+  if (view === "dashboard") {
+    const StatCard = ({label, value, color, icon}) =>
+      <div style={{flex:1,background:"#111118",border:"1px solid #1e1e2e",borderRadius:12,padding:"18px 20px",minWidth:130}}>
+        <div style={{fontSize:10,color:"#4b5563",fontFamily:"monospace",marginBottom:6}}>{icon} {label}</div>
+        <div style={{fontSize:26,fontWeight:800,color,fontFamily:"monospace",letterSpacing:-1}}>{fmtFull(value)}</div>
       </div>;
-    })}
+
+    // Top 5 reels by views
+    const ranked = published
+      .map(x=>({...x, views: stats[x.id]?.views||0}))
+      .filter(x=>x.views>0)
+      .sort((a,b)=>b.views-a.views)
+      .slice(0,5);
+
+    return <div>
+      <Toolbar/>
+      {/* KPI cards */}
+      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <StatCard label="ПРОСМОТРЫ" value={totalViews} color="#06b6d4" icon="👁"/>
+        <StatCard label="ЛАЙКИ" value={totalLikes} color="#ec4899" icon="❤️"/>
+        <StatCard label="КОММЕНТАРИИ" value={totalComments} color="#8b5cf6" icon="💬"/>
+        <StatCard label="ПУБЛИКАЦИИ" value={published.length} color="#10b981" icon="📹"/>
+        {totalLikes>0&&totalViews>0&&<StatCard label="ERR (лайки/просм.)" value={(totalLikes/totalViews*100).toFixed(2)+"%"} color="#f59e0b" icon="📈"/>}
+      </div>
+
+      {/* Bar chart by period */}
+      {hasStats && periodData.length > 0 && <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:12,padding:"16px 20px",marginBottom:20}}>
+        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700,marginBottom:14}}>
+          ПРОСМОТРЫ {groupBy==="week"?"ПО НЕДЕЛЯМ":"ПО МЕСЯЦАМ"}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {periodData.map(d => {
+            const pct = Math.round(d.views/maxViews*100);
+            return <div key={d.k} style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:120,fontSize:9,color:"#6b7280",fontFamily:"monospace",flexShrink:0,textAlign:"right"}}>{d.label}</div>
+              <div style={{flex:1,height:20,background:"#0d0d16",borderRadius:4,overflow:"hidden",position:"relative"}}>
+                <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,#06b6d4,#3b82f6)",borderRadius:4,transition:"width 0.4s"}}/>
+              </div>
+              <div style={{width:60,fontSize:10,fontFamily:"monospace",fontWeight:700,color:"#06b6d4",textAlign:"right"}}>{fmt(d.views)||"—"}</div>
+              <div style={{width:50,fontSize:9,fontFamily:"monospace",color:"#ec4899",textAlign:"right"}}>{fmt(d.likes)||"—"}</div>
+              <div style={{width:40,fontSize:9,fontFamily:"monospace",color:"#8b5cf6",textAlign:"right"}}>{fmt(d.comments)||"—"}</div>
+              <div style={{width:30,fontSize:8,fontFamily:"monospace",color:"#4b5563",textAlign:"right"}}>{d.count}шт</div>
+            </div>;
+          })}
+        </div>
+        <div style={{display:"flex",gap:16,marginTop:10,justifyContent:"flex-end"}}>
+          {[["#06b6d4","👁 Просмотры"],["#ec4899","❤️ Лайки"],["#8b5cf6","💬 Комм."]].map(([c,l])=>
+            <span key={l} style={{fontSize:8,color:c,fontFamily:"monospace"}}>{l}</span>
+          )}
+        </div>
+      </div>}
+
+      {/* Top reels */}
+      {ranked.length > 0 && <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:12,padding:"16px 20px"}}>
+        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700,marginBottom:12}}>ТОП РИЛСОВ ПО ПРОСМОТРАМ</div>
+        {ranked.map((item,i)=>{
+          const proj = projects.find(p=>p.id===item.project);
+          const s = stats[item.id]||{};
+          return <div key={item.id} onClick={()=>onOpen(item)}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderTop:i===0?"none":"1px solid #1e1e2e",cursor:"pointer"}}>
+            <span style={{fontSize:16,fontWeight:800,color:"#1e1e2e",width:24,textAlign:"center",fontFamily:"monospace"}}>
+              {i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`}
+            </span>
+            <div style={{flex:1,overflow:"hidden"}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title||"Без названия"}</div>
+              {proj&&<span style={{fontSize:8,color:proj.color,fontFamily:"monospace"}}>{proj.label}</span>}
+            </div>
+            <div style={{display:"flex",gap:16,flexShrink:0}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#06b6d4",fontFamily:"monospace"}}>{fmt(s.views)}</span>
+              <span style={{fontSize:10,color:"#ec4899",fontFamily:"monospace"}}>{fmt(s.likes)}</span>
+              <span style={{fontSize:10,color:"#8b5cf6",fontFamily:"monospace"}}>{fmt(s.comments)}</span>
+            </div>
+          </div>;
+        })}
+      </div>}
+
+      {!hasStats && <div style={{textAlign:"center",padding:"40px",color:"#4b5563"}}>
+        <div style={{fontSize:28,marginBottom:8}}>📊</div>
+        <div style={{fontSize:12}}>Статистика ещё не собрана.<br/>Откройте карточку рилса и нажмите 🔄, или дождитесь 07:00.</div>
+      </div>}
+    </div>;
+  }
+
+  // ── LIST VIEW ──────────────────────────────────────────────────────────────
+  return <div>
+    <Toolbar/>
+    <div style={{display:"flex",flexDirection:"column",gap:24}}>
+      {keys.map(k => {
+        const kItems = grouped[k];
+        const label = k==="unknown" ? "Без даты" : groupBy==="week" ? getWeekLabel(k) : getMonthLabel(k);
+        const weekTotal = kItems.reduce((s,x)=>s+pubCount(x),0);
+        const starredCount = kItems.filter(x=>x.starred).reduce((s,x)=>s+pubCount(x),0);
+        const periodViews = kItems.reduce((s,x)=>s+(stats[x.id]?.views||0),0);
+        const periodLikes = kItems.reduce((s,x)=>s+(stats[x.id]?.likes||0),0);
+        return <div key={k}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#10b981",fontFamily:"monospace"}}>{label}</span>
+            <span style={{fontSize:9,background:"#10b98120",color:"#10b981",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>{weekTotal} публ.</span>
+            {starredCount>0&&<span style={{fontSize:9,background:"#f59e0b20",color:"#f59e0b",borderRadius:10,padding:"1px 8px",fontFamily:"monospace"}}>★ {starredCount} залетевших</span>}
+            {periodViews>0&&<span style={{fontSize:9,color:"#06b6d4",fontFamily:"monospace",marginLeft:4}}>👁 {fmt(periodViews)}</span>}
+            {periodLikes>0&&<span style={{fontSize:9,color:"#ec4899",fontFamily:"monospace"}}>❤️ {fmt(periodLikes)}</span>}
+            <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",background:"#111118",borderRadius:10,overflow:"hidden",border:"1px solid #1e1e2e"}}>
+            <thead>
+              <tr style={{background:"#0d0d16"}}>
+                <TH w={28}>★</TH>
+                <TH>НАЗВАНИЕ</TH>
+                <TH w={130}>ПРОЕКТ</TH>
+                <TH w={100}>ТИП</TH>
+                <TH w={90}>КОЛ-ВО</TH>
+                <TH w={100}>ДАТА</TH>
+                <TH w={80}>👁 ПРОСМ.</TH>
+                <TH w={70}>❤️ ЛАЙКИ</TH>
+                <TH w={70}>💬 КОММ.</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {kItems.map((item,i) => {
+                const proj = projects.find(p=>p.id===item.project);
+                const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
+                const cnt = pubCount(item);
+                return <tr key={item.id} onClick={()=>onOpen(item)}
+                  style={{borderTop:i===0?"none":"1px solid #1e1e2e",cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{padding:"8px 10px",textAlign:"center"}} onClick={e=>{e.stopPropagation();onToggleStar&&onToggleStar(item);}}>
+                    <span style={{fontSize:14,color:item.starred?"#f59e0b":"#2d2d44",cursor:"pointer",transition:"color 0.1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#6b7280"}
+                      onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#f59e0b":"#2d2d44"}>★</span>
+                  </td>
+                  <td style={{padding:"8px 10px",fontSize:12,fontWeight:600,color:"#f0eee8"}}>{item.title||"Без названия"}</td>
+                  <td style={{padding:"8px 10px"}}>
+                    {proj&&<span style={{fontSize:9,color:proj.color,background:proj.color+"18",borderRadius:4,padding:"2px 6px",fontFamily:"monospace"}}>{proj.label}</span>}
+                  </td>
+                  <td style={{padding:"8px 10px",fontSize:9,color:"#6b7280",fontFamily:"monospace"}}>
+                    {item.pub_type==="carousel"?"🖼 Карусель":"🎬 Рилс"}
+                  </td>
+                  <td style={{padding:"8px 10px",fontSize:11,fontFamily:"monospace",fontWeight:700,color:cnt>1?"#a78bfa":"#6b7280"}}>
+                    {cnt>1?`× ${cnt}`:"—"}
+                  </td>
+                  <td style={{padding:"8px 10px",fontSize:9,color:"#10b981",fontFamily:"monospace"}}>{dateStr||"—"}</td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#06b6d4",fontSize:11}}>
+                    {fmt(stats[item.id]?.views)||"—"}
+                  </td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#ec4899",fontSize:11}}>
+                    {fmt(stats[item.id]?.likes)||"—"}
+                  </td>
+                  <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#8b5cf6",fontSize:11}}>
+                    {fmt(stats[item.id]?.comments)||"—"}
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>;
+      })}
+    </div>
   </div>;
 }
 
