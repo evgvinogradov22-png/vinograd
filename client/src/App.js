@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import RU_HOLIDAYS from "./holidays"
-import InspirationPage from "./Inspiration";
+import RU_HOLIDAYS from "./holidays";
 import { api, createWS } from "./api";
 import LoginScreen from "./LoginScreen";
 
@@ -15,7 +14,6 @@ const TABS = [
   { id:"summary",   label:"Сводка",        color:"#f97316" },
   { id:"analytics", label:"Аналитика",     color:"#a78bfa" },
   { id:"base",      label:"База",          color:"#06b6d4" },
-  { id:"inspiration", label:"👁 Насмотренность", color:"#a78bfa" },
 ];
 
 const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
@@ -2335,7 +2333,23 @@ function MainApp({currentUser, onLogout}){
     </div>;
   }
 
-  const cnt={pre:preItems.length,prod:prodItems.length,post:postReels.length+postVideo.length+postCarousels.length,pub:pubItems.length,summary:0,analytics:0,base:0,admin:adminItems.filter(t=>!t.archived).length};
+  const _now = new Date();
+  const _curMonth = _now.getMonth(), _curYear = _now.getFullYear();
+  const _myId = currentUser?.id;
+  const _mf = ["executor","editor","scriptwriter","operator","designer"];
+  const _pubThisMonth = pubItems.filter(x=>{ const d=x.planned_date||""; if(!d) return false; const dt=new Date(d); return dt.getMonth()===_curMonth&&dt.getFullYear()===_curYear&&x.status==="published"; }).length;
+  const _totalKpi = projects.filter(p=>!p.archived).reduce((s,p)=>s+(parseInt(kpis[`${p.id}_${_curYear}_${_curMonth}`]||"0")||0),0);
+  const _kpiPct = _totalKpi>0 ? Math.round((_pubThisMonth/_totalKpi)*100) : null;
+  const cnt={
+    pre:   preItems.filter(t=>!t.archived&&t.status!=="approved").length,
+    prod:  prodItems.filter(t=>!t.archived&&t.status!=="done").length,
+    post:  [...postReels,...postVideo,...postCarousels].filter(t=>!t.archived&&t.status!=="done").length,
+    pub:   pubItems.filter(t=>!t.archived&&t.status==="scheduled").length,
+    admin: adminItems.filter(t=>!t.archived&&t.status!=="done"&&t.status!=="cancelled").length,
+    summary: _myId ? [...preItems,...prodItems,...postReels,...postVideo,...postCarousels,...adminItems].filter(t=>!t.archived&&_mf.some(f=>t[f]===_myId)).length : 0,
+    analytics: _kpiPct,
+    base: 0,
+  };
 
   // ── Mobile stores object ─────────────────────────────────────────────────
   const mobileStores = {
@@ -2508,7 +2522,6 @@ function MainApp({currentUser, onLogout}){
       </>}
             {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects} kpisData={kpis}/>}
-      {tab==="inspiration"&&<InspirationPage projects={projects} currentUser={currentUser} onClose={()=>setTab("pre")}/>}
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
 
