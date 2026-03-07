@@ -1928,58 +1928,6 @@ function TrainingView(){
   );
 }
 
-// ── Projects View ─────────────────────────────────────────────────────────────
-// ── Projects View ─────────────────────────────────────────────────────────────
-function ProjectsView({projects,setProjects}){
-  const [showArchive,setShowArchive]=useState(false);
-  const [adding,setAdding]=useState(false);
-  const [newP,setNewP]=useState({label:"",color:"#8b5cf6",description:"",links:[""]});
-  const visible=projects.filter(p=>showArchive?p.archived:!p.archived);
-  async function addProject(){
-    if(!newP.label.trim()) return;
-    try {
-      const created = await api.createProject({...newP, links:newP.links.filter(l=>l.trim())});
-      setProjects(p=>[...p,{...created,links:created.links||[],archived:false}]);
-      setNewP({label:"",color:"#8b5cf6",description:"",links:[""]});
-      setAdding(false);
-    } catch(e){ alert("Ошибка: "+e.message); }
-  }
-  return <div>
-    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-      <h2 style={{fontSize:17,fontWeight:800,margin:0,color:"#f59e0b"}}>📁 Проекты</h2>
-      <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-        <button onClick={()=>setShowArchive(p=>!p)} style={{background:"transparent",border:`1px solid ${showArchive?"#f59e0b":"#2d2d44"}`,borderRadius:8,padding:"6px 12px",color:showArchive?"#f59e0b":"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>{showArchive?"← Активные":"🗄 Архив"}</button>
-        {!showArchive&&<button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"6px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>+ Добавить проект</button>}
-      </div>
-    </div>
-    {adding&&<div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:12,padding:"16px",marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:700,marginBottom:12,color:"#f59e0b"}}>+ Новый проект</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,marginBottom:10}}>
-        <Field label="НАЗВАНИЕ"><input value={newP.label} onChange={e=>setNewP(p=>({...p,label:e.target.value}))} placeholder="Название клиента / бренда" style={SI}/></Field>
-        <Field label="ЦВЕТ"><div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3}}>{AVATAR_COLORS.map(c=><div key={c} onClick={()=>setNewP(p=>({...p,color:c}))} style={{width:22,height:22,borderRadius:"50%",background:c,cursor:"pointer",border:newP.color===c?"3px solid #fff":"3px solid transparent"}}/>)}</div></Field>
-      </div>
-      <Field label="ОПИСАНИЕ"><textarea value={newP.description} onChange={e=>setNewP(p=>({...p,description:e.target.value}))} placeholder="ЦА, тон, особенности бренда..." style={{...SI,minHeight:65,resize:"vertical",lineHeight:1.5}}/></Field>
-      <Field label="ССЫЛКИ">
-        {newP.links.map((l,i)=><div key={i} style={{display:"flex",gap:5,marginBottom:4}}>
-          <input value={l} onChange={e=>setNewP(p=>({...p,links:p.links.map((x,j)=>j===i?e.target.value:x)}))} placeholder="https://..." style={{...SI,flex:1}}/>
-          <button onClick={()=>setNewP(p=>({...p,links:p.links.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
-        </div>)}
-        <button onClick={()=>setNewP(p=>({...p,links:[...p.links,""]}))} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:6,padding:"4px 12px",color:"#9ca3af",cursor:"pointer",fontSize:11}}>+ Ссылка</button>
-      </Field>
-      <div style={{display:"flex",gap:8,marginTop:10}}>
-        <button onClick={()=>setAdding(false)} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>Отмена</button>
-        <button onClick={addProject} style={{flex:2,background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:8,padding:"8px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>Создать</button>
-      </div>
-    </div>}
-    {visible.length===0&&!adding&&<div style={{textAlign:"center",padding:"50px 0",color:"#9ca3af"}}><div style={{fontSize:36,marginBottom:8}}>📁</div><div style={{fontSize:12,color:"#9ca3af"}}>{showArchive?"Архив пуст":"Нет активных проектов"}</div></div>}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
-      {visible.map(proj=>(
-        <ProjectCard key={proj.id} proj={proj} showArchive={showArchive} setProjects={setProjects}/>
-      ))}
-    </div>
-  </div>;
-}
-
 
 function ProjectCard({proj, showArchive, setProjects}){
   const [nl,setNl]=useState("");
