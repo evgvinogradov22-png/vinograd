@@ -1605,34 +1605,17 @@ initReelStatsDB().catch(console.error);
 
 // ── Fetch stats for one URL ───────────────────────────────────────────────────
 async function fetchReelStats(reelUrl) {
-  // Try /media-info first (has play_count), fallback to /post-dl
-  let d = null;
-  try {
-    const r1 = await looterFetch(
-      `https://${LOOTER_HOST2}/media?url=${encodeURIComponent(reelUrl)}`
-    );
-    d = r1?.data || r1;
-    // If no play_count, try post-info
-    if (!d?.play_count && !d?.video_play_count) {
-      const r2 = await looterFetch(
-        `https://${LOOTER_HOST2}/post-dl?url=${encodeURIComponent(reelUrl)}`
-      );
-      const d2 = r2?.data || r2;
-      // Merge: take play_count from r2 if available, else keep d
-      d = { ...d, ...d2, play_count: d2?.play_count || d2?.video_play_count || d?.play_count || 0 };
-    }
-  } catch(e) {
-    const r2 = await looterFetch(
-      `https://${LOOTER_HOST2}/post-dl?url=${encodeURIComponent(reelUrl)}`
-    );
-    d = r2?.data || r2;
-  }
+  // Use /post-info — returns video_play_count, edge_media_preview_like.count etc.
+  const data = await looterFetch(
+    `https://${LOOTER_HOST2}/post-info?url=${encodeURIComponent(reelUrl)}`
+  );
+  const d = data?.data || data;
   return {
-    views:    parseInt(d?.play_count || d?.video_play_count || d?.view_count || d?.video_view_count || 0),
-    likes:    parseInt(d?.like_count || d?.edge_media_preview_like?.count || 0),
-    comments: parseInt(d?.comment_count || d?.edge_media_to_comment?.count || 0),
+    views:    parseInt(d?.video_play_count || d?.video_view_count || 0),
+    likes:    parseInt(d?.edge_media_preview_like?.count || d?.like_count || 0),
+    comments: parseInt(d?.edge_media_to_parent_comment?.count || d?.edge_media_preview_comment?.count || d?.comment_count || 0),
     shares:   parseInt(d?.reshare_count || d?.share_count || 0),
-    reach:    parseInt(d?.reach || 0),
+    reach:    parseInt(d?.video_view_count || 0),
   };
 }
 
