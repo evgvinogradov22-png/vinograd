@@ -495,7 +495,7 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
         <span style={{fontSize:13,fontWeight:700}}>{days[0].getDate()} {MONTHS[days[0].getMonth()]} — {days[6].getDate()} {MONTHS[days[6].getMonth()]} {days[0].getFullYear()}</span>
         <button onClick={()=>{const d=new Date(base);d.setDate(d.getDate()+7);setBase(d);}} style={{background:"#111118",border:"1px solid #2d2d44",color:"#f0eee8",width:28,height:28,borderRadius:6,cursor:"pointer",fontSize:14}}>›</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:4,overflow:"hidden"}}>
         {days.map(d=>{
           const k=fmt(d); const its=byDay[k]||[]; const isToday=k===todayStr; const isOver=overDay===k;
           return <div key={k}
@@ -503,7 +503,7 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
             onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOverDay(null);}}
             onDrop={e=>{e.preventDefault();if(dragId){onMoveToDay(dragId,k+"T12:00");setDragId(null);setOverDay(null);}}}
             onClick={()=>onDayClick(k+"T12:00")}
-            style={{background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?"1px solid #7c3aed":isToday?"1px solid #7c3aed":"1px solid #1e1e2e",borderRadius:10,padding:"8px 7px",minHeight:130,cursor:"pointer",transition:"all 0.1s"}}
+            style={{background:isOver?"#111130":isToday?"#0f0f1e":"#111118",border:isOver?"1px solid #7c3aed":isToday?"1px solid #7c3aed":"1px solid #1e1e2e",borderRadius:8,padding:"6px 5px",minHeight:120,cursor:"pointer",transition:"all 0.1s",overflow:"hidden"}}
             onMouseEnter={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#3d3d5c";}}
             onMouseLeave={e=>{if(!isOver&&!isToday)e.currentTarget.style.borderColor="#1e1e2e";}}>
             <div style={{textAlign:"center",marginBottom:6}}>
@@ -520,15 +520,15 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
               return(
               <div key={x.id} draggable onDragStart={e=>{e.stopPropagation();setDragId(x.id);}}
                 onClick={e=>{e.stopPropagation();onItemClick(x);}}
-                style={{background:bg,border:`1px solid ${border}`,borderRadius:5,padding:"5px 7px",marginBottom:4,cursor:"grab"}}>
+                style={{background:bg,border:`1px solid ${border}`,borderRadius:4,padding:"4px 5px",marginBottom:3,cursor:"grab"}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:3,marginBottom:3}}>
-                  <div style={{fontSize:9,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,lineHeight:1.3}}>{x.title||"Без названия"}</div>
+                  <div style={{fontSize:8,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,lineHeight:1.3}}>{x.title||"Без названия"}</div>
                   <span style={{fontSize:11,color:x.starred?"#f59e0b":"#2d2d44",flexShrink:0,lineHeight:1,cursor:"pointer"}}
                     onClick={e=>{e.stopPropagation();onItemClick({...x,_toggleStar:true});}}>★</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
-                  {proj&&<span style={{fontSize:7,color:proj.color,fontFamily:"monospace",background:proj.color+"18",borderRadius:3,padding:"1px 4px",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
-                  {st&&<span style={{fontSize:7,color:sc,fontFamily:"monospace",background:sc+"18",borderRadius:3,padding:"1px 4px"}}>{st.l}</span>}
+                  {proj&&<span style={{fontSize:6,color:proj.color,fontFamily:"monospace",background:proj.color+"18",borderRadius:2,padding:"1px 3px",maxWidth:55,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
+                  {st&&<span style={{fontSize:6,color:sc,fontFamily:"monospace",background:sc+"18",borderRadius:2,padding:"1px 3px"}}>{st.l}</span>}
                   <span style={{fontSize:7,color:"#6b7280",marginLeft:"auto"}}>{x.pub_type==="carousel"?"🖼":`🎬${(x.reels_count||1)>1?" ×"+(x.reels_count||1):""}`}</span>
                 </div>
               </div>
@@ -1096,10 +1096,20 @@ function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
     setRefreshing(false);
   }
 
-  function saveUrl() {
+  async function saveUrl() {
     if (!url.trim()) return;
     onUrlSave(url.trim());
     setEditing(false);
+    // Immediately persist to DB so refresh works without saving whole card
+    if (taskId) {
+      try {
+        await fetch(`/api/tasks/${taskId}`, {
+          method: "PATCH",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ data: { reel_url: url.trim() } }),
+        });
+      } catch(e) { console.error("reel_url save:", e); }
+    }
   }
 
   const latest = history[history.length - 1];
@@ -1206,7 +1216,7 @@ function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
             <div style={{textAlign:"center",padding:"12px",color:"#4b5563",fontSize:11}}>⏳ Загружаю...</div>
           ) : (
             <div style={{textAlign:"center",padding:"12px",color:"#4b5563",fontSize:11}}>
-              Нажмите «Сохранить» карточку, затем «🔄 Обновить»
+              Введите ссылку и нажмите «Сохранить»
             </div>
           )}
 

@@ -446,7 +446,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
     if (title      !== undefined) { sets.push(`title=$${i++}`);      vals.push(title); }
     if (project_id !== undefined) { sets.push(`project_id=$${i++}`); vals.push(project_id); }
     if (status     !== undefined) { sets.push(`status=$${i++}`);     vals.push(status); }
-    if (data       !== undefined) { sets.push(`data=$${i++}`);       vals.push(JSON.stringify(data)); }
+    if (data       !== undefined) { sets.push(`data=tasks.data || '{}'::jsonb || $${i++}::jsonb`); vals.push(JSON.stringify(data)); }
     if (archived      !== undefined) { sets.push(`archived=$${i++}`);      vals.push(archived); }
     if (completed_at  !== undefined) { sets.push(`completed_at=$${i++}`); vals.push(completed_at); }
     vals.push(req.params.id);
@@ -1605,17 +1605,34 @@ initReelStatsDB().catch(console.error);
 
 // ── Fetch stats for one URL ───────────────────────────────────────────────────
 async function fetchReelStats(reelUrl) {
-  const data = await looterFetch(
-    `https://${LOOTER_HOST2}/post-dl?url=${encodeURIComponent(reelUrl)}`
-  );
-  // looter2 /post-dl returns media info
-  const d = data?.data || data;
+  // Try /media-info first (has play_count), fallback to /post-dl
+  let d = null;
+  try {
+    const r1 = await looterFetch(
+      `https://${LOOTER_HOST2}/media?url=${encodeURIComponent(reelUrl)}`
+    );
+    d = r1?.data || r1;
+    // If no play_count, try post-info
+    if (!d?.play_count && !d?.video_play_count) {
+      const r2 = await looterFetch(
+        `https://${LOOTER_HOST2}/post-dl?url=${encodeURIComponent(reelUrl)}`
+      );
+      const d2 = r2?.data || r2;
+      // Merge: take play_count from r2 if available, else keep d
+      d = { ...d, ...d2, play_count: d2?.play_count || d2?.video_play_count || d?.play_count || 0 };
+    }
+  } catch(e) {
+    const r2 = await looterFetch(
+      `https://${LOOTER_HOST2}/post-dl?url=${encodeURIComponent(reelUrl)}`
+    );
+    d = r2?.data || r2;
+  }
   return {
-    views:    parseInt(d?.play_count    || d?.view_count    || d?.video_view_count || 0),
-    likes:    parseInt(d?.like_count    || d?.edge_media_preview_like?.count || 0),
-    comments: parseInt(d?.comment_count || d?.edge_media_to_comment?.count   || 0),
-    shares:   parseInt(d?.reshare_count || d?.share_count   || 0),
-    reach:    parseInt(d?.reach         || 0),
+    views:    parseInt(d?.play_count || d?.video_play_count || d?.view_count || d?.video_view_count || 0),
+    likes:    parseInt(d?.like_count || d?.edge_media_preview_like?.count || 0),
+    comments: parseInt(d?.comment_count || d?.edge_media_to_comment?.count || 0),
+    shares:   parseInt(d?.reshare_count || d?.share_count || 0),
+    reach:    parseInt(d?.reach || 0),
   };
 }
 
