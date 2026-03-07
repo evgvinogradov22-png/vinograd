@@ -11,10 +11,11 @@ const TABS = [
   { id:"post",      label:"Постпродакшн",  color:"#ec4899" },
   { id:"pub",       label:"Публикация",    color:"#10b981" },
   { id:"admin",     label:"Адм. задачи",   color:"#f97316" },
+  { id:"projects",  label:"Проекты",       color:"#f59e0b" },
+  { id:"projects",  label:"Проекты",       color:"#f59e0b" },
   { id:"summary",   label:"Сводка",        color:"#f97316" },
   { id:"analytics", label:"Аналитика",     color:"#a78bfa" },
   { id:"base",      label:"База",          color:"#06b6d4" },
-  { id:"projects",  label:"Проекты",       color:"#f59e0b" },
 ];
 
 const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
@@ -2735,7 +2736,7 @@ function MainApp({currentUser, onLogout}){
   if(isMobile) return <ErrorBoundary key="mobile"><MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/></ErrorBoundary>;
 
   const TASK_TABS = TABS.filter(t=>!["summary","analytics","base"].includes(t.id));
-  const META_TABS = TABS.filter(t=>["summary","analytics","base","projects"].includes(t.id));
+  const META_TABS = TABS.filter(t=>["summary","analytics","base"].includes(t.id));
 
   return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",overflow:"hidden"}}>
     {/* LEFT SIDEBAR */}
