@@ -1582,6 +1582,17 @@ async function looterFetch(url) {
   });
 }
 
+
+app.get("/api/reel-stats/debug", async (req, res) => {
+  try {
+    const { url, endpoint } = req.query;
+    if (!url) return res.status(400).json({ error: "url required" });
+    const ep = endpoint || "post-dl";
+    const full = `https://${LOOTER_HOST2}/${ep}?url=${encodeURIComponent(url)}`;
+    const data = await looterFetch(full);
+    res.json({ endpoint: ep, full_url: full, keys: Object.keys(data||{}), data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 // ── DB init ───────────────────────────────────────────────────────────────────
 async function initReelStatsDB() {
   await pool.query(`
@@ -1605,11 +1616,12 @@ initReelStatsDB().catch(console.error);
 
 // ── Fetch stats for one URL ───────────────────────────────────────────────────
 async function fetchReelStats(reelUrl) {
-  // Use /post-info — returns video_play_count, edge_media_preview_like.count etc.
-  const data = await looterFetch(
+  // /post-info returns fields directly at root level (no nested .data)
+  const d = await looterFetch(
     `https://${LOOTER_HOST2}/post-info?url=${encodeURIComponent(reelUrl)}`
   );
-  const d = data?.data || data;
+  console.log("[reel-stats] post-info keys:", Object.keys(d||{}).join(","));
+  console.log("[reel-stats] video_play_count:", d?.video_play_count, "likes:", d?.edge_media_preview_like?.count);
   return {
     views:    parseInt(d?.video_play_count || d?.video_view_count || 0),
     likes:    parseInt(d?.edge_media_preview_like?.count || d?.like_count || 0),
@@ -1624,8 +1636,10 @@ app.post("/api/reel-stats/refresh/:taskId", async (req, res) => {
   try {
     const task = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.taskId]);
     if (!task) return res.status(404).json({ error: "Task not found" });
-    const reelUrl = task.data?.reel_url;
-    if (!reelUrl) return res.status(400).json({ error: "reel_url not set" });
+    // data может прийти строкой из БД
+    const taskData = typeof task.data === "string" ? JSON.parse(task.data) : (task.data || {});
+    const reelUrl = taskData.reel_url;
+    if (!reelUrl) return res.status(400).json({ error: "reel_url not set", raw: task.data });
 
     const stats = await fetchReelStats(reelUrl);
     const id = uuidv4();
@@ -1684,6 +1698,19 @@ app.get("/api/reel-stats", async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── DEBUG: check task data and raw API response ───────────────────────────────
+app.get("/api/reel-stats/debug/:taskId", async (req, res) => {
+  try {
+    const task = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.taskId]);
+    if (!task) return res.status(404).json({ error: "Task not found" });
+    const taskData = typeof task.data === "string" ? JSON.parse(task.data) : (task.data || {});
+    const reelUrl = taskData.reel_url;
+    if (!reelUrl) return res.json({ error: "no reel_url", taskData });
+    const raw = await looterFetch(`https://${LOOTER_HOST2}/post-info?url=${encodeURIComponent(reelUrl)}`);
+    res.json({ reelUrl, taskData, raw_keys: Object.keys(raw?.data || raw || {}), raw });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 // ── CRON: auto-refresh all tracked reels every 24h ───────────────────────────
 async function cronRefreshAllReels() {
   try {
@@ -1716,6 +1743,30 @@ async function cronRefreshAllReels() {
 setInterval(cronRefreshAllReels, 24 * 60 * 60 * 1000);
 // Also run once 30s after server start
 setTimeout(cronRefreshAllReels, 30000);
+
+// ── Debug reel endpoints ──────────────────────────────────────────────────────
+app.get("/api/reel-debug", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: "url required" });
+  const endpoints = ["post-dl", "media", "post", "reel", "shortcode", "media-by-url"];
+  const results = {};
+  for (const ep of endpoints) {
+    try {
+      const data = await looterFetch(`https://${LOOTER_HOST2}/${ep}?url=${encodeURIComponent(url)}`);
+      const d = data?.data || data;
+      results[ep] = {
+        keys: Object.keys(d || data || {}),
+        play_count: d?.video_play_count || d?.play_count || d?.view_count || "—",
+        likes: d?.edge_media_preview_like?.count || d?.like_count || "—",
+        raw: JSON.stringify(data).slice(0, 300),
+      };
+    } catch(e) {
+      results[ep] = { error: e.message };
+    }
+  }
+  res.json(results);
+});
+
 
 app.get("*", (req, res) => {
   const index = path.join(BUILD_PATH, "index.html");
