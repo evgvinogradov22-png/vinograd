@@ -481,7 +481,7 @@ function CalView({items,dateField,onDayClick,renderChip,color,onMoveToDay}){
 }
 
 // ── Week View ─────────────────────────────────────────────────────────────────
-function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
+function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay,onToggleStar}){
   const [base,setBase]=useState(()=>{const d=new Date(2026,2,2);const dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1));return d;});
   const [dragId,setDragId]=useState(null); const [overDay,setOverDay]=useState(null);
   const days=Array.from({length:7},(_,i)=>{const d=new Date(base);d.setDate(d.getDate()+i);return d;});
@@ -524,7 +524,7 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
                 <div style={{display:"flex",alignItems:"flex-start",gap:3,marginBottom:3}}>
                   <div style={{fontSize:8,fontWeight:700,color:"#f0eee8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,lineHeight:1.3}}>{x.title||"Без названия"}</div>
                   <span style={{fontSize:11,color:x.starred?"#f59e0b":"#2d2d44",flexShrink:0,lineHeight:1,cursor:"pointer"}}
-                    onClick={e=>{e.stopPropagation();onItemClick({...x,_toggleStar:true});}}>★</span>
+                    onClick={e=>{e.stopPropagation();e.preventDefault();if(onToggleStar)onToggleStar(x);else onItemClick({...x,_toggleStar:true});}}>★</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
                   {proj&&<span style={{fontSize:6,color:proj.color,fontFamily:"monospace",background:proj.color+"18",borderRadius:2,padding:"1px 3px",maxWidth:55,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.label}</span>}
@@ -2092,6 +2092,23 @@ function useTaskStore(type, stores) {
 
 // ── PublishedView ─────────────────────────────────────────────────────────────
 function PublishedView({items, projects, onOpen, onToggleStar}) {
+  const [stats, setStats] = useState({});
+  useEffect(() => {
+    const ids = items.filter(x=>x.status==="published").map(x=>x.id);
+    if (!ids.length) return;
+    fetch("/api/reel-stats/latest", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({task_ids: ids})
+    }).then(r=>r.json()).then(setStats).catch(()=>{});
+  }, [items]);
+
+  function fmt(n) {
+    if (!n) return null;
+    if (n >= 1000000) return (n/1000000).toFixed(1)+"M";
+    if (n >= 1000) return (n/1000).toFixed(1)+"K";
+    return String(n);
+  }
   function getWeekKey(dateStr) {
     if (!dateStr) return null;
     const d = new Date(dateStr);
@@ -2147,6 +2164,9 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
               <TH w={100}>ТИП</TH>
               <TH w={90}>КОЛ-ВО</TH>
               <TH w={100}>ДАТА</TH>
+              <TH w={80}>👁 ПРОСМ.</TH>
+              <TH w={70}>❤️ ЛАЙКИ</TH>
+              <TH w={70}>💬 КОММ.</TH>
             </tr>
           </thead>
           <tbody>
@@ -2175,6 +2195,15 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
                 </td>
                 <td style={{padding:"8px 10px",fontSize:9,color:"#10b981",fontFamily:"monospace"}} onClick={()=>onOpen(item)}>
                   {dateStr||"—"}
+                </td>
+                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#06b6d4",fontSize:11}} onClick={()=>onOpen(item)}>
+                  {fmt(stats[item.id]?.views)||"—"}
+                </td>
+                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#ec4899",fontSize:11}} onClick={()=>onOpen(item)}>
+                  {fmt(stats[item.id]?.likes)||"—"}
+                </td>
+                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#8b5cf6",fontSize:11}} onClick={()=>onOpen(item)}>
+                  {fmt(stats[item.id]?.comments)||"—"}
                 </td>
               </tr>;
             })}
@@ -2713,7 +2742,7 @@ function MainApp({currentUser, onLogout}){
         <div style={{display:"flex",gap:6,marginBottom:12}}>
           {[{id:"week",l:"Неделя"},{id:"calendar",l:"Месяц"},{id:"status",l:"По статусам"},{id:"published",l:"Опубликованные"}].map(v=><button key={v.id} onClick={()=>setPubViewMode(v.id)} style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",background:pubViewMode===v.id?"#10b98120":"transparent",border:pubViewMode===v.id?"1px solid #10b98140":"1px solid #1e1e2e",color:pubViewMode===v.id?"#10b981":"#6b7280",fontSize:11,fontFamily:"inherit"}}>{v.l}</button>)}
         </div>
-        {pubViewMode==="week"&&<div style={{overflow:"hidden",width:"100%"}}><WeekView items={filtPub} onItemClick={x=>openEdit("pub",x)} onDayClick={dt=>openNew("pub",{planned_date:dt})} projects={projects} onMoveToDay={(id,dt)=>moveToDay("pub",id,dt)}/></div>}
+        {pubViewMode==="week"&&<div style={{overflow:"hidden",width:"100%"}}><WeekView items={filtPub} onItemClick={x=>openEdit("pub",x)} onDayClick={dt=>openNew("pub",{planned_date:dt})} projects={projects} onMoveToDay={(id,dt)=>moveToDay("pub",id,dt)} onToggleStar={x=>toggleStar("pub",x)}/></div>}
         {pubViewMode==="calendar"&&<CalView items={filtPub} dateField="planned_date" onDayClick={d=>openNew("pub",{planned_date:d+"T12:00"})} color="#10b981" onMoveToDay={(id,day)=>moveToDay("pub",id,day+"T12:00")} renderChip={x=>{const sc=stColor(PUB_STATUSES,x.status);return <div key={x.id} onClick={e=>{e.stopPropagation();openEdit("pub",x);}} style={{background:sc+"18",border:`1px solid ${sc}30`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:9,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.title}</div>;}}/>}
         {pubViewMode==="status"&&<Kanban statuses={PUB_STATUSES.filter(s=>s.id!=="published")} items={filtPub.filter(x=>x.status!=="published")} onDrop={(id,st)=>drop("pub",id,st)} onAddClick={st=>openNew("pub",{status:st})} renderCard={x=>mkCard(x,"pub")}/>}
         {pubViewMode==="published"&&<PublishedView items={pubItems} projects={projects} onOpen={x=>openEdit("pub",x)} onToggleStar={x=>toggleStar("pub",x)}/>}
