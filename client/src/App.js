@@ -543,6 +543,13 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay}){
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function Modal({title,color,onClose,onSave,onDelete,children}){
   const [confirmDel,setConfirmDel]=useState(false);
+  const onCloseRef=useRef(onClose);
+  useEffect(()=>{onCloseRef.current=onClose;},[onClose]);
+  useEffect(()=>{
+    const h=e=>{if(e.key==="Escape")onCloseRef.current();};
+    document.addEventListener("keydown",h);
+    return()=>document.removeEventListener("keydown",h);
+  },[]);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.87)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
       <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,width:"min(700px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
@@ -1078,6 +1085,7 @@ function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
   }
 
   async function refresh() {
+    if (!reelUrl) return;
     setRefreshing(true);
     try {
       const r = await fetch(`/api/reel-stats/refresh/${taskId}`, { method: "POST" });
@@ -1089,6 +1097,7 @@ function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
   }
 
   function saveUrl() {
+    if (!url.trim()) return;
     onUrlSave(url.trim());
     setEditing(false);
   }
@@ -1139,6 +1148,7 @@ function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
         <div style={{display:"flex",gap:6}}>
           {reelUrl && !editing && (
             <button onClick={refresh} disabled={refreshing}
+              title="Сначала сохраните карточку (кнопка «Сохранить» вверху), затем нажмите Обновить"
               style={{background:"transparent",border:"1px solid #ec489940",borderRadius:6,padding:"3px 10px",color:"#ec4899",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>
               {refreshing ? "⏳" : "🔄 Обновить"}
             </button>
@@ -1196,7 +1206,7 @@ function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
             <div style={{textAlign:"center",padding:"12px",color:"#4b5563",fontSize:11}}>⏳ Загружаю...</div>
           ) : (
             <div style={{textAlign:"center",padding:"12px",color:"#4b5563",fontSize:11}}>
-              Нет данных — нажмите «Обновить»
+              Нажмите «Сохранить» карточку, затем «🔄 Обновить»
             </div>
           )}
 
