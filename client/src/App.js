@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import RU_HOLIDAYS from "./holidays";
+import RU_HOLIDAYS from "./holidays"
+import InspirationPage from "./Inspiration";
 import { api, createWS } from "./api";
 import LoginScreen from "./LoginScreen";
 
@@ -14,6 +15,7 @@ const TABS = [
   { id:"summary",   label:"Сводка",        color:"#f97316" },
   { id:"analytics", label:"Аналитика",     color:"#a78bfa" },
   { id:"base",      label:"База",          color:"#06b6d4" },
+  { id:"inspiration", label:"👁 Насмотренность", color:"#a78bfa" },
 ];
 
 const PRE_STATUSES  = [{id:"idea",l:"Идея",c:"#6b7280"},{id:"brief",l:"Бриф",c:"#f59e0b"},{id:"script",l:"Сценарий",c:"#8b5cf6"},{id:"approved",l:"Утверждено",c:"#10b981"}];
@@ -2501,6 +2503,7 @@ function MainApp({currentUser, onLogout}){
       </>}
             {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects}/>}
+      {tab==="inspiration"&&<InspirationPage projects={projects} currentUser={currentUser} onClose={()=>setTab("pre")}/>}
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
 

@@ -1114,3 +1114,445 @@ app.post("/api/auth/reset-password", async (req, res) => {
 initDb()
   .then(() => server.listen(PORT, () => console.log(`🍇 Виноград server on port ${PORT}`)))
   .catch(err => { console.error("DB init failed:", err); process.exit(1); });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── НАСМОТРЕННОСТЬ — Inspiration API ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const RAPID_KEY = process.env.RAPIDAPI_KEY || "69435af1fcmshb4c74c0ac33da12p1496d4jsn17881f89c7a4";
+const LOOTER_HOST = "instagram-looter2.p.rapidapi.com";
+
+// ── DB init for inspiration ───────────────────────────────────────────────────
+async function initInspirationDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS inspiration_items (
+      id TEXT PRIMARY KEY,
+      platform TEXT NOT NULL,
+      video_id TEXT,
+      title TEXT,
+      description TEXT,
+      author TEXT,
+      author_username TEXT,
+      thumbnail TEXT,
+      video_url TEXT,
+      play_url TEXT,
+      views BIGINT DEFAULT 0,
+      likes BIGINT DEFAULT 0,
+      comments BIGINT DEFAULT 0,
+      shares BIGINT DEFAULT 0,
+      duration INTEGER DEFAULT 0,
+      published_at TEXT,
+      source_query TEXT,
+      source_type TEXT,
+      starred BOOLEAN DEFAULT false,
+      project_id TEXT,
+      note TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS inspiration_searches (
+      id TEXT PRIMARY KEY,
+      platform TEXT,
+      query TEXT,
+      search_type TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+}
+initInspirationDB().catch(console.error);
+
+// helper: RapidAPI fetch
+async function rapidFetch(url, headers = {}) {
+  const https = require("https");
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const options = {
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: "GET",
+      headers: { "X-RapidAPI-Key": RAPID_KEY, "X-RapidAPI-Host": parsed.hostname, ...headers },
+    };
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); }
+        catch(e) { reject(new Error("Invalid JSON: " + data.slice(0, 200))); }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+// ── GET saved items ───────────────────────────────────────────────────────────
+app.get("/api/inspiration", async (req, res) => {
+  try {
+    const { starred, project_id, platform, search } = req.query;
+    let sql = "SELECT * FROM inspiration_items WHERE 1=1";
+    const params = [];
+    if (starred === "true") { params.push(true); sql += ` AND starred=$${params.length}`; }
+    if (project_id) { params.push(project_id); sql += ` AND project_id=$${params.length}`; }
+    if (platform && platform !== "all") { params.push(platform); sql += ` AND platform=$${params.length}`; }
+    if (search) { params.push(`%${search}%`); sql += ` AND (title ILIKE $${params.length} OR author ILIKE $${params.length} OR description ILIKE $${params.length})`; }
+    sql += " ORDER BY created_at DESC LIMIT 200";
+    const items = await q(sql, params);
+    res.json(items);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PATCH item (star, note, project) ─────────────────────────────────────────
+app.patch("/api/inspiration/:id", async (req, res) => {
+  try {
+    const { starred, note, project_id } = req.body;
+    const fields = []; const vals = [];
+    if (starred !== undefined) { vals.push(starred); fields.push(`starred=$${vals.length}`); }
+    if (note !== undefined)    { vals.push(note);    fields.push(`note=$${vals.length}`); }
+    if (project_id !== undefined) { vals.push(project_id); fields.push(`project_id=$${vals.length}`); }
+    if (!fields.length) return res.json({ ok: true });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE inspiration_items SET ${fields.join(",")} WHERE id=$${vals.length}`, vals);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE item ───────────────────────────────────────────────────────────────
+app.delete("/api/inspiration/:id", async (req, res) => {
+  try {
+    await pool.query("DELETE FROM inspiration_items WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PARSE Instagram by username ───────────────────────────────────────────────
+app.post("/api/inspiration/parse/instagram/user", async (req, res) => {
+  try {
+    if (!RAPID_KEY) return res.status(400).json({ error: "RAPIDAPI_KEY not set" });
+    const { username, count = 12 } = req.body;
+    if (!username) return res.status(400).json({ error: "username required" });
+    const clean = username.replace(/^@/, "");
+
+    // Instagram Looter2 API
+    const data = await rapidFetch(
+      `https://${LOOTER_HOST}/profile-reels?username=${encodeURIComponent(clean)}&count=${count}`,
+      { "X-RapidAPI-Host": LOOTER_HOST }
+    );
+
+    // looter2 returns: data.data[] or data.items[] or data[]
+    const posts = data?.data || data?.items || (Array.isArray(data) ? data : []);
+    const reels = posts.slice(0, count);
+
+    const saved = [];
+    for (const p of reels) {
+      const id = uuidv4();
+      const item = {
+        id, platform: "instagram",
+        video_id: p.id || p.pk || p.shortcode,
+        title: (p.caption?.text || p.caption || "").slice(0, 300),
+        description: (p.caption?.text || p.caption || "").slice(0, 1000),
+        author: p.user?.full_name || p.owner?.full_name || clean,
+        author_username: p.user?.username || p.owner?.username || clean,
+        thumbnail: p.image_versions2?.candidates?.[0]?.url || p.thumbnail_url || p.display_url || "",
+        video_url: `https://www.instagram.com/reel/${p.shortcode || p.code}/`,
+        play_url: p.video_url || p.video_versions?.[0]?.url || "",
+        views: p.play_count || p.view_count || p.video_view_count || 0,
+        likes: p.like_count || p.edge_media_preview_like?.count || 0,
+        comments: p.comment_count || p.edge_media_to_comment?.count || 0,
+        shares: p.reshare_count || 0,
+        duration: p.video_duration || 0,
+        published_at: p.taken_at ? new Date(p.taken_at * 1000).toISOString() : (p.timestamp ? new Date(p.timestamp*1000).toISOString() : null),
+        source_query: "@" + clean,
+        source_type: "user",
+      };
+      await pool.query(
+        `INSERT INTO inspiration_items (id,platform,video_id,title,description,author,author_username,thumbnail,video_url,play_url,views,likes,comments,shares,duration,published_at,source_query,source_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (id) DO NOTHING`,
+        [item.id,item.platform,item.video_id,item.title,item.description,item.author,item.author_username,item.thumbnail,item.video_url,item.play_url,item.views,item.likes,item.comments,item.shares,item.duration,item.published_at,item.source_query,item.source_type]
+      );
+      saved.push(item);
+    }
+    await pool.query(`INSERT INTO inspiration_searches (id,platform,query,search_type) VALUES ($1,$2,$3,$4)`,
+      [uuidv4(), "instagram", "@"+clean, "user"]);
+    res.json({ ok: true, count: saved.length, items: saved });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PARSE Instagram by hashtag ────────────────────────────────────────────────
+app.post("/api/inspiration/parse/instagram/hashtag", async (req, res) => {
+  try {
+    if (!RAPID_KEY) return res.status(400).json({ error: "RAPIDAPI_KEY not set" });
+    const { hashtag, count = 12 } = req.body;
+    if (!hashtag) return res.status(400).json({ error: "hashtag required" });
+    const clean = hashtag.replace(/^#/, "");
+
+    // Instagram Looter2 — hashtag
+    const data = await rapidFetch(
+      `https://${LOOTER_HOST}/hashtag-medias?hashtag=${encodeURIComponent(clean)}&count=${count}`,
+      { "X-RapidAPI-Host": LOOTER_HOST }
+    );
+
+    const posts = data?.data || data?.items || (Array.isArray(data) ? data : []);
+    const reels = posts.filter(p => p.is_video || p.media_type === 2 || p.__typename === "GraphVideo").slice(0, count);
+
+    const saved = [];
+    for (const p of reels) {
+      const id = uuidv4();
+      const item = {
+        id, platform: "instagram",
+        video_id: p.id || p.pk || p.shortcode,
+        title: (p.caption?.text || p.edge_media_to_caption?.edges?.[0]?.node?.text || "").slice(0, 300),
+        description: (p.caption?.text || p.edge_media_to_caption?.edges?.[0]?.node?.text || "").slice(0, 1000),
+        author: p.user?.full_name || p.owner?.full_name || "",
+        author_username: p.user?.username || p.owner?.username || "",
+        thumbnail: p.image_versions2?.candidates?.[0]?.url || p.display_url || p.thumbnail_url || "",
+        video_url: `https://www.instagram.com/reel/${p.shortcode || p.code}/`,
+        play_url: p.video_url || p.video_versions?.[0]?.url || "",
+        views: p.play_count || p.video_view_count || 0,
+        likes: p.like_count || p.edge_media_preview_like?.count || 0,
+        comments: p.comment_count || p.edge_media_to_comment?.count || 0,
+        shares: 0,
+        duration: p.video_duration || 0,
+        published_at: p.taken_at ? new Date(p.taken_at * 1000).toISOString() : null,
+        source_query: "#" + clean,
+        source_type: "hashtag",
+      };
+      await pool.query(
+        `INSERT INTO inspiration_items (id,platform,video_id,title,description,author,author_username,thumbnail,video_url,play_url,views,likes,comments,shares,duration,published_at,source_query,source_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (id) DO NOTHING`,
+        [item.id,item.platform,item.video_id,item.title,item.description,item.author,item.author_username,item.thumbnail,item.video_url,item.play_url,item.views,item.likes,item.comments,item.shares,item.duration,item.published_at,item.source_query,item.source_type]
+      );
+      saved.push(item);
+    }
+    await pool.query(`INSERT INTO inspiration_searches (id,platform,query,search_type) VALUES ($1,$2,$3,$4)`,
+      [uuidv4(), "instagram", "#"+clean, "hashtag"]);
+    res.json({ ok: true, count: saved.length, items: saved });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PARSE TikTok by username ──────────────────────────────────────────────────
+app.post("/api/inspiration/parse/tiktok/user", async (req, res) => {
+  try {
+    if (!RAPID_KEY) return res.status(400).json({ error: "RAPIDAPI_KEY not set" });
+    const { username, count = 12 } = req.body;
+    if (!username) return res.status(400).json({ error: "username required" });
+    const clean = username.replace(/^@/, "");
+
+    const data = await rapidFetch(
+      `https://tiktok-api23.p.rapidapi.com/api/user/posts?uniqueId=${encodeURIComponent(clean)}&count=${count}&cursor=0`,
+      { "X-RapidAPI-Host": "tiktok-api23.p.rapidapi.com" }
+    );
+
+    const items = data?.data?.itemList || data?.itemList || [];
+    const saved = [];
+    for (const v of items.slice(0, count)) {
+      const id = uuidv4();
+      const item = {
+        id, platform: "tiktok",
+        video_id: v.id,
+        title: (v.desc || "").slice(0, 300),
+        description: (v.desc || "").slice(0, 1000),
+        author: v.author?.nickname || clean,
+        author_username: v.author?.uniqueId || clean,
+        thumbnail: v.video?.cover || v.video?.originCover || "",
+        video_url: `https://www.tiktok.com/@${v.author?.uniqueId || clean}/video/${v.id}`,
+        play_url: v.video?.playAddr || "",
+        views: v.stats?.playCount || 0,
+        likes: v.stats?.diggCount || 0,
+        comments: v.stats?.commentCount || 0,
+        shares: v.stats?.shareCount || 0,
+        duration: v.video?.duration || 0,
+        published_at: v.createTime ? new Date(v.createTime * 1000).toISOString() : null,
+        source_query: "@" + clean,
+        source_type: "user",
+      };
+      await pool.query(
+        `INSERT INTO inspiration_items (id,platform,video_id,title,description,author,author_username,thumbnail,video_url,play_url,views,likes,comments,shares,duration,published_at,source_query,source_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (id) DO NOTHING`,
+        [item.id,item.platform,item.video_id,item.title,item.description,item.author,item.author_username,item.thumbnail,item.video_url,item.play_url,item.views,item.likes,item.comments,item.shares,item.duration,item.published_at,item.source_query,item.source_type]
+      );
+      saved.push(item);
+    }
+    await pool.query(`INSERT INTO inspiration_searches (id,platform,query,search_type) VALUES ($1,$2,$3,$4)`,
+      [uuidv4(), "tiktok", "@"+clean, "user"]);
+    res.json({ ok: true, count: saved.length, items: saved });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PARSE TikTok by keyword ───────────────────────────────────────────────────
+app.post("/api/inspiration/parse/tiktok/keyword", async (req, res) => {
+  try {
+    if (!RAPID_KEY) return res.status(400).json({ error: "RAPIDAPI_KEY not set" });
+    const { keyword, count = 12 } = req.body;
+    if (!keyword) return res.status(400).json({ error: "keyword required" });
+
+    const data = await rapidFetch(
+      `https://tiktok-api23.p.rapidapi.com/api/search/video?keywords=${encodeURIComponent(keyword)}&count=${count}&cursor=0&region=RU&publish_time=0&sort_type=0`,
+      { "X-RapidAPI-Host": "tiktok-api23.p.rapidapi.com" }
+    );
+
+    const items = data?.data?.itemList || data?.itemList || [];
+    const saved = [];
+    for (const v of items.slice(0, count)) {
+      const id = uuidv4();
+      const item = {
+        id, platform: "tiktok",
+        video_id: v.id,
+        title: (v.desc || "").slice(0, 300),
+        description: (v.desc || "").slice(0, 1000),
+        author: v.author?.nickname || "",
+        author_username: v.author?.uniqueId || "",
+        thumbnail: v.video?.cover || "",
+        video_url: `https://www.tiktok.com/@${v.author?.uniqueId}/video/${v.id}`,
+        play_url: v.video?.playAddr || "",
+        views: v.stats?.playCount || 0,
+        likes: v.stats?.diggCount || 0,
+        comments: v.stats?.commentCount || 0,
+        shares: v.stats?.shareCount || 0,
+        duration: v.video?.duration || 0,
+        published_at: v.createTime ? new Date(v.createTime * 1000).toISOString() : null,
+        source_query: keyword,
+        source_type: "keyword",
+      };
+      await pool.query(
+        `INSERT INTO inspiration_items (id,platform,video_id,title,description,author,author_username,thumbnail,video_url,play_url,views,likes,comments,shares,duration,published_at,source_query,source_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (id) DO NOTHING`,
+        [item.id,item.platform,item.video_id,item.title,item.description,item.author,item.author_username,item.thumbnail,item.video_url,item.play_url,item.views,item.likes,item.comments,item.shares,item.duration,item.published_at,item.source_query,item.source_type]
+      );
+      saved.push(item);
+    }
+    await pool.query(`INSERT INTO inspiration_searches (id,platform,query,search_type) VALUES ($1,$2,$3,$4)`,
+      [uuidv4(), "tiktok", keyword, "keyword"]);
+    res.json({ ok: true, count: saved.length, items: saved });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PARSE YouTube by channel ──────────────────────────────────────────────────
+app.post("/api/inspiration/parse/youtube/channel", async (req, res) => {
+  try {
+    if (!RAPID_KEY) return res.status(400).json({ error: "RAPIDAPI_KEY not set" });
+    const { channel, count = 12 } = req.body;
+    if (!channel) return res.status(400).json({ error: "channel required" });
+    const clean = channel.replace(/^@/, "");
+
+    const data = await rapidFetch(
+      `https://yt-api.p.rapidapi.com/channel/videos?id=@${encodeURIComponent(clean)}`,
+      { "X-RapidAPI-Host": "yt-api.p.rapidapi.com" }
+    );
+
+    const videos = data?.data || [];
+    const saved = [];
+    for (const v of videos.slice(0, count)) {
+      const id = uuidv4();
+      const item = {
+        id, platform: "youtube",
+        video_id: v.videoId,
+        title: (v.title || "").slice(0, 300),
+        description: (v.description || "").slice(0, 1000),
+        author: v.channelTitle || clean,
+        author_username: clean,
+        thumbnail: v.thumbnail?.[0]?.url || "",
+        video_url: `https://www.youtube.com/watch?v=${v.videoId}`,
+        play_url: "",
+        views: parseInt(v.viewCount) || 0,
+        likes: 0,
+        comments: parseInt(v.commentCount) || 0,
+        shares: 0,
+        duration: 0,
+        published_at: v.publishedTimeText || null,
+        source_query: "@" + clean,
+        source_type: "channel",
+      };
+      await pool.query(
+        `INSERT INTO inspiration_items (id,platform,video_id,title,description,author,author_username,thumbnail,video_url,play_url,views,likes,comments,shares,duration,published_at,source_query,source_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (id) DO NOTHING`,
+        [item.id,item.platform,item.video_id,item.title,item.description,item.author,item.author_username,item.thumbnail,item.video_url,item.play_url,item.views,item.likes,item.comments,item.shares,item.duration,item.published_at,item.source_query,item.source_type]
+      );
+      saved.push(item);
+    }
+    await pool.query(`INSERT INTO inspiration_searches (id,platform,query,search_type) VALUES ($1,$2,$3,$4)`,
+      [uuidv4(), "youtube", "@"+clean, "channel"]);
+    res.json({ ok: true, count: saved.length, items: saved });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PARSE YouTube by keyword ──────────────────────────────────────────────────
+app.post("/api/inspiration/parse/youtube/keyword", async (req, res) => {
+  try {
+    if (!RAPID_KEY) return res.status(400).json({ error: "RAPIDAPI_KEY not set" });
+    const { keyword, count = 12 } = req.body;
+    if (!keyword) return res.status(400).json({ error: "keyword required" });
+
+    const data = await rapidFetch(
+      `https://yt-api.p.rapidapi.com/search?query=${encodeURIComponent(keyword)}&type=video`,
+      { "X-RapidAPI-Host": "yt-api.p.rapidapi.com" }
+    );
+
+    const videos = (data?.data || []).filter(v => v.type === "video");
+    const saved = [];
+    for (const v of videos.slice(0, count)) {
+      const id = uuidv4();
+      const item = {
+        id, platform: "youtube",
+        video_id: v.videoId,
+        title: (v.title || "").slice(0, 300),
+        description: (v.description || "").slice(0, 1000),
+        author: v.channelTitle || "",
+        author_username: v.channelHandle?.replace("@","") || "",
+        thumbnail: v.thumbnail?.[0]?.url || "",
+        video_url: `https://www.youtube.com/watch?v=${v.videoId}`,
+        play_url: "",
+        views: parseInt(v.viewCount) || 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        duration: 0,
+        published_at: v.publishedTimeText || null,
+        source_query: keyword,
+        source_type: "keyword",
+      };
+      await pool.query(
+        `INSERT INTO inspiration_items (id,platform,video_id,title,description,author,author_username,thumbnail,video_url,play_url,views,likes,comments,shares,duration,published_at,source_query,source_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (id) DO NOTHING`,
+        [item.id,item.platform,item.video_id,item.title,item.description,item.author,item.author_username,item.thumbnail,item.video_url,item.play_url,item.views,item.likes,item.comments,item.shares,item.duration,item.published_at,item.source_query,item.source_type]
+      );
+      saved.push(item);
+    }
+    await pool.query(`INSERT INTO inspiration_searches (id,platform,query,search_type) VALUES ($1,$2,$3,$4)`,
+      [uuidv4(), "youtube", keyword, "keyword"]);
+    res.json({ ok: true, count: saved.length, items: saved });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── SEARCH Instagram accounts (looter2 /search) ───────────────────────────────
+app.get("/api/inspiration/instagram/search-accounts", async (req, res) => {
+  try {
+    if (!RAPID_KEY) return res.status(400).json({ error: "RAPIDAPI_KEY not set" });
+    const { query } = req.query;
+    if (!query) return res.status(400).json({ error: "query required" });
+    const data = await rapidFetch(
+      `https://${LOOTER_HOST}/search?query=${encodeURIComponent(query)}`,
+      { "X-RapidAPI-Host": LOOTER_HOST }
+    );
+    // Returns users array
+    const users = data?.users || data?.data?.users || data?.accounts || (Array.isArray(data) ? data : []);
+    res.json(users.slice(0, 10).map(u => ({
+      username: u.username || u.user?.username,
+      full_name: u.full_name || u.user?.full_name,
+      followers: u.follower_count || u.edge_followed_by?.count || 0,
+      profile_pic: u.profile_pic_url || u.user?.profile_pic_url,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET search history ────────────────────────────────────────────────────────
+app.get("/api/inspiration/searches", async (req, res) => {
+  try {
+    const rows = await q("SELECT * FROM inspiration_searches ORDER BY created_at DESC LIMIT 50");
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
