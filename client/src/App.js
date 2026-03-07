@@ -2175,6 +2175,7 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
               const dateStr = item.completed_at || item.planned_date?.slice(0,10) || "";
               const cnt = pubCount(item);
               return <tr key={item.id}
+                onClick={()=>onOpen(item)}
                 style={{borderTop: i===0?"none":"1px solid #1e1e2e", cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background="#16161f"}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -2183,26 +2184,26 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
                     onMouseEnter={e=>e.currentTarget.style.color=item.starred?"#d97706":"#6b7280"}
                     onMouseLeave={e=>e.currentTarget.style.color=item.starred?"#f59e0b":"#2d2d44"}>★</span>
                 </td>
-                <td style={{padding:"8px 10px",fontSize:12,fontWeight:600,color:"#f0eee8"}} onClick={()=>onOpen(item)}>{item.title||"Без названия"}</td>
-                <td style={{padding:"8px 10px"}} onClick={()=>onOpen(item)}>
+                <td style={{padding:"8px 10px",fontSize:12,fontWeight:600,color:"#f0eee8"}}>{item.title||"Без названия"}</td>
+                <td style={{padding:"8px 10px"}}>
                   {proj&&<span style={{fontSize:9,color:proj.color,background:proj.color+"18",borderRadius:4,padding:"2px 6px",fontFamily:"monospace"}}>{proj.label}</span>}
                 </td>
-                <td style={{padding:"8px 10px",fontSize:9,color:"#6b7280",fontFamily:"monospace"}} onClick={()=>onOpen(item)}>
+                <td style={{padding:"8px 10px",fontSize:9,color:"#6b7280",fontFamily:"monospace"}}>
                   {item.pub_type==="carousel"?"🖼 Карусель":"🎬 Рилс"}
                 </td>
-                <td style={{padding:"8px 10px",fontSize:11,fontFamily:"monospace",fontWeight:700,color:cnt>1?"#a78bfa":"#6b7280"}} onClick={()=>onOpen(item)}>
+                <td style={{padding:"8px 10px",fontSize:11,fontFamily:"monospace",fontWeight:700,color:cnt>1?"#a78bfa":"#6b7280"}}>
                   {cnt>1?`× ${cnt}`:"—"}
                 </td>
-                <td style={{padding:"8px 10px",fontSize:9,color:"#10b981",fontFamily:"monospace"}} onClick={()=>onOpen(item)}>
+                <td style={{padding:"8px 10px",fontSize:9,color:"#10b981",fontFamily:"monospace"}}>
                   {dateStr||"—"}
                 </td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#06b6d4",fontSize:11}} onClick={()=>onOpen(item)}>
+                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#06b6d4",fontSize:11}}>
                   {fmt(stats[item.id]?.views)||"—"}
                 </td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#ec4899",fontSize:11}} onClick={()=>onOpen(item)}>
+                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#ec4899",fontSize:11}}>
                   {fmt(stats[item.id]?.likes)||"—"}
                 </td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#8b5cf6",fontSize:11}} onClick={()=>onOpen(item)}>
+                <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",color:"#8b5cf6",fontSize:11}}>
                   {fmt(stats[item.id]?.comments)||"—"}
                 </td>
               </tr>;
@@ -2764,7 +2765,7 @@ function MainApp({currentUser, onLogout}){
     {modal?.type==="post_video"   &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
     {modal?.type==="post_carousel"&&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
     {modal?.type==="admin"        &&<Modal title="Административная задача" color="#f97316" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("admin",modal.item.id):undefined}><AdminForm item={modal.item} onSave={d=>save("admin",d)} onDelete={id=>deleteTask("admin",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-        {modal?.type==="pub"          &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pub"          &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
     </div>{/* /MAIN COLUMN */}
   </div>;
 }
