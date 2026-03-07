@@ -1369,17 +1369,17 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
 }
 
 // ── Analytics View ────────────────────────────────────────────────────────────
-function AnalyticsView({pubItems,projects}){
+function AnalyticsView({pubItems,projects,kpisData={}}){
   const now = new Date();
   const [selMonth, setSelMonth] = useState(now.getMonth());
   const [selYear,  setSelYear]  = useState(now.getFullYear());
-  const [kpis, setKpis] = useState({});
+  const [kpis, setKpis] = useState(kpisData);
   const [kpiLoaded, setKpiLoaded] = useState(false);
 
   // Load KPIs from server once
   useEffect(()=>{
     fetch("/api/analytics/kpi").then(r=>r.ok?r.json():[]).then(rows=>{
-      const map={};
+      const map={...kpisData};
       rows.forEach(r=>{ map[`${r.project_id}_${r.year}_${r.month}`]=String(r.kpi); });
       setKpis(map); setKpiLoaded(true);
     }).catch(()=>setKpiLoaded(true));
@@ -2005,6 +2005,7 @@ function MainApp({currentUser, onLogout}){
   const [postCarousels,setPostCarousels]=useState([]);
   const [pubItems,setPubItems]=useState([]);
   const [adminItems,setAdminItems]=useState([]);
+  const [kpis,setKpis]=useState({});
   const [modal,setModal]=useState(null);
   const saveFnRef = useRef(null);
   // Stores object for useTaskStore — avoids repeated chains
@@ -2024,6 +2025,10 @@ function MainApp({currentUser, onLogout}){
           api.getTasks(),
         ]);
         setProjects(projs.map(p => ({...p, links: p.links || [], archived: p.archived || false})));
+        // Load KPIs for sidebar analytics badge
+        fetch("/api/analytics/kpi").then(r=>r.ok?r.json():[]).then(rows=>{
+          const map={}; rows.forEach(r=>{map[`${r.project_id}_${r.year}_${r.month}`]=String(r.kpi);}); setKpis(map);
+        }).catch(()=>{});
         setTeamMembers(users.map(u => ({...u, note: u.note || ""})));
         // Split tasks by type and merge data field
         const expand = t => {
@@ -2363,7 +2368,7 @@ function MainApp({currentUser, onLogout}){
           <button key={t.id} onClick={()=>{setTab(t.id);setViewMode("kanban");}} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 8px",borderRadius:8,cursor:"pointer",marginBottom:2,background:tab===t.id?t.color+"15":"transparent",border:"none",color:tab===t.id?t.color:"#9ca3af",fontFamily:"inherit",fontWeight:tab===t.id?700:500,fontSize:12,textAlign:"left",position:"relative"}}>
             {tab===t.id&&<div style={{position:"absolute",left:0,top:"20%",bottom:"20%",width:2,borderRadius:2,background:t.color}}/>}
             <span style={{flex:1}}>{t.label}</span>
-            {cnt[t.id]>0&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#4b5563",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}</span>}
+            {cnt[t.id]!=null&&cnt[t.id]!==0&&<span style={{fontSize:9,background:tab===t.id?t.color+"25":"#1a1a2e",borderRadius:20,padding:"0 6px",color:tab===t.id?t.color:"#4b5563",fontFamily:"monospace",fontWeight:700}}>{cnt[t.id]}{t.id==="analytics"?"%":""}</span>}
           </button>
         ))}
         <div style={{fontSize:9,fontWeight:700,color:"#4b5563",letterSpacing:".1em",textTransform:"uppercase",padding:"12px 8px 4px",fontFamily:"monospace"}}>Обзор</div>
@@ -2502,7 +2507,7 @@ function MainApp({currentUser, onLogout}){
         <Kanban statuses={ADMIN_STATUSES} items={filtAdmin} renderCard={x=>mkCard(x,"admin")} onDrop={(id,st)=>drop("admin",id,st)} onAddClick={st=>openNew("admin",{status:st})}/>
       </>}
             {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
-      {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects}/>}
+      {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects} kpisData={kpis}/>}
       {tab==="inspiration"&&<InspirationPage projects={projects} currentUser={currentUser} onClose={()=>setTab("pre")}/>}
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
