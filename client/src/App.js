@@ -2056,7 +2056,7 @@ function MainApp({currentUser, onLogout}){
   // ── Notifications: polling + WS ────────────────────────────────────────────
   useEffect(() => {
     if (!currentUser?.id) return;
-    if (Notification.permission === "default") Notification.requestPermission();
+    if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission();
 
     const seenIds = new Set();
 
@@ -2070,7 +2070,7 @@ function MainApp({currentUser, onLogout}){
       });
       // Browser push for each new notif
       fresh.forEach(r => {
-        if (Notification.permission === "granted") {
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
           const body = r.kind === "chat_message" ? (r.body||"Новое сообщение") : "Новая задача назначена на вас";
           const n = new Notification("🍇 " + (r.title||"Виноград"), { body });
           n.onclick = () => { window.focus(); n.close(); };
