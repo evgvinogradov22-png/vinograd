@@ -1616,30 +1616,12 @@ initReelStatsDB().catch(console.error);
 
 // ── Fetch stats for one URL ───────────────────────────────────────────────────
 async function fetchReelStats(reelUrl) {
-  // Extract shortcode from Instagram URL: /p/SHORTCODE/ or /reel/SHORTCODE/
-  const match = reelUrl.match(/\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
-  const shortcode = match ? match[1] : null;
-
-  let d = null;
-  if (shortcode) {
-    // /shortcode endpoint returns video_play_count
-    try {
-      d = await looterFetch(`https://${LOOTER_HOST2}/shortcode?shortcode=${shortcode}`);
-      console.log("[reel-stats] shortcode keys:", Object.keys(d||{}).join(","));
-      console.log("[reel-stats] video_play_count:", d?.video_play_count, "likes:", d?.edge_media_preview_like?.count);
-    } catch(e) {
-      console.error("[reel-stats] shortcode failed:", e.message);
-    }
-  }
-
-  // Fallback to post-dl if shortcode failed
-  if (!d || !d.video_play_count) {
-    const r = await looterFetch(`https://${LOOTER_HOST2}/post-dl?url=${encodeURIComponent(reelUrl)}`);
-    const d2 = r?.data || r;
-    d = { ...d2, ...(d||{}) };
-    console.log("[reel-stats] post-dl fallback, like_count:", d?.like_count);
-  }
-
+  // "Media info by URL" = /post?url= (correct endpoint from RapidAPI docs)
+  const d = await looterFetch(
+    `https://${LOOTER_HOST2}/post?url=${encodeURIComponent(reelUrl)}`
+  );
+  console.log("[reel-stats] /post keys:", Object.keys(d||{}).slice(0,10).join(","));
+  console.log("[reel-stats] video_play_count:", d?.video_play_count, "likes:", d?.edge_media_preview_like?.count, "like_count:", d?.like_count);
   return {
     views:    parseInt(d?.video_play_count || d?.video_view_count || 0),
     likes:    parseInt(d?.edge_media_preview_like?.count || d?.like_count || 0),
