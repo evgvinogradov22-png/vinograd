@@ -667,6 +667,7 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
+
     
   </div>;
 }
@@ -728,6 +729,7 @@ function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFn
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
+
     
   </div>;
 }
@@ -930,6 +932,7 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
+
     
   </div>;
 }
@@ -970,6 +973,7 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
+
     
   </div>;
 }
@@ -1043,11 +1047,185 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
+
     
   </div>;
 }
 
 // ── PubForm ──────────────────────────────────────────────────────────────────
+
+
+// ── ReelStatsBlock ────────────────────────────────────────────────────────────
+function ReelStatsBlock({ taskId, reelUrl, onUrlSave }) {
+  const [url, setUrl] = useState(reelUrl || "");
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [editing, setEditing] = useState(!reelUrl);
+
+  useEffect(() => {
+    if (taskId) loadHistory();
+  }, [taskId]);
+
+  async function loadHistory() {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/reel-stats/${taskId}`);
+      const data = await r.json();
+      setHistory(Array.isArray(data) ? data : []);
+    } catch(e) {}
+    setLoading(false);
+  }
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      const r = await fetch(`/api/reel-stats/refresh/${taskId}`, { method: "POST" });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Ошибка");
+      await loadHistory();
+    } catch(e) { alert("Ошибка: " + e.message); }
+    setRefreshing(false);
+  }
+
+  function saveUrl() {
+    onUrlSave(url.trim());
+    setEditing(false);
+  }
+
+  const latest = history[history.length - 1];
+  const prev   = history[history.length - 2];
+
+  function delta(key) {
+    if (!latest || !prev) return null;
+    const d = (latest[key]||0) - (prev[key]||0);
+    return d > 0 ? `+${d}` : d < 0 ? String(d) : null;
+  }
+
+  function fmt(n) {
+    if (!n) return "0";
+    if (n >= 1000000) return (n/1000000).toFixed(1)+"M";
+    if (n >= 1000) return (n/1000).toFixed(1)+"K";
+    return String(n);
+  }
+
+  // Mini sparkline using SVG
+  function Sparkline({ data, color }) {
+    if (data.length < 2) return null;
+    const w = 120, h = 32;
+    const min = Math.min(...data), max = Math.max(...data);
+    const range = max - min || 1;
+    const pts = data.map((v, i) => {
+      const x = (i / (data.length - 1)) * w;
+      const y = h - ((v - min) / range) * (h - 4) - 2;
+      return `${x},${y}`;
+    }).join(" ");
+    return (
+      <svg width={w} height={h} style={{overflow:"visible"}}>
+        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
+        <circle cx={pts.split(" ").pop().split(",")[0]} cy={pts.split(" ").pop().split(",")[1]}
+          r="3" fill={color}/>
+      </svg>
+    );
+  }
+
+  const viewHistory  = history.map(h => h.views || 0);
+  const likeHistory  = history.map(h => h.likes || 0);
+
+  return (
+    <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div style={{fontSize:9,color:"#ec4899",fontFamily:"monospace",fontWeight:700}}>📊 СТАТИСТИКА РИЛСА</div>
+        <div style={{display:"flex",gap:6}}>
+          {reelUrl && !editing && (
+            <button onClick={refresh} disabled={refreshing}
+              style={{background:"transparent",border:"1px solid #ec489940",borderRadius:6,padding:"3px 10px",color:"#ec4899",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>
+              {refreshing ? "⏳" : "🔄 Обновить"}
+            </button>
+          )}
+          <button onClick={() => setEditing(!editing)}
+            style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"3px 10px",color:"#9ca3af",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>
+            {editing ? "✕" : "✏️ URL"}
+          </button>
+        </div>
+      </div>
+
+      {/* URL input */}
+      {(editing || !reelUrl) && (
+        <div style={{display:"flex",gap:6,marginBottom:10}}>
+          <input value={url} onChange={e => setUrl(e.target.value)}
+            onKeyDown={e => e.key==="Enter" && saveUrl()}
+            placeholder="https://www.instagram.com/reel/..."
+            style={{background:"#16161f",border:"1px solid #2d2d44",borderRadius:7,padding:"6px 10px",color:"#f0eee8",fontSize:11,outline:"none",flex:1,fontFamily:"inherit"}}/>
+          <button onClick={saveUrl} disabled={!url.trim()}
+            style={{background:"#ec489920",border:"1px solid #ec489950",borderRadius:7,padding:"6px 14px",color:"#ec4899",cursor:"pointer",fontSize:11,fontFamily:"inherit",fontWeight:700}}>
+            Сохранить
+          </button>
+        </div>
+      )}
+
+      {!reelUrl && !editing && (
+        <div style={{textAlign:"center",padding:"16px 0",color:"#4b5563",fontSize:11}}>
+          Вставьте ссылку на рилс чтобы отслеживать статистику
+        </div>
+      )}
+
+      {reelUrl && !editing && (
+        <>
+          {/* Current stats */}
+          {latest ? (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:12}}>
+              {[
+                { key:"views",    icon:"👁",  label:"Просмотры", color:"#06b6d4" },
+                { key:"likes",    icon:"❤️", label:"Лайки",     color:"#ec4899" },
+                { key:"comments", icon:"💬",  label:"Коммент.",  color:"#8b5cf6" },
+                { key:"shares",   icon:"↗",   label:"Репосты",   color:"#10b981" },
+              ].map(s => {
+                const d = delta(s.key);
+                return (
+                  <div key={s.key} style={{background:"#111118",border:"1px solid #1a1a2e",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                    <div style={{fontSize:16,marginBottom:2}}>{s.icon}</div>
+                    <div style={{fontSize:16,fontWeight:800,color:s.color,fontFamily:"monospace"}}>{fmt(latest[s.key]||0)}</div>
+                    <div style={{fontSize:8,color:"#4b5563",fontFamily:"monospace"}}>{s.label}</div>
+                    {d && <div style={{fontSize:9,color:d.startsWith("+")?"#10b981":"#ef4444",fontFamily:"monospace",marginTop:2}}>{d}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          ) : loading ? (
+            <div style={{textAlign:"center",padding:"12px",color:"#4b5563",fontSize:11}}>⏳ Загружаю...</div>
+          ) : (
+            <div style={{textAlign:"center",padding:"12px",color:"#4b5563",fontSize:11}}>
+              Нет данных — нажмите «Обновить»
+            </div>
+          )}
+
+          {/* Sparklines */}
+          {history.length >= 2 && (
+            <div style={{display:"flex",gap:16,marginBottom:10,padding:"8px 0",borderTop:"1px solid #1a1a2e"}}>
+              <div>
+                <div style={{fontSize:8,color:"#4b5563",fontFamily:"monospace",marginBottom:4}}>👁 ПРОСМОТРЫ</div>
+                <Sparkline data={viewHistory} color="#06b6d4"/>
+              </div>
+              <div>
+                <div style={{fontSize:8,color:"#4b5563",fontFamily:"monospace",marginBottom:4}}>❤️ ЛАЙКИ</div>
+                <Sparkline data={likeHistory} color="#ec4899"/>
+              </div>
+            </div>
+          )}
+
+          {/* Last updated */}
+          {latest && (
+            <div style={{fontSize:8,color:"#374151",fontFamily:"monospace",textAlign:"right"}}>
+              обновлено {new Date(latest.recorded_at).toLocaleString("ru",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+              {history.length > 1 && ` · ${history.length} снапшотов`}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
   const [d,setD]=useState({...item}); const [aiCap,setAiCap]=useState(false);
@@ -1123,6 +1301,11 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
+    <ReelStatsBlock
+      taskId={d.id}
+      reelUrl={d.reel_url||""}
+      onUrlSave={url => u("reel_url", url)}
+    />
     
   </div>;
 }
@@ -2842,6 +3025,7 @@ function MAnalyticsScreen({pubItems,projects}){
           </div>
         ))}
       </>}
+      <ReelStatsTable projects={projects}/>
     </div>
   </>;
 }

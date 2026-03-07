@@ -1573,3 +1573,171 @@ app.post("/api/auth/reset-password", async (req, res) => {
 initDb()
   .then(() => server.listen(PORT, () => console.log(`🍇 Виноград server on port ${PORT}`)))
   .catch(err => { console.error("DB init failed:", err); process.exit(1); });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── REEL STATS — автосбор статистики публикаций ───────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const LOOTER_KEY  = process.env.RAPIDAPI_KEY || "69435af1fcmshb4c74c0ac33da12p1496d4jsn17881f89c7a4";
+const LOOTER_HOST2 = "instagram-looter2.p.rapidapi.com";
+
+async function looterFetch(url) {
+  const https = require("https");
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const options = {
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: "GET",
+      headers: {
+        "X-RapidAPI-Key": LOOTER_KEY,
+        "X-RapidAPI-Host": parsed.hostname,
+      },
+    };
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (c) => { data += c; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); }
+        catch(e) { reject(new Error("Invalid JSON: " + data.slice(0, 300))); }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+// ── DB init ───────────────────────────────────────────────────────────────────
+async function initReelStatsDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reel_stats (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      reel_url TEXT NOT NULL,
+      platform TEXT DEFAULT 'instagram',
+      views BIGINT DEFAULT 0,
+      likes BIGINT DEFAULT 0,
+      comments BIGINT DEFAULT 0,
+      shares BIGINT DEFAULT 0,
+      reach BIGINT DEFAULT 0,
+      recorded_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS reel_stats_task_idx ON reel_stats(task_id);
+    CREATE INDEX IF NOT EXISTS reel_stats_recorded_idx ON reel_stats(recorded_at);
+  `);
+}
+initReelStatsDB().catch(console.error);
+
+// ── Fetch stats for one URL ───────────────────────────────────────────────────
+async function fetchReelStats(reelUrl) {
+  const data = await looterFetch(
+    `https://${LOOTER_HOST2}/post-dl?url=${encodeURIComponent(reelUrl)}`
+  );
+  // looter2 /post-dl returns media info
+  const d = data?.data || data;
+  return {
+    views:    parseInt(d?.play_count    || d?.view_count    || d?.video_view_count || 0),
+    likes:    parseInt(d?.like_count    || d?.edge_media_preview_like?.count || 0),
+    comments: parseInt(d?.comment_count || d?.edge_media_to_comment?.count   || 0),
+    shares:   parseInt(d?.reshare_count || d?.share_count   || 0),
+    reach:    parseInt(d?.reach         || 0),
+  };
+}
+
+// ── Manual refresh for one task ───────────────────────────────────────────────
+app.post("/api/reel-stats/refresh/:taskId", async (req, res) => {
+  try {
+    const task = await q1("SELECT * FROM tasks WHERE id=$1", [req.params.taskId]);
+    if (!task) return res.status(404).json({ error: "Task not found" });
+    const reelUrl = task.data?.reel_url;
+    if (!reelUrl) return res.status(400).json({ error: "reel_url not set" });
+
+    const stats = await fetchReelStats(reelUrl);
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO reel_stats (id, task_id, reel_url, views, likes, comments, shares, reach)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [id, task.id, reelUrl, stats.views, stats.likes, stats.comments, stats.shares, stats.reach]
+    );
+    res.json({ ok: true, stats, recorded_at: new Date().toISOString() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET history for one task ──────────────────────────────────────────────────
+app.get("/api/reel-stats/:taskId", async (req, res) => {
+  try {
+    const rows = await q(
+      "SELECT * FROM reel_stats WHERE task_id=$1 ORDER BY recorded_at ASC",
+      [req.params.taskId]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET latest snapshot for multiple tasks (for card badges) ──────────────────
+app.post("/api/reel-stats/latest", async (req, res) => {
+  try {
+    const { task_ids } = req.body;
+    if (!task_ids?.length) return res.json({});
+    // Latest snapshot per task_id
+    const rows = await q(
+      `SELECT DISTINCT ON (task_id) task_id, views, likes, comments, shares, reach, recorded_at
+       FROM reel_stats
+       WHERE task_id = ANY($1)
+       ORDER BY task_id, recorded_at DESC`,
+      [task_ids]
+    );
+    const map = {};
+    rows.forEach(r => { map[r.task_id] = r; });
+    res.json(map);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET all tracked reels (for analytics page) ────────────────────────────────
+app.get("/api/reel-stats", async (req, res) => {
+  try {
+    // Latest snapshot per task + task info
+    const rows = await q(`
+      SELECT DISTINCT ON (rs.task_id)
+        rs.task_id, rs.views, rs.likes, rs.comments, rs.shares, rs.reach, rs.recorded_at,
+        t.title, t.project_id, t.data
+      FROM reel_stats rs
+      JOIN tasks t ON t.id = rs.task_id
+      ORDER BY rs.task_id, rs.recorded_at DESC
+    `);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── CRON: auto-refresh all tracked reels every 24h ───────────────────────────
+async function cronRefreshAllReels() {
+  try {
+    // Find all pub tasks with reel_url set
+    const tasks = await q(
+      `SELECT id, data FROM tasks WHERE type='pub' AND data->>'reel_url' IS NOT NULL AND data->>'reel_url' != ''`
+    );
+    console.log(`[cron] Refreshing reel stats for ${tasks.length} tasks`);
+    for (const task of tasks) {
+      try {
+        const stats = await fetchReelStats(task.data.reel_url);
+        await pool.query(
+          `INSERT INTO reel_stats (id, task_id, reel_url, views, likes, comments, shares, reach)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [uuidv4(), task.id, task.data.reel_url, stats.views, stats.likes, stats.comments, stats.shares, stats.reach]
+        );
+        // Throttle: 1s between requests
+        await new Promise(r => setTimeout(r, 1000));
+      } catch(e) {
+        console.error(`[cron] Failed for task ${task.id}:`, e.message);
+      }
+    }
+    console.log(`[cron] Done refreshing reel stats`);
+  } catch(e) {
+    console.error("[cron] cronRefreshAllReels error:", e.message);
+  }
+}
+
+// Run cron every 24 hours
+setInterval(cronRefreshAllReels, 24 * 60 * 60 * 1000);
+// Also run once 30s after server start
+setTimeout(cronRefreshAllReels, 30000);
