@@ -1090,31 +1090,6 @@ app.post("/api/ai/caption", async (req, res) => {
 });
 
 // ── Fallback → React SPA ──────────────────────────────────────────────────────
-app.get("*", (req, res) => {
-  const index = path.join(BUILD_PATH, "index.html");
-  if (fs.existsSync(index)) res.sendFile(index);
-  else res.json({ status: "Виноград API running 🍇" });
-});
-
-// ── Сброс пароля ─────────────────────────────────────────────────────────────
-app.post("/api/auth/reset-password", async (req, res) => {
-  try {
-    const { telegram, new_password, invite_password } = req.body;
-    if (invite_password !== INVITE_PASSWORD) return res.status(403).json({ error: "Неверный код приглашения" });
-    if (!telegram || !new_password) return res.status(400).json({ error: "Заполните все поля" });
-    const clean = telegram.replace(/^@/, "").toLowerCase().trim();
-    const user = await q1("SELECT id FROM users WHERE telegram=$1", [clean]);
-    if (!user) return res.status(404).json({ error: "Пользователь не найден" });
-    await q("UPDATE users SET password_hash=$1 WHERE id=$2", [new_password, user.id]);
-    res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
-initDb()
-  .then(() => server.listen(PORT, () => console.log(`🍇 Виноград server on port ${PORT}`)))
-  .catch(err => { console.error("DB init failed:", err); process.exit(1); });
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── НАСМОТРЕННОСТЬ — Inspiration API ─────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1556,3 +1531,28 @@ app.get("/api/inspiration/searches", async (req, res) => {
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+app.get("*", (req, res) => {
+  const index = path.join(BUILD_PATH, "index.html");
+  if (fs.existsSync(index)) res.sendFile(index);
+  else res.json({ status: "Виноград API running 🍇" });
+});
+
+// ── Сброс пароля ─────────────────────────────────────────────────────────────
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    const { telegram, new_password, invite_password } = req.body;
+    if (invite_password !== INVITE_PASSWORD) return res.status(403).json({ error: "Неверный код приглашения" });
+    if (!telegram || !new_password) return res.status(400).json({ error: "Заполните все поля" });
+    const clean = telegram.replace(/^@/, "").toLowerCase().trim();
+    const user = await q1("SELECT id FROM users WHERE telegram=$1", [clean]);
+    if (!user) return res.status(404).json({ error: "Пользователь не найден" });
+    await q("UPDATE users SET password_hash=$1 WHERE id=$2", [new_password, user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+initDb()
+  .then(() => server.listen(PORT, () => console.log(`🍇 Виноград server on port ${PORT}`)))
+  .catch(err => { console.error("DB init failed:", err); process.exit(1); });
