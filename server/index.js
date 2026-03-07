@@ -1206,13 +1206,19 @@ app.post("/api/inspiration/parse/instagram/user", async (req, res) => {
     if (!username) return res.status(400).json({ error: "username required" });
     const clean = username.replace(/^@/, "");
 
-    // Instagram Looter2 API
+    // Instagram Looter2: first get user_id, then fetch reels
+    const profileData = await rapidFetch(
+      `https://${LOOTER_HOST}/profile2?username=${encodeURIComponent(clean)}`,
+      { "X-RapidAPI-Host": LOOTER_HOST }
+    );
+    const userId = profileData?.id || profileData?.pk || profileData?.data?.id;
+    if (!userId) throw new Error("Пользователь не найден: " + clean);
+
     const data = await rapidFetch(
-      `https://${LOOTER_HOST}/profile-reels?username=${encodeURIComponent(clean)}&count=${count}`,
+      `https://${LOOTER_HOST}/reels?id=${userId}&count=${count}`,
       { "X-RapidAPI-Host": LOOTER_HOST }
     );
 
-    // looter2 returns: data.data[] or data.items[] or data[]
     const posts = data?.data || data?.items || (Array.isArray(data) ? data : []);
     const reels = posts.slice(0, count);
 
@@ -1262,12 +1268,13 @@ app.post("/api/inspiration/parse/instagram/hashtag", async (req, res) => {
 
     // Instagram Looter2 — hashtag
     const data = await rapidFetch(
-      `https://${LOOTER_HOST}/hashtag-medias?hashtag=${encodeURIComponent(clean)}&count=${count}`,
+      `https://${LOOTER_HOST}/tag-feeds?query=${encodeURIComponent(clean)}`,
       { "X-RapidAPI-Host": LOOTER_HOST }
     );
 
-    const posts = data?.data || data?.items || (Array.isArray(data) ? data : []);
-    const reels = posts.filter(p => p.is_video || p.media_type === 2 || p.__typename === "GraphVideo").slice(0, count);
+    // tag-feeds returns {data: {medias: []}} or similar
+    const rawItems = data?.data?.medias || data?.data?.items || data?.data || data?.items || (Array.isArray(data) ? data : []);
+    const reels = rawItems.filter(p => p.is_video || p.media_type === 2 || p.__typename === "GraphVideo" || p.video_url).slice(0, count);
 
     const saved = [];
     for (const p of reels) {
@@ -1521,6 +1528,16 @@ app.get("/api/inspiration/instagram/search-accounts", async (req, res) => {
       followers: u.follower_count || u.edge_followed_by?.count || 0,
       profile_pic: u.profile_pic_url || u.user?.profile_pic_url,
     })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DEBUG: test looter2 endpoints ────────────────────────────────────────────
+app.get("/api/inspiration/debug", async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: "url required" });
+    const data = await rapidFetch(url, { "X-RapidAPI-Host": LOOTER_HOST });
+    res.json({ url, keys: Object.keys(data), sample: JSON.stringify(data).slice(0, 2000) });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
