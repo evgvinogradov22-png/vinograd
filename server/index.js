@@ -1718,7 +1718,15 @@ app.get("/api/reel-stats/:taskId", async (req, res) => {
       "SELECT * FROM reel_stats WHERE task_id=$1 ORDER BY recorded_at ASC",
       [req.params.taskId]
     );
-    res.json(rows);
+    const parsed = rows.map(r => ({
+      ...r,
+      views:    parseInt(r.views)    || 0,
+      likes:    parseInt(r.likes)    || 0,
+      comments: parseInt(r.comments) || 0,
+      shares:   parseInt(r.shares)   || 0,
+      reach:    parseInt(r.reach)    || 0,
+    }));
+    res.json(parsed);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1736,7 +1744,16 @@ app.post("/api/reel-stats/latest", async (req, res) => {
       [task_ids]
     );
     const map = {};
-    rows.forEach(r => { map[r.task_id] = r; });
+    rows.forEach(r => {
+      map[r.task_id] = {
+        ...r,
+        views:    parseInt(r.views)    || 0,
+        likes:    parseInt(r.likes)    || 0,
+        comments: parseInt(r.comments) || 0,
+        shares:   parseInt(r.shares)   || 0,
+        reach:    parseInt(r.reach)    || 0,
+      };
+    });
     res.json(map);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1753,7 +1770,15 @@ app.get("/api/reel-stats", async (req, res) => {
       JOIN tasks t ON t.id = rs.task_id
       ORDER BY rs.task_id, rs.recorded_at DESC
     `);
-    res.json(rows);
+    const parsed = rows.map(r => ({
+      ...r,
+      views:    parseInt(r.views)    || 0,
+      likes:    parseInt(r.likes)    || 0,
+      comments: parseInt(r.comments) || 0,
+      shares:   parseInt(r.shares)   || 0,
+      reach:    parseInt(r.reach)    || 0,
+    }));
+    res.json(parsed);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

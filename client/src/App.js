@@ -12,7 +12,6 @@ const TABS = [
   { id:"pub",       label:"Публикация",    color:"#10b981" },
   { id:"admin",     label:"Адм. задачи",   color:"#f97316" },
   { id:"projects",  label:"Проекты",       color:"#f59e0b" },
-  { id:"projects",  label:"Проекты",       color:"#f59e0b" },
   { id:"summary",   label:"Сводка",        color:"#f97316" },
   { id:"analytics", label:"Аналитика",     color:"#a78bfa" },
   { id:"base",      label:"База",          color:"#06b6d4" },
