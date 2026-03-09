@@ -12,6 +12,7 @@ const TABS = [
   { id:"pub",       label:"Публикация",    color:"#10b981" },
   { id:"admin",     label:"Адм. задачи",   color:"#f97316" },
   { id:"projects",  label:"Проекты",       color:"#f59e0b" },
+  { id:"board",     label:"Доска",         color:"#a78bfa" },
   { id:"summary",   label:"Сводка",        color:"#f97316" },
   { id:"analytics", label:"Аналитика",     color:"#a78bfa" },
   { id:"base",      label:"База",          color:"#06b6d4" },
@@ -869,7 +870,7 @@ function SourceInputs({d, u}){
   </div>;
 }
 
-function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
+function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef,onSendToPub}){
   const [d,setD]=useState({...item,sources:item.sources||[]}); const [tr,setTr]=useState(false); const [gb,setGb]=useState(false);
   const [err,setErr]=useState("");
   const fileRef=useRef(null);
@@ -942,12 +943,12 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-
+    {d.status==="done"&&onSendToPub&&<button onClick={()=>onSendToPub(d)} style={{width:"100%",marginTop:4,background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚀 Отправить на публикацию</button>}
     
   </div>;
 }
 
-function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
+function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef,onSendToPub}){
   const [d,setD]=useState({...item,source_links:item.source_links||[]});
   const fileRef=useRef(null);
   const dRefPV=useRef(d);
@@ -985,7 +986,7 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       </div>
     </div>
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
-
+    {d.status==="done"&&onSendToPub&&<button onClick={()=>onSendToPub(d)} style={{width:"100%",marginTop:4,background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚀 Отправить на публикацию</button>}
     
   </div>;
 }
@@ -1018,7 +1019,7 @@ function SlideImageUpload({slide,idx,onUploaded}){
   </div>;
 }
 
-function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
+function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef,onSendToPub}){
   const [d,setD]=useState({...item,slides:[...(item.slides||[{id:genId(),text:"",img:"",img_name:""}])]}); const [newSlide,setNewSlide]=useState("");
   const _dRef3=useRef(d);
   const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; _dRef3.current=next; return next; });
@@ -1152,6 +1153,7 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       onUrlSave={urls => { u("reel_urls", urls); u("reel_url", urls[0]||""); }}
     />}
     
+    {d.status==="done"&&onSendToPub&&<button onClick={()=>onSendToPub(d)} style={{width:"100%",marginTop:4,background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚀 Отправить на публикацию</button>}
   </div>;
 }
 // ── ReelStatsBlock ────────────────────────────────────────────────────────────
@@ -2069,6 +2071,212 @@ function useTaskStore(type, stores) {
   return map[type] || [[], ()=>{}];
 }
 
+// ── IntellectBoard ────────────────────────────────────────────────────────────
+const STICKER_COLORS = [
+  "#fbbf24","#f87171","#34d399","#60a5fa","#a78bfa","#f472b6","#fb923c","#e2e8f0"
+];
+
+function IntellectBoard({ projects, currentUser }) {
+  const [stickers, setStickers] = useState([]);
+  const [projFilter, setProjFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [dragging, setDragging] = useState(null); // {id, startX, startY, origX, origY}
+  const [resizing, setResizing] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const boardRef = useRef(null);
+  const MIN_W = 140, MIN_H = 100;
+
+  useEffect(() => {
+    setLoading(true);
+    fetch("/api/stickers" + (projFilter !== "all" ? `?project_id=${projFilter}` : ""))
+      .then(r => r.json()).then(rows => { setStickers(Array.isArray(rows) ? rows : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [projFilter]);
+
+  function addSticker() {
+    const id = genId();
+    const color = STICKER_COLORS[Math.floor(Math.random() * STICKER_COLORS.length)];
+    const board = boardRef.current?.getBoundingClientRect();
+    const x = board ? Math.random() * Math.max(0, board.width - 220) : 80;
+    const y = board ? Math.random() * Math.max(0, board.height - 180) : 80;
+    const s = { id, project_id: projFilter === "all" ? (projects[0]?.id || "all") : projFilter,
+      text: "", color, x, y, w: 200, h: 150, author_id: currentUser?.id || "" };
+    setStickers(p => [...p, s]);
+    setEditing(id);
+    fetch("/api/stickers", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(s) }).catch(() => {});
+  }
+
+  function updateSticker(id, patch) {
+    setStickers(p => p.map(s => s.id === id ? { ...s, ...patch } : s));
+    fetch(`/api/stickers/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch) }).catch(() => {});
+  }
+
+  function deleteSticker(id) {
+    setStickers(p => p.filter(s => s.id !== id));
+    fetch(`/api/stickers/${id}`, { method:"DELETE" }).catch(() => {});
+  }
+
+  // Drag
+  function onMouseDownDrag(e, s) {
+    if (e.target.closest(".sticker-controls") || e.target.closest(".sticker-resize") || e.target.tagName === "TEXTAREA") return;
+    e.preventDefault();
+    setDragging({ id: s.id, startX: e.clientX, startY: e.clientY, origX: s.x, origY: s.y });
+  }
+  function onMouseDownResize(e, s) {
+    e.preventDefault(); e.stopPropagation();
+    setResizing({ id: s.id, startX: e.clientX, startY: e.clientY, origW: s.w, origH: s.h });
+  }
+  useEffect(() => {
+    function onMove(e) {
+      if (dragging) {
+        const dx = e.clientX - dragging.startX, dy = e.clientY - dragging.startY;
+        setStickers(p => p.map(s => s.id === dragging.id ? { ...s, x: Math.max(0, dragging.origX + dx), y: Math.max(0, dragging.origY + dy) } : s));
+      }
+      if (resizing) {
+        const dx = e.clientX - resizing.startX, dy = e.clientY - resizing.startY;
+        setStickers(p => p.map(s => s.id === resizing.id ? { ...s, w: Math.max(MIN_W, resizing.origW + dx), h: Math.max(MIN_H, resizing.origH + dy) } : s));
+      }
+    }
+    function onUp(e) {
+      if (dragging) {
+        const s = stickers.find(x => x.id === dragging.id);
+        if (s) fetch(`/api/stickers/${s.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ x: s.x, y: s.y }) }).catch(() => {});
+        setDragging(null);
+      }
+      if (resizing) {
+        const s = stickers.find(x => x.id === resizing.id);
+        if (s) fetch(`/api/stickers/${s.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ w: s.w, h: s.h }) }).catch(() => {});
+        setResizing(null);
+      }
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, [dragging, resizing, stickers]);
+
+  const filtered = projFilter === "all" ? stickers : stickers.filter(s => s.project_id === projFilter);
+  const proj = id => projects.find(p => p.id === id);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 48px)", background:"#07070f" }}>
+      {/* Toolbar */}
+      <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"10px 16px", borderBottom:"1px solid #1a1a2e", background:"#0d0d16" }}>
+        <div style={{ fontSize:15, fontWeight:800, color:"#f0eee8", display:"flex", alignItems:"center", gap:8 }}>
+          🧠 <span>Интелект-доска</span>
+        </div>
+        <div style={{ display:"flex", gap:5, flex:1, overflowX:"auto", scrollbarWidth:"none" }}>
+          <button onClick={() => setProjFilter("all")}
+            style={{ flexShrink:0, padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+              background: projFilter==="all" ? "#a78bfa18" : "#111118",
+              border: `1px solid ${projFilter==="all" ? "#a78bfa55" : "#1e1e2e"}`,
+              color: projFilter==="all" ? "#a78bfa" : "#4b5563" }}>Все проекты</button>
+          {projects.filter(p=>!p.archived).map(p => (
+            <button key={p.id} onClick={() => setProjFilter(p.id)}
+              style={{ flexShrink:0, padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                background: projFilter===p.id ? p.color+"18" : "#111118",
+                border: `1px solid ${projFilter===p.id ? p.color+"55" : "#1e1e2e"}`,
+                color: projFilter===p.id ? p.color : "#4b5563" }}>{p.label}</button>
+          ))}
+        </div>
+        <button onClick={addSticker}
+          style={{ flexShrink:0, background:"linear-gradient(135deg,#7c3aed,#a78bfa)", border:"none", borderRadius:10, padding:"8px 16px",
+            fontSize:12, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+          + Стикер
+        </button>
+      </div>
+
+      {/* Board */}
+      <div ref={boardRef} style={{ flex:1, position:"relative", overflow:"hidden", cursor: dragging ? "grabbing" : "default" }}>
+        {/* Grid pattern */}
+        <div style={{ position:"absolute", inset:0, backgroundImage:"radial-gradient(circle, #1e1e2e 1px, transparent 1px)", backgroundSize:"28px 28px", opacity:0.5 }}/>
+
+        {loading && <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", color:"#4b5563" }}>⏳ Загрузка...</div>}
+
+        {!loading && filtered.length === 0 && (
+          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:"#2d2d44" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🧠</div>
+            <div style={{ fontSize:14, fontWeight:700 }}>Доска пуста</div>
+            <div style={{ fontSize:11, marginTop:6 }}>Нажмите «+ Стикер» чтобы добавить заметку</div>
+          </div>
+        )}
+
+        {filtered.map(s => {
+          const p = proj(s.project_id);
+          const isEdit = editing === s.id;
+          const isDrag = dragging?.id === s.id;
+          return (
+            <div key={s.id}
+              onMouseDown={e => onMouseDownDrag(e, s)}
+              style={{
+                position:"absolute", left:s.x, top:s.y, width:s.w, height:s.h,
+                background: s.color + "ee",
+                borderRadius:12,
+                boxShadow: isDrag
+                  ? "0 20px 40px rgba(0,0,0,0.5), 0 0 0 2px #fff4"
+                  : "0 4px 16px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.15) inset",
+                cursor: isDrag ? "grabbing" : "grab",
+                display:"flex", flexDirection:"column",
+                transition: isDrag ? "none" : "box-shadow 0.15s",
+                zIndex: isDrag || isEdit ? 100 : 1,
+                userSelect:"none",
+              }}>
+              {/* Header */}
+              <div className="sticker-controls" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"6px 8px 4px", flexShrink:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                  {/* Color picker dots */}
+                  {STICKER_COLORS.map(c => (
+                    <div key={c} onClick={() => updateSticker(s.id, { color: c })}
+                      style={{ width:10, height:10, borderRadius:"50%", background:c, cursor:"pointer",
+                        border: s.color===c ? "2px solid rgba(0,0,0,0.5)" : "1px solid rgba(0,0,0,0.2)",
+                        flexShrink:0 }}/>
+                  ))}
+                </div>
+                <button onClick={() => deleteSticker(s.id)}
+                  style={{ background:"rgba(0,0,0,0.15)", border:"none", borderRadius:6, width:18, height:18,
+                    cursor:"pointer", fontSize:11, color:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>×</button>
+              </div>
+              {/* Text */}
+              <div style={{ flex:1, padding:"0 10px 6px", overflow:"hidden" }}>
+                {isEdit ? (
+                  <textarea
+                    autoFocus
+                    value={s.text}
+                    onChange={e => setStickers(p => p.map(x => x.id===s.id ? {...x,text:e.target.value} : x))}
+                    onBlur={() => { updateSticker(s.id, { text: s.text }); setEditing(null); }}
+                    style={{ width:"100%", height:"100%", background:"transparent", border:"none", outline:"none", resize:"none",
+                      fontSize:13, color:"rgba(0,0,0,0.8)", fontFamily:"inherit", lineHeight:1.5 }}
+                  />
+                ) : (
+                  <div onClick={() => setEditing(s.id)}
+                    style={{ width:"100%", height:"100%", fontSize:13, color:s.text?"rgba(0,0,0,0.8)":"rgba(0,0,0,0.3)",
+                      lineHeight:1.5, whiteSpace:"pre-wrap", wordBreak:"break-word", cursor:"text",
+                      fontStyle: s.text ? "normal" : "italic" }}>
+                    {s.text || "Нажмите чтобы написать..."}
+                  </div>
+                )}
+              </div>
+              {/* Footer: project tag */}
+              {p && (
+                <div style={{ padding:"3px 10px 6px", flexShrink:0, display:"flex", alignItems:"center", gap:5 }}>
+                  <div style={{ width:6, height:6, borderRadius:"50%", background:p.color, flexShrink:0 }}/>
+                  <span style={{ fontSize:9, color:"rgba(0,0,0,0.5)", fontFamily:"monospace", fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.label}</span>
+                </div>
+              )}
+              {/* Resize handle */}
+              <div className="sticker-resize"
+                onMouseDown={e => onMouseDownResize(e, s)}
+                style={{ position:"absolute", bottom:0, right:0, width:16, height:16, cursor:"nwse-resize",
+                  display:"flex", alignItems:"flex-end", justifyContent:"flex-end", padding:"3px" }}>
+                <svg width="8" height="8" viewBox="0 0 8 8"><path d="M0 8L8 0M4 8L8 4" stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── PublishedView ─────────────────────────────────────────────────────────────
 function PublishedView({items, projects, onOpen, onToggleStar}) {
   const [stats, setStats] = useState({});
@@ -2747,6 +2955,34 @@ function MainApp({currentUser, onLogout}){
     setter(p=>p.map(x=>x.id===id?{...x,archived:newVal}:x));
     api.updateTask(id,{archived:newVal}).catch(e=>console.error("Archive error:",e));
   }
+
+  async function sendToPub(sourceType, sourceItem) {
+    // Determine pub_type from source
+    const pubType = sourceType==="post_carousel" ? "carousel" : "video";
+    const reelsCount = sourceItem.reels_count || sourceItem.video_count || 1;
+    const newPub = {
+      id: genId(),
+      title: sourceItem.title || "",
+      project: sourceItem.project || "",
+      status: "draft",
+      pub_type: pubType,
+      reels_count: reelsCount,
+      producer: sourceItem.producer || "",
+      planned_date: "",
+      caption: "",
+      hashtags: "",
+      file_name: sourceItem.final_file_name || "",
+      file_url: sourceItem.final_file_url || "",
+      chat: [],
+    };
+    // Archive source task
+    const [,srcSetter] = useTaskStore(sourceType, stores);
+    srcSetter(p=>p.map(x=>x.id===sourceItem.id?{...x,archived:true}:x));
+    api.updateTask(sourceItem.id,{archived:true}).catch(e=>console.error("Archive error:",e));
+    // Open pub modal pre-filled
+    close();
+    setTimeout(()=>setModal({type:"pub", item:newPub}), 50);
+  }
   function drop(type,id,newStatus){
     const DONE_STATUSES=["done","approved","published"];
     const completedAt=DONE_STATUSES.includes(newStatus)?new Date().toISOString().slice(0,10):"";
@@ -2854,7 +3090,7 @@ function MainApp({currentUser, onLogout}){
     preItems,prodItems,postReels,postVideo,postCarousels,pubItems,
     setProjects,setTeam:setTeamMembers,setPubItems,
     projects,teamMembers,modal,
-    openEdit,openNew,close,save,deleteTask,
+    openEdit,openNew,close,save,deleteTask,sendToPub,
   };
 
   if(isMobile) return <ErrorBoundary key="mobile"><MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/></ErrorBoundary>;
@@ -3020,6 +3256,7 @@ function MainApp({currentUser, onLogout}){
       </>}
             {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects} kpisData={kpis}/>}
+      {tab==="board"&&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><IntellectBoard projects={projects} currentUser={currentUser}/></div>}
       {tab==="projects"&&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><ProjectsView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} onOpenTask={(type,item)=>openEdit(type,item)}/></div>}
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
@@ -3027,9 +3264,9 @@ function MainApp({currentUser, onLogout}){
     {/* MODALS */}
     {modal?.type==="pre"          &&<Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
     {modal?.type==="prod"         &&<Modal title="Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_reels"   &&<Modal title="Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_video"   &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_carousel"&&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="post_reels"   &&<Modal title="Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_reels",d)}/></Modal>}
+    {modal?.type==="post_video"   &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_video",d)}/></Modal>}
+    {modal?.type==="post_carousel"&&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} onSendToPub={d=>sendToPub("post_carousel",d)}/></Modal>}
     {modal?.type==="admin"        &&<Modal title="Административная задача" color="#f97316" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("admin",modal.item.id):undefined}><AdminForm item={modal.item} onSave={d=>save("admin",d)} onDelete={id=>deleteTask("admin",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
     {modal?.type==="pub"          &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
     </div>{/* /MAIN COLUMN */}
@@ -3593,7 +3830,7 @@ function MBaseScreen({projects,setProjects,teamMembers,setTeamMembers,currentUse
 // МОБИЛЬНОЕ ПРИЛОЖЕНИЕ
 // ═══════════════════════════════════════════════════════════════════════════════
 function MobileApp({currentUser,onLogout,stores}){
-  const {preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,teamMembers:team,modal,openEdit,openNew,close,save,deleteTask,setPubItems} = stores;
+  const {preItems,prodItems,postReels,postVideo,postCarousels,pubItems,projects,teamMembers:team,modal,openEdit,openNew,close,save,deleteTask,setPubItems,sendToPub} = stores;
   const [tab,setTab]=useState("tasks");
   const [notifOpen,setNotifOpen]=useState(false);
   const [notifs,setNotifs]=useState([]);
@@ -3709,9 +3946,9 @@ function MobileApp({currentUser,onLogout,stores}){
       {/* МОДАЛКИ */}
       {modal?.type==="pre"           &&<Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm           item={modal.item} onSave={d=>save("pre",d)}            onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
       {modal?.type==="prod"          &&<Modal title="Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm          item={modal.item} onSave={d=>save("prod",d)}           onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="post_reels"    &&<Modal title="Постпродакшн — Рилс"     color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm     item={modal.item} onSave={d=>save("post_reels",d)}     onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="post_video"    &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm     item={modal.item} onSave={d=>save("post_video",d)}     onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="post_carousel" &&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm  item={modal.item} onSave={d=>save("post_carousel",d)}  onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={team} currentUser={currentUser}/></Modal>}
+      {modal?.type==="post_reels"    &&<Modal title="Постпродакшн — Рилс"     color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm     item={modal.item} onSave={d=>save("post_reels",d)}     onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_reels",d)}/></Modal>}
+      {modal?.type==="post_video"    &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm     item={modal.item} onSave={d=>save("post_video",d)}     onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_video",d)}/></Modal>}
+      {modal?.type==="post_carousel" &&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm  item={modal.item} onSave={d=>save("post_carousel",d)}  onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={team} currentUser={currentUser} onSendToPub={d=>sendToPub("post_carousel",d)}/></Modal>}
       {modal?.type==="admin"         &&<Modal title="Административная задача"  color="#f97316" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("admin",modal.item.id):undefined}><AdminForm          item={modal.item} onSave={d=>save("admin",d)}           onDelete={id=>deleteTask("admin",id)}         onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
       {modal?.type==="pub"           &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm           item={modal.item} onSave={d=>save("pub",d)}            onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={team} currentUser={currentUser}/></Modal>}
     </div>

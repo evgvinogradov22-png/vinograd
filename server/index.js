@@ -1874,6 +1874,65 @@ app.post("/api/auth/reset-password", async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Stickers (Интелект-доска) ─────────────────────────────────────────────────
+(async () => {
+  await pool.query(`CREATE TABLE IF NOT EXISTS stickers (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL DEFAULT 'all',
+    text TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '#fbbf24',
+    x FLOAT NOT NULL DEFAULT 100,
+    y FLOAT NOT NULL DEFAULT 100,
+    w FLOAT NOT NULL DEFAULT 200,
+    h FLOAT NOT NULL DEFAULT 150,
+    author_id TEXT,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())*1000,
+    updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())*1000
+  )`);
+})().catch(console.error);
+
+app.get("/api/stickers", async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const rows = project_id && project_id !== "all"
+      ? await q("SELECT * FROM stickers WHERE project_id=$1 ORDER BY created_at ASC", [project_id])
+      : await q("SELECT * FROM stickers ORDER BY created_at ASC");
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/stickers", async (req, res) => {
+  try {
+    const { id, project_id="all", text="", color="#fbbf24", x=100, y=100, w=200, h=150, author_id="" } = req.body;
+    const now = Date.now();
+    const row = await q1(
+      `INSERT INTO stickers (id,project_id,text,color,x,y,w,h,author_id,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING *`,
+      [id, project_id, text, color, x, y, w, h, author_id, now]
+    );
+    res.json(row);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.patch("/api/stickers/:id", async (req, res) => {
+  try {
+    const fields = ["text","color","x","y","w","h","project_id"];
+    const sets = ["updated_at=$1"]; const vals = [Date.now()]; let i = 2;
+    for (const f of fields) { if (req.body[f] !== undefined) { sets.push(`${f}=$${i++}`); vals.push(req.body[f]); } }
+    vals.push(req.params.id);
+    await q(`UPDATE stickers SET ${sets.join(",")} WHERE id=$${i}`, vals);
+    const row = await q1("SELECT * FROM stickers WHERE id=$1", [req.params.id]);
+    res.json(row);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/stickers/:id", async (req, res) => {
+  try {
+    await q("DELETE FROM stickers WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 initDb()
   .then(() => server.listen(PORT, () => console.log(`🍇 Виноград server on port ${PORT}`)))
