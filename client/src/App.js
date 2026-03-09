@@ -988,8 +988,6 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
 
     
   </div>;
-
-  </div>;
 }
 
 // ── Slide image uploader ──────────────────────────────────────────────────────
