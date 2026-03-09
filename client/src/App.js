@@ -1177,8 +1177,11 @@ function SingleReelStats({ taskId, reelUrl, index, onUrlSave, reelsCount }) {
     setLoading(false);
   }
 
+  const [errMsg, setErrMsg] = useState("");
+
   async function refresh() {
     setRefreshing(true);
+    setErrMsg("");
     try {
       const r = await fetch(`/api/reel-stats/refresh/${taskId}`, {
         method: "POST",
@@ -1186,9 +1189,18 @@ function SingleReelStats({ taskId, reelUrl, index, onUrlSave, reelsCount }) {
         body: JSON.stringify({ url_key: storageKey })
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Ошибка");
+      if (!r.ok) {
+        // Если URL не задан — просто показываем подсказку добавить URL, не ошибку
+        if (data.error?.includes("reel_url not set")) {
+          setEditing(true);
+        } else {
+          setErrMsg(data.error || "Ошибка обновления");
+        }
+        setRefreshing(false);
+        return;
+      }
       await loadHistory();
-    } catch(e) { alert("Ошибка: " + e.message); }
+    } catch(e) { setErrMsg(e.message); }
     setRefreshing(false);
   }
 
@@ -1306,6 +1318,7 @@ function SingleReelStats({ taskId, reelUrl, index, onUrlSave, reelsCount }) {
           ) : (
             <div style={{textAlign:"center",padding:"10px",color:"#4b5563",fontSize:11}}>Нет данных — нажмите «🔄 Обновить»</div>
           )}
+          {errMsg && <div style={{fontSize:10,color:"#ef4444",fontFamily:"monospace",marginTop:4,textAlign:"center"}}>⚠️ {errMsg}</div>}
           {history.length >= 2 && (
             <div style={{display:"flex",gap:12,padding:"6px 0",borderTop:"1px solid #1a1a2e"}}>
               <div><div style={{fontSize:7,color:"#4b5563",fontFamily:"monospace",marginBottom:2}}>👁 ПРОСМОТРЫ</div><Sparkline data={viewHistory} color="#06b6d4"/></div>
