@@ -2059,6 +2059,7 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
   const [stats, setStats] = useState({});
   const [groupBy, setGroupBy] = useState("week"); // "week" | "month"
   const [view, setView] = useState("list"); // "list" | "dashboard"
+  const [selectedPeriod, setSelectedPeriod] = useState("all"); // "all" | period key
 
   useEffect(() => {
     const ids = items.filter(x=>x.status==="published").map(x=>x.id);
@@ -2116,12 +2117,6 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
   const keys = Object.keys(grouped).filter(k=>k!=="unknown").sort((a,b)=>b.localeCompare(a));
   if (grouped["unknown"]) keys.push("unknown");
 
-  // Totals for dashboard
-  const totalViews    = Object.values(stats).reduce((s,x)=>s+(x?.views||0),0);
-  const totalLikes    = Object.values(stats).reduce((s,x)=>s+(x?.likes||0),0);
-  const totalComments = Object.values(stats).reduce((s,x)=>s+(x?.comments||0),0);
-  const hasStats      = totalViews + totalLikes + totalComments > 0;
-
   // Per-period totals for dashboard bars
   const periodData = keys.filter(k=>k!=="unknown").map(k => {
     const pItems = grouped[k] || [];
@@ -2131,6 +2126,16 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
     const label    = groupBy === "week" ? getWeekLabel(k) : getMonthLabel(k);
     return { k, label, views, likes, comments, count: pItems.length };
   });
+
+  // Items filtered by selected period
+  const filteredPeriodData = selectedPeriod === "all" ? periodData : periodData.filter(d=>d.k===selectedPeriod);
+  const filteredItems = selectedPeriod === "all" ? published : (grouped[selectedPeriod] || []);
+
+  // Totals for dashboard — computed from filtered period
+  const totalViews    = filteredPeriodData.reduce((s,d)=>s+d.views,0);
+  const totalLikes    = filteredPeriodData.reduce((s,d)=>s+d.likes,0);
+  const totalComments = filteredPeriodData.reduce((s,d)=>s+d.comments,0);
+  const hasStats      = totalViews + totalLikes + totalComments > 0;
 
   const maxViews = Math.max(...periodData.map(d=>d.views), 1);
 
@@ -2154,12 +2159,17 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
     {/* Group toggle */}
     <div style={{display:"flex",background:"#111118",borderRadius:8,border:"1px solid #1e1e2e",overflow:"hidden"}}>
       {[["week","По неделям"],["month","По месяцам"]].map(([v,l])=>
-        <button key={v} onClick={()=>setGroupBy(v)} style={{padding:"5px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:600,
+        <button key={v} onClick={()=>{setGroupBy(v);setSelectedPeriod("all");}} style={{padding:"5px 12px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:600,
           background:groupBy===v?"#10b98130":"transparent",color:groupBy===v?"#10b981":"#4b5563"}}>
           {l}
         </button>
       )}
     </div>
+    {/* Period selector */}
+    <select value={selectedPeriod} onChange={e=>setSelectedPeriod(e.target.value)} style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:8,color:selectedPeriod!=="all"?"#10b981":"#6b7280",fontSize:10,fontFamily:"monospace",padding:"5px 10px",cursor:"pointer",outline:"none"}}>
+      <option value="all">Все периоды</option>
+      {periodData.map(d=><option key={d.k} value={d.k}>{d.label}</option>)}
+    </select>
     <div style={{flex:1}}/>
     <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{published.length} публикаций · обновление в 07:00</span>
   </div>;
@@ -2172,8 +2182,8 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
         <div style={{fontSize:26,fontWeight:800,color,fontFamily:"monospace",letterSpacing:-1}}>{fmtFull(value)}</div>
       </div>;
 
-    // Top 5 reels by views
-    const ranked = published
+    // Top 5 reels by views — from filtered period
+    const ranked = filteredItems
       .map(x=>({...x, views: stats[x.id]?.views||0}))
       .filter(x=>x.views>0)
       .sort((a,b)=>b.views-a.views)
@@ -2186,7 +2196,7 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
         <StatCard label="ПРОСМОТРЫ" value={totalViews} color="#06b6d4" icon="👁"/>
         <StatCard label="ЛАЙКИ" value={totalLikes} color="#ec4899" icon="❤️"/>
         <StatCard label="КОММЕНТАРИИ" value={totalComments} color="#8b5cf6" icon="💬"/>
-        <StatCard label="ПУБЛИКАЦИИ" value={published.length} color="#10b981" icon="📹"/>
+        <StatCard label="ПУБЛИКАЦИИ" value={filteredItems.length} color="#10b981" icon="📹"/>
         {totalLikes>0&&totalViews>0&&<StatCard label="ERR (лайки/просм.)" value={(totalLikes/totalViews*100).toFixed(2)+"%"} color="#f59e0b" icon="📈"/>}
       </div>
 
@@ -2198,10 +2208,13 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {periodData.map(d => {
             const pct = Math.round(d.views/maxViews*100);
-            return <div key={d.k} style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:120,fontSize:9,color:"#6b7280",fontFamily:"monospace",flexShrink:0,textAlign:"right"}}>{d.label}</div>
+            const isSelected = selectedPeriod !== "all" && d.k === selectedPeriod;
+            const isDimmed   = selectedPeriod !== "all" && d.k !== selectedPeriod;
+            return <div key={d.k} onClick={()=>setSelectedPeriod(selectedPeriod===d.k?"all":d.k)}
+              style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",opacity:isDimmed?0.35:1,transition:"opacity 0.2s"}}>
+              <div style={{width:120,fontSize:9,color:isSelected?"#10b981":"#6b7280",fontFamily:"monospace",flexShrink:0,textAlign:"right",fontWeight:isSelected?700:400}}>{d.label}</div>
               <div style={{flex:1,height:20,background:"#0d0d16",borderRadius:4,overflow:"hidden",position:"relative"}}>
-                <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,#06b6d4,#3b82f6)",borderRadius:4,transition:"width 0.4s"}}/>
+                <div style={{width:pct+"%",height:"100%",background:isSelected?"linear-gradient(90deg,#10b981,#06b6d4)":"linear-gradient(90deg,#06b6d4,#3b82f6)",borderRadius:4,transition:"width 0.4s"}}/>
               </div>
               <div style={{width:60,fontSize:10,fontFamily:"monospace",fontWeight:700,color:"#06b6d4",textAlign:"right"}}>{fmt(d.views)||"—"}</div>
               <div style={{width:50,fontSize:9,fontFamily:"monospace",color:"#ec4899",textAlign:"right"}}>{fmt(d.likes)||"—"}</div>
@@ -2214,6 +2227,7 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
           {[["#06b6d4","👁 Просмотры"],["#ec4899","❤️ Лайки"],["#8b5cf6","💬 Комм."]].map(([c,l])=>
             <span key={l} style={{fontSize:8,color:c,fontFamily:"monospace"}}>{l}</span>
           )}
+          {selectedPeriod!=="all"&&<span onClick={()=>setSelectedPeriod("all")} style={{fontSize:8,color:"#4b5563",fontFamily:"monospace",cursor:"pointer",marginLeft:8}}>✕ сбросить фильтр</span>}
         </div>
       </div>}
 
