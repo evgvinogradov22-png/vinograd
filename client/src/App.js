@@ -2126,7 +2126,8 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
     const likes    = pItems.reduce((s,x)=>s+(stats[x.id]?.likes||0),0);
     const comments = pItems.reduce((s,x)=>s+(stats[x.id]?.comments||0),0);
     const label    = groupBy === "week" ? getWeekLabel(k) : getMonthLabel(k);
-    return { k, label, views, likes, comments, count: pItems.length };
+    const pubsCount = pItems.reduce((s,x)=>s+pubCount(x),0);
+    return { k, label, views, likes, comments, count: pubsCount };
   });
 
   // Items filtered by selected period
@@ -2173,7 +2174,7 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
       {periodData.map(d=><option key={d.k} value={d.k}>{d.label}</option>)}
     </select>
     <div style={{flex:1}}/>
-    <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{published.length} публикаций · обновление в 07:00</span>
+    <span style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{published.reduce((s,x)=>s+pubCount(x),0)} публикаций · обновление в 07:00</span>
   </div>;
 
   // ── DASHBOARD VIEW ──────────────────────────────────────────────────────────
@@ -2198,7 +2199,7 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
         <StatCard label="ПРОСМОТРЫ" value={totalViews} color="#06b6d4" icon="👁"/>
         <StatCard label="ЛАЙКИ" value={totalLikes} color="#ec4899" icon="❤️"/>
         <StatCard label="КОММЕНТАРИИ" value={totalComments} color="#8b5cf6" icon="💬"/>
-        <StatCard label="ПУБЛИКАЦИИ" value={filteredItems.length} color="#10b981" icon="📹"/>
+        <StatCard label="ПУБЛИКАЦИИ" value={filteredItems.reduce((s,x)=>s+pubCount(x),0)} color="#10b981" icon="📹"/>
         {totalLikes>0&&totalViews>0&&<StatCard label="ERR (лайки/просм.)" value={(totalLikes/totalViews*100).toFixed(2)+"%"} color="#f59e0b" icon="📈"/>}
       </div>
 
@@ -3370,7 +3371,7 @@ function MAnalyticsScreen({pubItems,projects}){
   return <>
     <div style={M.sh}>
       <div style={M.title}>Аналитика</div>
-      <div style={{fontSize:11,color:"#4b5563",fontFamily:"monospace",marginTop:4}}>{published.length} опубликовано · обновление в 07:00</div>
+      <div style={{fontSize:11,color:"#4b5563",fontFamily:"monospace",marginTop:4}}>{published.reduce((s,x)=>s+pubCount(x),0)} опубликовано · обновление в 07:00</div>
     </div>
     <div style={{...M.scroll,...M.pad}}>
       {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#4b5563",fontSize:13}}>⏳ Загрузка статистики...</div>}
@@ -3382,7 +3383,7 @@ function MAnalyticsScreen({pubItems,projects}){
         </div>
         <div style={{display:"flex",gap:10,marginBottom:20}}>
           <StatCard icon="💬" label="КОММ." value={totalComments} color="#8b5cf6"/>
-          <StatCard icon="📹" label="ПУБЛИКАЦИЙ" value={published.length} color="#10b981"/>
+          <StatCard icon="📹" label="ПУБЛИКАЦИЙ" value={pub.reduce((s,x)=>s+pubCount(x),0)} color="#10b981"/>
         </div>
 
         {/* ERR */}
