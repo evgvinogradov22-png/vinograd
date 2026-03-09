@@ -1933,6 +1933,49 @@ app.delete("/api/stickers/:id", async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Sticker Arrows ────────────────────────────────────────────────────────────
+(async () => {
+  await pool.query(`CREATE TABLE IF NOT EXISTS sticker_arrows (
+    id TEXT PRIMARY KEY,
+    from_id TEXT NOT NULL,
+    to_id   TEXT NOT NULL,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())*1000
+  )`);
+})().catch(console.error);
+
+app.get("/api/sticker-arrows", async (req, res) => {
+  try {
+    const rows = await q("SELECT id, from_id as \"from\", to_id as \"to\" FROM sticker_arrows ORDER BY created_at ASC");
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/sticker-arrows", async (req, res) => {
+  try {
+    const { id, from, to } = req.body;
+    const row = await q1(
+      `INSERT INTO sticker_arrows (id, from_id, to_id) VALUES ($1,$2,$3)
+       ON CONFLICT (id) DO NOTHING RETURNING id, from_id as "from", to_id as "to"`,
+      [id, from, to]
+    );
+    res.json(row || { id, from, to });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/sticker-arrows/:id", async (req, res) => {
+  try {
+    await q("DELETE FROM sticker_arrows WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/sticker-arrows/by-sticker/:stickerId", async (req, res) => {
+  try {
+    await q("DELETE FROM sticker_arrows WHERE from_id=$1 OR to_id=$1", [req.params.stickerId]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 initDb()
   .then(() => server.listen(PORT, () => console.log(`🍇 Виноград server on port ${PORT}`)))

@@ -2072,206 +2072,334 @@ function useTaskStore(type, stores) {
 }
 
 // ── IntellectBoard ────────────────────────────────────────────────────────────
-const STICKER_COLORS = [
-  "#fbbf24","#f87171","#34d399","#60a5fa","#a78bfa","#f472b6","#fb923c","#e2e8f0"
-];
-
 function IntellectBoard({ projects, currentUser }) {
   const [stickers, setStickers] = useState([]);
-  const [projFilter, setProjFilter] = useState("all");
-  const [loading, setLoading] = useState(true);
-  const [dragging, setDragging] = useState(null); // {id, startX, startY, origX, origY}
-  const [resizing, setResizing] = useState(null);
-  const [editing, setEditing] = useState(null);
-  const boardRef = useRef(null);
+  const [arrows, setArrows]     = useState([]); // [{id,from,to}]
+  const [scale, setScale]       = useState(1);
+  const [pan, setPan]           = useState({ x: 0, y: 0 });
+  const [loading, setLoading]   = useState(true);
+  const [mode, setMode]         = useState("select"); // "select" | "arrow"
+  const [arrowStart, setArrowStart] = useState(null); // sticker id
+  const [dragging, setDragging]     = useState(null);
+  const [resizing, setResizing]     = useState(null);
+  const [panning, setPanning]       = useState(null); // {startX,startY,origX,origY}
+  const [editing, setEditing]       = useState(null);
+  const boardRef  = useRef(null);
   const MIN_W = 140, MIN_H = 100;
 
+  // Load
   useEffect(() => {
     setLoading(true);
-    fetch("/api/stickers" + (projFilter !== "all" ? `?project_id=${projFilter}` : ""))
-      .then(r => r.json()).then(rows => { setStickers(Array.isArray(rows) ? rows : []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [projFilter]);
+    Promise.all([
+      fetch("/api/stickers").then(r=>r.json()),
+      fetch("/api/sticker-arrows").then(r=>r.json()).catch(()=>[]),
+    ]).then(([s,a]) => {
+      setStickers(Array.isArray(s) ? s : []);
+      setArrows(Array.isArray(a) ? a : []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const projColor = (id) => projects.find(p=>p.id===id)?.color || "#a78bfa";
+
+  // Paper sticker style
+  function stickerStyle(s, isDrag) {
+    const c = projColor(s.project_id);
+    return {
+      position:"absolute", left:s.x, top:s.y, width:s.w, height:s.h,
+      background: `${c}dd`,
+      borderRadius: "2px 12px 10px 2px",
+      boxShadow: isDrag
+        ? `0 24px 48px rgba(0,0,0,0.6), 2px 2px 0 rgba(0,0,0,0.15), -2px 4px 0 ${c}88`
+        : `2px 4px 12px rgba(0,0,0,0.45), 2px 2px 0 rgba(0,0,0,0.12), inset 0 -2px 4px rgba(0,0,0,0.08)`,
+      cursor: mode==="arrow" ? "crosshair" : isDrag ? "grabbing" : "grab",
+      display:"flex", flexDirection:"column",
+      transform: isDrag ? "rotate(2deg) scale(1.04)" : `rotate(${s.rot||0}deg)`,
+      transition: isDrag ? "none" : "box-shadow 0.15s, transform 0.15s",
+      zIndex: isDrag || editing===s.id ? 200 : 1,
+      userSelect:"none",
+      // "fold" top-right corner using pseudo via before — done via inner element
+    };
+  }
 
   function addSticker() {
     const id = genId();
-    const color = STICKER_COLORS[Math.floor(Math.random() * STICKER_COLORS.length)];
-    const board = boardRef.current?.getBoundingClientRect();
-    const x = board ? Math.random() * Math.max(0, board.width - 220) : 80;
-    const y = board ? Math.random() * Math.max(0, board.height - 180) : 80;
-    const s = { id, project_id: projFilter === "all" ? (projects[0]?.id || "all") : projFilter,
-      text: "", color, x, y, w: 200, h: 150, author_id: currentUser?.id || "" };
+    const proj = projects.find(p=>!p.archived) || projects[0];
+    const rot = (Math.random() - 0.5) * 3; // slight random tilt
+    const s = {
+      id,
+      project_id: proj?.id || "all",
+      text: "",
+      color: proj?.color || "#a78bfa",
+      x: Math.max(20, 80 + Math.random()*300 - pan.x/scale),
+      y: Math.max(20, 80 + Math.random()*200 - pan.y/scale),
+      w: 200, h: 160,
+      rot,
+      author_id: currentUser?.id || "",
+    };
     setStickers(p => [...p, s]);
     setEditing(id);
-    fetch("/api/stickers", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(s) }).catch(() => {});
+    fetch("/api/stickers", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s)}).catch(()=>{});
   }
 
-  function updateSticker(id, patch) {
-    setStickers(p => p.map(s => s.id === id ? { ...s, ...patch } : s));
-    fetch(`/api/stickers/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch) }).catch(() => {});
+  function delSticker(id) {
+    setStickers(p=>p.filter(s=>s.id!==id));
+    setArrows(p=>p.filter(a=>a.from!==id&&a.to!==id));
+    fetch(`/api/stickers/${id}`,{method:"DELETE"}).catch(()=>{});
+    fetch(`/api/sticker-arrows/by-sticker/${id}`,{method:"DELETE"}).catch(()=>{});
   }
 
-  function deleteSticker(id) {
-    setStickers(p => p.filter(s => s.id !== id));
-    fetch(`/api/stickers/${id}`, { method:"DELETE" }).catch(() => {});
+  function patchSticker(id, patch) {
+    setStickers(p=>p.map(s=>s.id===id?{...s,...patch}:s));
+    fetch(`/api/stickers/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(patch)}).catch(()=>{});
   }
 
-  // Drag
+  // Arrow mode click on sticker
+  function onStickerClick(e, s) {
+    if (mode !== "arrow") return;
+    e.stopPropagation();
+    if (!arrowStart) { setArrowStart(s.id); return; }
+    if (arrowStart === s.id) { setArrowStart(null); return; }
+    const existing = arrows.find(a=>(a.from===arrowStart&&a.to===s.id)||(a.from===s.id&&a.to===arrowStart));
+    if (existing) {
+      setArrows(p=>p.filter(a=>a.id!==existing.id));
+      fetch(`/api/sticker-arrows/${existing.id}`,{method:"DELETE"}).catch(()=>{});
+    } else {
+      const id = genId();
+      const arrow = {id, from:arrowStart, to:s.id};
+      setArrows(p=>[...p,arrow]);
+      fetch("/api/sticker-arrows",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(arrow)}).catch(()=>{});
+    }
+    setArrowStart(null);
+  }
+
+  // Drag stickers
   function onMouseDownDrag(e, s) {
-    if (e.target.closest(".sticker-controls") || e.target.closest(".sticker-resize") || e.target.tagName === "TEXTAREA") return;
-    e.preventDefault();
-    setDragging({ id: s.id, startX: e.clientX, startY: e.clientY, origX: s.x, origY: s.y });
+    if (mode==="arrow" || e.target.closest(".stk-ctrl") || e.target.closest(".stk-rsz") || e.target.tagName==="TEXTAREA") return;
+    e.preventDefault(); e.stopPropagation();
+    setDragging({id:s.id, sx:e.clientX, sy:e.clientY, ox:s.x, oy:s.y});
   }
   function onMouseDownResize(e, s) {
     e.preventDefault(); e.stopPropagation();
-    setResizing({ id: s.id, startX: e.clientX, startY: e.clientY, origW: s.w, origH: s.h });
+    setResizing({id:s.id, sx:e.clientX, sy:e.clientY, ow:s.w, oh:s.h});
   }
+
+  // Pan board (middle mouse or background drag in select mode)
+  function onBoardMouseDown(e) {
+    if (e.target !== boardRef.current && e.target !== boardRef.current?.firstChild) return;
+    if (e.button===1 || (e.button===0 && mode==="select")) {
+      e.preventDefault();
+      setPanning({sx:e.clientX, sy:e.clientY, ox:pan.x, oy:pan.y});
+    }
+  }
+
+  // Zoom wheel
+  function onWheel(e) {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1.1 : 0.9;
+    setScale(s => Math.min(3, Math.max(0.2, s * delta)));
+  }
+
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", onWheel, {passive:false});
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   useEffect(() => {
     function onMove(e) {
       if (dragging) {
-        const dx = e.clientX - dragging.startX, dy = e.clientY - dragging.startY;
-        setStickers(p => p.map(s => s.id === dragging.id ? { ...s, x: Math.max(0, dragging.origX + dx), y: Math.max(0, dragging.origY + dy) } : s));
+        const dx=(e.clientX-dragging.sx)/scale, dy=(e.clientY-dragging.sy)/scale;
+        setStickers(p=>p.map(s=>s.id===dragging.id?{...s,x:Math.max(0,dragging.ox+dx),y:Math.max(0,dragging.oy+dy)}:s));
       }
       if (resizing) {
-        const dx = e.clientX - resizing.startX, dy = e.clientY - resizing.startY;
-        setStickers(p => p.map(s => s.id === resizing.id ? { ...s, w: Math.max(MIN_W, resizing.origW + dx), h: Math.max(MIN_H, resizing.origH + dy) } : s));
+        const dx=(e.clientX-resizing.sx)/scale, dy=(e.clientY-resizing.sy)/scale;
+        setStickers(p=>p.map(s=>s.id===resizing.id?{...s,w:Math.max(MIN_W,resizing.ow+dx),h:Math.max(MIN_H,resizing.oh+dy)}:s));
+      }
+      if (panning) {
+        setPan({x:panning.ox+(e.clientX-panning.sx), y:panning.oy+(e.clientY-panning.sy)});
       }
     }
-    function onUp(e) {
-      if (dragging) {
-        const s = stickers.find(x => x.id === dragging.id);
-        if (s) fetch(`/api/stickers/${s.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ x: s.x, y: s.y }) }).catch(() => {});
-        setDragging(null);
-      }
-      if (resizing) {
-        const s = stickers.find(x => x.id === resizing.id);
-        if (s) fetch(`/api/stickers/${s.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ w: s.w, h: s.h }) }).catch(() => {});
-        setResizing(null);
-      }
+    function onUp() {
+      if (dragging) { const s=stickers.find(x=>x.id===dragging.id); if(s) patchSticker(s.id,{x:s.x,y:s.y}); setDragging(null); }
+      if (resizing) { const s=stickers.find(x=>x.id===resizing.id); if(s) patchSticker(s.id,{w:s.w,h:s.h}); setResizing(null); }
+      if (panning) setPanning(null);
     }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, [dragging, resizing, stickers]);
+    return ()=>{ window.removeEventListener("mousemove",onMove); window.removeEventListener("mouseup",onUp); };
+  }, [dragging, resizing, panning, stickers, scale]);
 
-  const filtered = projFilter === "all" ? stickers : stickers.filter(s => s.project_id === projFilter);
-  const proj = id => projects.find(p => p.id === id);
+  // Compute arrow SVG line between two sticker centers
+  function arrowLine(a) {
+    const from = stickers.find(s=>s.id===a.from);
+    const to   = stickers.find(s=>s.id===a.to);
+    if (!from||!to) return null;
+    const fx=from.x+from.w/2, fy=from.y+from.h/2;
+    const tx=to.x+to.w/2,   ty=to.y+to.h/2;
+    // Cubic bezier for curved arrow
+    const dx=tx-fx, dy=ty-fy;
+    const cx1=fx+dx*0.3-dy*0.15, cy1=fy+dy*0.3+dx*0.15;
+    const cx2=fx+dx*0.7+dy*0.15, cy2=fy+dy*0.7-dx*0.15;
+    const d=`M${fx},${fy} C${cx1},${cy1} ${cx2},${cy2} ${tx},${ty}`;
+    // Arrow head angle
+    const angle=Math.atan2(ty-cy2, tx-cx2)*180/Math.PI;
+    return {d, tx, ty, angle, id:a.id, color: projColor(from.project_id)};
+  }
+
+  const arrowData = arrows.map(arrowLine).filter(Boolean);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 48px)", background:"#07070f" }}>
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 48px)",background:"#07070f",overflow:"hidden"}}>
       {/* Toolbar */}
-      <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"10px 16px", borderBottom:"1px solid #1a1a2e", background:"#0d0d16" }}>
-        <div style={{ fontSize:15, fontWeight:800, color:"#f0eee8", display:"flex", alignItems:"center", gap:8 }}>
-          🧠 <span>Интелект-доска</span>
-        </div>
-        <div style={{ display:"flex", gap:5, flex:1, overflowX:"auto", scrollbarWidth:"none" }}>
-          <button onClick={() => setProjFilter("all")}
-            style={{ flexShrink:0, padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-              background: projFilter==="all" ? "#a78bfa18" : "#111118",
-              border: `1px solid ${projFilter==="all" ? "#a78bfa55" : "#1e1e2e"}`,
-              color: projFilter==="all" ? "#a78bfa" : "#4b5563" }}>Все проекты</button>
-          {projects.filter(p=>!p.archived).map(p => (
-            <button key={p.id} onClick={() => setProjFilter(p.id)}
-              style={{ flexShrink:0, padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-                background: projFilter===p.id ? p.color+"18" : "#111118",
-                border: `1px solid ${projFilter===p.id ? p.color+"55" : "#1e1e2e"}`,
-                color: projFilter===p.id ? p.color : "#4b5563" }}>{p.label}</button>
+      <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:"1px solid #1a1a2e",background:"#0d0d16"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#f0eee8",marginRight:4}}>🧠 Интелект-доска</div>
+
+        {/* Mode */}
+        <div style={{display:"flex",background:"#111118",borderRadius:8,border:"1px solid #1e1e2e",overflow:"hidden"}}>
+          {[["select","☝️ Выбор"],["arrow","↗️ Стрелка"]].map(([m,l])=>(
+            <button key={m} onClick={()=>{setMode(m);setArrowStart(null);}}
+              style={{padding:"5px 13px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,
+                background:mode===m?"#1e1e2e":"transparent",color:mode===m?"#f0eee8":"#4b5563"}}>{l}</button>
           ))}
         </div>
+
+        {arrowStart && <span style={{fontSize:11,color:"#f59e0b",fontFamily:"monospace",animation:"pulse 1s infinite"}}>⬤ Выберите второй стикер...</span>}
+
+        <div style={{flex:1}}/>
+
+        {/* Zoom controls */}
+        <div style={{display:"flex",alignItems:"center",gap:6,background:"#111118",border:"1px solid #1e1e2e",borderRadius:8,padding:"4px 8px"}}>
+          <button onClick={()=>setScale(s=>Math.max(0.2,s-0.1))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 2px"}}>−</button>
+          <span style={{fontSize:11,color:"#9ca3af",fontFamily:"monospace",minWidth:38,textAlign:"center"}}>{Math.round(scale*100)}%</span>
+          <button onClick={()=>setScale(s=>Math.min(3,s+0.1))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 2px"}}>+</button>
+          <button onClick={()=>{setScale(1);setPan({x:0,y:0});}} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:10,fontFamily:"monospace",padding:"0 2px"}}>1:1</button>
+        </div>
+
         <button onClick={addSticker}
-          style={{ flexShrink:0, background:"linear-gradient(135deg,#7c3aed,#a78bfa)", border:"none", borderRadius:10, padding:"8px 16px",
-            fontSize:12, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
-          + Стикер
-        </button>
+          style={{background:"linear-gradient(135deg,#7c3aed,#a78bfa)",border:"none",borderRadius:9,padding:"7px 16px",
+            fontSize:12,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>+ Стикер</button>
       </div>
 
-      {/* Board */}
-      <div ref={boardRef} style={{ flex:1, position:"relative", overflow:"hidden", cursor: dragging ? "grabbing" : "default" }}>
-        {/* Grid pattern */}
-        <div style={{ position:"absolute", inset:0, backgroundImage:"radial-gradient(circle, #1e1e2e 1px, transparent 1px)", backgroundSize:"28px 28px", opacity:0.5 }}/>
+      {/* Canvas */}
+      <div ref={boardRef}
+        onMouseDown={onBoardMouseDown}
+        style={{flex:1,position:"relative",overflow:"hidden",
+          cursor: panning ? "grabbing" : mode==="arrow" ? "crosshair" : "grab",
+          backgroundImage:"radial-gradient(circle, #1e1e2e 1px, transparent 1px)",
+          backgroundSize:`${28*scale}px ${28*scale}px`,
+          backgroundPosition:`${pan.x}px ${pan.y}px`,
+        }}>
 
-        {loading && <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", color:"#4b5563" }}>⏳ Загрузка...</div>}
+        {/* Scaled + panned world */}
+        <div style={{position:"absolute",left:pan.x,top:pan.y,
+          transform:`scale(${scale})`,transformOrigin:"0 0",
+          width:4000,height:4000}}>
 
-        {!loading && filtered.length === 0 && (
-          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:"#2d2d44" }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>🧠</div>
-            <div style={{ fontSize:14, fontWeight:700 }}>Доска пуста</div>
-            <div style={{ fontSize:11, marginTop:6 }}>Нажмите «+ Стикер» чтобы добавить заметку</div>
+          {/* SVG arrows layer */}
+          <svg style={{position:"absolute",inset:0,width:4000,height:4000,pointerEvents:"none",overflow:"visible"}}>
+            <defs>
+              {arrowData.map(a=>(
+                <marker key={a.id+"m"} id={`ah-${a.id}`} markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L8,3 z" fill={a.color} opacity="0.85"/>
+                </marker>
+              ))}
+            </defs>
+            {arrowData.map(a=>(
+              <g key={a.id}>
+                <path d={a.d} fill="none" stroke={a.color} strokeWidth="2.5" opacity="0.7"
+                  strokeDasharray="none" markerEnd={`url(#ah-${a.id})`}/>
+                {/* Invisible wider path for easier clicking */}
+                <path d={a.d} fill="none" stroke="transparent" strokeWidth="12"
+                  style={{cursor:"pointer"}}
+                  onClick={()=>{setArrows(p=>p.filter(x=>x.id!==a.id));fetch(`/api/sticker-arrows/${a.id}`,{method:"DELETE"}).catch(()=>{});}}/>
+              </g>
+            ))}
+          </svg>
+
+          {/* Stickers */}
+          {stickers.map(s => {
+            const isDrag = dragging?.id===s.id;
+            const isArrowSrc = arrowStart===s.id;
+            const p = projects.find(x=>x.id===s.project_id);
+            const c = p?.color || "#a78bfa";
+            return (
+              <div key={s.id}
+                onMouseDown={e=>onMouseDownDrag(e,s)}
+                onClick={e=>onStickerClick(e,s)}
+                style={stickerStyle(s,isDrag)}>
+
+                {/* Paper fold top-right corner */}
+                <div style={{position:"absolute",top:0,right:0,width:18,height:18,
+                  background:`linear-gradient(225deg, rgba(0,0,0,0.18) 50%, ${c}00 50%)`,
+                  borderRadius:"0 12px 0 0",pointerEvents:"none"}}/>
+
+                {/* Arrow-mode highlight */}
+                {mode==="arrow"&&<div style={{position:"absolute",inset:0,borderRadius:"2px 12px 10px 2px",
+                  border:`2px solid ${isArrowSrc?"#fff":"rgba(255,255,255,0.3)"}`,
+                  boxShadow:isArrowSrc?"0 0 12px #fff8":"none",pointerEvents:"none"}}/>}
+
+                {/* Controls */}
+                <div className="stk-ctrl" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 8px 3px",flexShrink:0}}>
+                  {/* Project dot + label */}
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <div style={{width:7,height:7,borderRadius:"50%",background:"rgba(0,0,0,0.25)",flexShrink:0}}/>
+                    <span style={{fontSize:9,color:"rgba(0,0,0,0.45)",fontFamily:"monospace",fontWeight:700,maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {p?.label||""}
+                    </span>
+                  </div>
+                  {/* Project change + delete */}
+                  <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                    <select value={s.project_id}
+                      onChange={e=>{e.stopPropagation();patchSticker(s.id,{project_id:e.target.value,color:projects.find(x=>x.id===e.target.value)?.color||"#a78bfa"});}}
+                      onClick={e=>e.stopPropagation()}
+                      style={{background:"rgba(0,0,0,0.12)",border:"none",borderRadius:4,fontSize:9,color:"rgba(0,0,0,0.5)",cursor:"pointer",fontFamily:"inherit",padding:"1px 2px",maxWidth:60}}>
+                      {projects.filter(x=>!x.archived).map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
+                    </select>
+                    <button onClick={e=>{e.stopPropagation();delSticker(s.id);}}
+                      style={{background:"rgba(0,0,0,0.12)",border:"none",borderRadius:5,width:17,height:17,cursor:"pointer",
+                        fontSize:12,color:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,flexShrink:0}}>×</button>
+                  </div>
+                </div>
+
+                {/* Text body */}
+                <div style={{flex:1,padding:"0 10px 8px",overflow:"hidden"}}>
+                  {editing===s.id ? (
+                    <textarea autoFocus value={s.text}
+                      onMouseDown={e=>e.stopPropagation()}
+                      onChange={e=>setStickers(p=>p.map(x=>x.id===s.id?{...x,text:e.target.value}:x))}
+                      onBlur={()=>{patchSticker(s.id,{text:s.text});setEditing(null);}}
+                      style={{width:"100%",height:"100%",background:"transparent",border:"none",outline:"none",resize:"none",
+                        fontSize:13,color:"rgba(0,0,0,0.75)",fontFamily:"inherit",lineHeight:1.55}}/>
+                  ) : (
+                    <div onClick={e=>{if(mode!=="arrow"){e.stopPropagation();setEditing(s.id);}}}
+                      style={{width:"100%",height:"100%",fontSize:13,lineHeight:1.55,whiteSpace:"pre-wrap",wordBreak:"break-word",
+                        color:s.text?"rgba(0,0,0,0.75)":"rgba(0,0,0,0.3)",fontStyle:s.text?"normal":"italic",cursor:"text"}}>
+                      {s.text||"Нажмите чтобы написать..."}
+                    </div>
+                  )}
+                </div>
+
+                {/* Resize handle */}
+                <div className="stk-rsz" onMouseDown={e=>onMouseDownResize(e,s)}
+                  style={{position:"absolute",bottom:0,right:0,width:18,height:18,cursor:"nwse-resize",
+                    display:"flex",alignItems:"flex-end",justifyContent:"flex-end",padding:4}}>
+                  <svg width="8" height="8"><path d="M0 8L8 0M4 8L8 4" stroke="rgba(0,0,0,0.22)" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {loading&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563"}}>⏳ Загрузка...</div>}
+        {!loading&&stickers.length===0&&(
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:"#2d2d44",pointerEvents:"none"}}>
+            <div style={{fontSize:52,marginBottom:12}}>🧠</div>
+            <div style={{fontSize:14,fontWeight:700}}>Доска пуста</div>
+            <div style={{fontSize:11,marginTop:6}}>Нажмите «+ Стикер» чтобы добавить заметку</div>
           </div>
         )}
-
-        {filtered.map(s => {
-          const p = proj(s.project_id);
-          const isEdit = editing === s.id;
-          const isDrag = dragging?.id === s.id;
-          return (
-            <div key={s.id}
-              onMouseDown={e => onMouseDownDrag(e, s)}
-              style={{
-                position:"absolute", left:s.x, top:s.y, width:s.w, height:s.h,
-                background: s.color + "ee",
-                borderRadius:12,
-                boxShadow: isDrag
-                  ? "0 20px 40px rgba(0,0,0,0.5), 0 0 0 2px #fff4"
-                  : "0 4px 16px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.15) inset",
-                cursor: isDrag ? "grabbing" : "grab",
-                display:"flex", flexDirection:"column",
-                transition: isDrag ? "none" : "box-shadow 0.15s",
-                zIndex: isDrag || isEdit ? 100 : 1,
-                userSelect:"none",
-              }}>
-              {/* Header */}
-              <div className="sticker-controls" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"6px 8px 4px", flexShrink:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                  {/* Color picker dots */}
-                  {STICKER_COLORS.map(c => (
-                    <div key={c} onClick={() => updateSticker(s.id, { color: c })}
-                      style={{ width:10, height:10, borderRadius:"50%", background:c, cursor:"pointer",
-                        border: s.color===c ? "2px solid rgba(0,0,0,0.5)" : "1px solid rgba(0,0,0,0.2)",
-                        flexShrink:0 }}/>
-                  ))}
-                </div>
-                <button onClick={() => deleteSticker(s.id)}
-                  style={{ background:"rgba(0,0,0,0.15)", border:"none", borderRadius:6, width:18, height:18,
-                    cursor:"pointer", fontSize:11, color:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>×</button>
-              </div>
-              {/* Text */}
-              <div style={{ flex:1, padding:"0 10px 6px", overflow:"hidden" }}>
-                {isEdit ? (
-                  <textarea
-                    autoFocus
-                    value={s.text}
-                    onChange={e => setStickers(p => p.map(x => x.id===s.id ? {...x,text:e.target.value} : x))}
-                    onBlur={() => { updateSticker(s.id, { text: s.text }); setEditing(null); }}
-                    style={{ width:"100%", height:"100%", background:"transparent", border:"none", outline:"none", resize:"none",
-                      fontSize:13, color:"rgba(0,0,0,0.8)", fontFamily:"inherit", lineHeight:1.5 }}
-                  />
-                ) : (
-                  <div onClick={() => setEditing(s.id)}
-                    style={{ width:"100%", height:"100%", fontSize:13, color:s.text?"rgba(0,0,0,0.8)":"rgba(0,0,0,0.3)",
-                      lineHeight:1.5, whiteSpace:"pre-wrap", wordBreak:"break-word", cursor:"text",
-                      fontStyle: s.text ? "normal" : "italic" }}>
-                    {s.text || "Нажмите чтобы написать..."}
-                  </div>
-                )}
-              </div>
-              {/* Footer: project tag */}
-              {p && (
-                <div style={{ padding:"3px 10px 6px", flexShrink:0, display:"flex", alignItems:"center", gap:5 }}>
-                  <div style={{ width:6, height:6, borderRadius:"50%", background:p.color, flexShrink:0 }}/>
-                  <span style={{ fontSize:9, color:"rgba(0,0,0,0.5)", fontFamily:"monospace", fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.label}</span>
-                </div>
-              )}
-              {/* Resize handle */}
-              <div className="sticker-resize"
-                onMouseDown={e => onMouseDownResize(e, s)}
-                style={{ position:"absolute", bottom:0, right:0, width:16, height:16, cursor:"nwse-resize",
-                  display:"flex", alignItems:"flex-end", justifyContent:"flex-end", padding:"3px" }}>
-                <svg width="8" height="8" viewBox="0 0 8 8"><path d="M0 8L8 0M4 8L8 4" stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
