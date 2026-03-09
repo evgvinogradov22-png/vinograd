@@ -948,11 +948,14 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
 }
 
 function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef}){
-  const [d,setD]=useState({...item,source_links:item.source_links||[]}); const [nl,setNl]=useState("");
+  const [d,setD]=useState({...item,source_links:item.source_links||[]});
   const fileRef=useRef(null);
   const dRefPV=useRef(d);
   const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; dRefPV.current=next; return next; });
   useEffect(()=>{ dRefPV.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(dRefPV.current); },[d]);
+  function setLink(i,v){const a=[...d.source_links];a[i]=v;u("source_links",a);}
+  function removeLink(i){u("source_links",d.source_links.filter((_,j)=>j!==i));}
+  function addLink(){u("source_links",[...d.source_links,""]);}
   return <div style={{display:"flex",flexDirection:"column",gap:11}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="НАЗВАНИЕ"><input value={d.title} onChange={e=>u("title",e.target.value)} style={SI}/></Field>
@@ -963,14 +966,13 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
     </div>
     <Field label="ИСХОДНИКИ (ССЫЛКИ)">
-      {d.source_links.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
-        <a href={l} target="_blank" rel="noreferrer" style={{flex:1,fontSize:11,color:"#a78bfa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</a>
-        <button onClick={()=>u("source_links",d.source_links.filter((_,j)=>j!==i))} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
-      </div>)}
-      <div style={{display:"flex",gap:5}}>
-        <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://..." style={{...SI,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&nl){u("source_links",[...d.source_links,nl]);setNl("");}}}/>
-        <button onClick={()=>{if(nl){u("source_links",[...d.source_links,nl]);setNl("");}}} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 11px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
-      </div>
+      {d.source_links.map((l,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+          <input value={l} onChange={e=>setLink(i,e.target.value)} placeholder="https://..." style={{...SI,flex:1,color:"#a78bfa"}} autoFocus={l===""&&i===d.source_links.length-1}/>
+          <button onClick={()=>removeLink(i)} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:18,lineHeight:1,flexShrink:0,padding:"0 2px"}}>×</button>
+        </div>
+      ))}
+      <button onClick={addLink} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:7,padding:"7px",color:"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit",width:"100%",textAlign:"center"}}>+ Добавить ссылку</button>
     </Field>
     <Field label="КОЛ-ВО ИТОГОВЫХ ВИДЕО"><input type="number" min="1" value={d.video_count||1} onChange={e=>u("video_count",parseInt(e.target.value)||1)} style={{...SI,width:100}}/></Field>
     <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Подробное ТЗ..." style={{...SI,minHeight:100,resize:"vertical",lineHeight:1.5}}/></Field>
@@ -985,6 +987,8 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
     <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
 
     
+  </div>;
+
   </div>;
 }
 

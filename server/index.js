@@ -1697,8 +1697,10 @@ app.post("/api/reel-stats/refresh/:taskId", async (req, res) => {
     if (!task) return res.status(404).json({ error: "Task not found" });
     // data может прийти строкой из БД
     const taskData = typeof task.data === "string" ? JSON.parse(task.data) : (task.data || {});
-    const reelUrl = taskData.reel_url;
-    if (!reelUrl) return res.status(400).json({ error: "reel_url not set", raw: task.data });
+    // Используем url_key из запроса (reel_url, reel_url_1, reel_url_2 ...) или дефолт reel_url
+    const urlKey = req.body?.url_key || "reel_url";
+    const reelUrl = taskData[urlKey];
+    if (!reelUrl) return res.status(400).json({ error: `reel_url not set for key: ${urlKey}`, available_keys: Object.keys(taskData).filter(k=>k.startsWith("reel_url")) });
 
     const stats = await fetchReelStats(reelUrl);
     const id = uuidv4();
