@@ -39,7 +39,7 @@ async function xhrUpload(file, onProgress) {
     body: JSON.stringify({ name: file.name, type: file.type || "application/octet-stream" })
   });
   if (!presignRes.ok) throw new Error("Ошибка получения URL: " + presignRes.status);
-  const { presignedUrl, url } = await presignRes.json();
+  const { presignedUrl, url, key } = await presignRes.json();
 
   // Step 2: upload directly to R2 with progress
   return new Promise((resolve, reject) => {
@@ -47,7 +47,7 @@ async function xhrUpload(file, onProgress) {
     xhr.upload.onprogress = ev => { if (ev.lengthComputable) onProgress(Math.round(ev.loaded/ev.total*100)); };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(url);
+        resolve({ url, key }); // return both for building download links
       } else { reject(new Error("Ошибка загрузки: " + xhr.status)); }
     };
     xhr.onerror = () => reject(new Error("Ошибка сети"));
@@ -72,6 +72,20 @@ function UploadProgress({progress, fileName}) {
 
 
 const genId = () => Math.random().toString(36).slice(2,9);
+
+// ── Direct download via presigned R2 URL (bypasses Railway completely) ────────
+async function triggerDownload(key, name) {
+  if (!key) return;
+  try {
+    const r = await fetch(`/api/download-url?key=${encodeURIComponent(key)}&name=${encodeURIComponent(name||"file")}`);
+    if (!r.ok) throw new Error(r.status);
+    const { url } = await r.json();
+    const a = document.createElement("a");
+    a.href = url; a.download = name || "file"; a.target = "_blank";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  } catch(e) { alert("Ошибка скачивания: " + e.message); }
+}
+
 
 // ── TzField — textarea with clickable links preview ──────────────────────────
 function TzField({value, onChange, placeholder, label, minHeight=100}) {
@@ -421,11 +435,11 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
                       <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
                         <span style={{fontSize:14}}>{fileIcon}</span>
                         <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
-                        <a href={m.furl&&m.furl.includes("s3.")
-                            ? `/api/download?key=${encodeURIComponent(m.furl.split("/vinogradov/")[1]?"vinogradov/"+m.furl.split("/vinogradov/")[1]:"")}&name=${encodeURIComponent(m.fname||"file")}`
-                            : m.furl}
-                          target="_blank" rel="noreferrer" download={m.fname||"file"}
-                          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>↓</a>
+                        <button onClick={()=>{
+                            const key = m.furl&&m.furl.includes("/vinogradov/") ? "vinogradov/"+m.furl.split("/vinogradov/")[1] : null;
+                            triggerDownload(key, m.fname||"file");
+                          }}
+                          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,border:"none",cursor:"pointer"}}>↓</button>
                       </div>
                     );
                   })()}
@@ -864,8 +878,9 @@ function FinalFileOrLink({d,u,fileRef}){
         const f=e.target.files[0]; if(!f) return;
         setUploading(true); setUploadProgress(0); u("final_file_name",f.name); u("final_file_url","");
         try{
-          const url = await xhrUpload(f, p=>setUploadProgress(p));
+          const {url, key} = await xhrUpload(f, p=>setUploadProgress(p));
           u("final_file_url", url);
+          u("final_file_key", key);
         }catch(e){alert("Ошибка: "+e.message);}
         setUploading(false); e.target.value="";
       }}/>
@@ -877,12 +892,8 @@ function FinalFileOrLink({d,u,fileRef}){
                 <span>🎬</span>
                 <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
                 {d.final_file_url
-                  ? <a
-                      href={d.final_file_url&&d.final_file_url.includes("s3.")
-                        ? `/api/download?key=${encodeURIComponent("vinogradov/"+d.final_file_url.split("/vinogradov/")[1])}&name=${encodeURIComponent(d.final_file_name||"file")}`
-                        : d.final_file_url}
-                      target="_blank" rel="noreferrer" download={d.final_file_name||"file"}
-                      style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
+                  ? <button onClick={()=>triggerDownload(d.final_file_key, d.final_file_name||"file")}
+                      style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer"}}>↓ Скачать</button>
                   : <span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
                 <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
               </div>
@@ -913,8 +924,8 @@ function SourceInputs({d, u}){
     for (const f of files) {
       try {
         setUploading(true); setUploadProgress(0); setUploadingName(f.name);
-        const dlurl = await xhrUpload(f, p=>setUploadProgress(p));
-        const newSources = [...sources, {name:f.name, url:dlurl}];
+        const {url: dlurl, key: dlkey} = await xhrUpload(f, p=>setUploadProgress(p));
+        const newSources = [...sources, {name:f.name, url:dlurl, key:dlkey}];
         u("sources", newSources);
         if (newSources.length === 1) { u("source_name", f.name); u("source_url", dlurl); }
       } catch(e) { setUploadErr(e.message); }
@@ -937,12 +948,8 @@ function SourceInputs({d, u}){
       <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:7,padding:"6px 10px",marginBottom:5}}>
         <span>{s.url&&s.url.startsWith("http")?"🔗":"📁"}</span>
         <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
-        {s.url&&<a
-          href={s.url&&s.url.includes("s3.")
-            ? `/api/download?key=${encodeURIComponent("vinogradov/"+s.url.split("/vinogradov/")[1])}&name=${encodeURIComponent(s.name||"file")}`
-            : s.url}
-          target="_blank" rel="noreferrer" download={s.name||"file"}
-          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none"}}>↓</a>}
+        {s.url&&<button onClick={()=>triggerDownload(s.key, s.name||"file")}
+          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,border:"none",cursor:"pointer"}}>↓</button>}
         <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
       </div>
     ))}
@@ -1062,8 +1069,8 @@ function SlideImageUpload({slide,idx,onUploaded}){
     const f=e.target.files[0]; if(!f) return;
     setLoading(true);
     try{
-      const url = await xhrUpload(f, ()=>{});
-      onUploaded(url, f.name);
+      const {url, key} = await xhrUpload(f, ()=>{});
+      onUploaded(url, f.name, key);
     }catch(err){alert("Ошибка: "+err.message);}
     setLoading(false); e.target.value="";
   }
@@ -1183,8 +1190,9 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
         const f=e.target.files[0]; if(!f) return;
         u("file_name",f.name); setUploading(true); setUploadProgress(0);
         try {
-          const url = await xhrUpload(f, p=>setUploadProgress(p));
+          const {url, key} = await xhrUpload(f, p=>setUploadProgress(p));
           u("file_url", url);
+          u("file_key", key);
         } catch(err) { alert("Ошибка загрузки: "+err.message); }
         setUploading(false);
       }}/>
@@ -1200,7 +1208,7 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       {!uploading&&d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.file_name}</span>
-            {d.file_url&&<a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>⬇ Скачать</a>}
+            {d.file_url&&<a href="#" onClick={e=>{e.preventDefault();triggerDownload(d.file_key, d.file_name||"file");}} style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>⬇ Скачать</a>}
             <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
           </div>
         :!uploading&&<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
@@ -3296,6 +3304,7 @@ function MainApp({currentUser, onLogout}){
       hashtags:     item.hashtags     ?? "",
       file_name:    item.file_name    ?? "",
       file_url:     item.file_url     ?? "",
+      file_key:     item.file_key     ?? "",
       brief:        item.brief        ?? "",
       script:       item.script       ?? "",
       location:     item.location     ?? "",

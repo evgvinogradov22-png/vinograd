@@ -686,6 +686,24 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка загрузки: " + e.message }); }
 });
 
+// Download URL — returns presigned URL as JSON so client can download directly (no Railway bottleneck)
+app.get("/api/download-url", async (req, res) => {
+  const { key, name } = req.query;
+  if (!key) return res.status(400).json({ error: "key required" });
+  try {
+    const fname = name || key.split("/").pop() || "file";
+    const isAudio = /voice_|\.(webm|ogg|mp3|m4a|wav)$/i.test(fname);
+    const cmd = new GetObjectCommand({
+      Bucket: R2_BUCKET, Key: key,
+      ResponseContentDisposition: isAudio
+        ? `inline; filename*=UTF-8''${encodeURIComponent(fname)}`
+        : `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`,
+    });
+    const url = await getSignedUrl(r2, cmd, { expiresIn: 3600 });
+    res.json({ url });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Download — redirect to presigned R2 URL with attachment header
 app.get("/api/download", async (req, res) => {
   const { key, name } = req.query;
