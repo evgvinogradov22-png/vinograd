@@ -256,46 +256,70 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
     }).catch(e => { setErr("Ошибка: " + e.message); setUploading(false); });
   }
 
-  // ── Voice recording ──────────────────────────────────────────────────────────
+  // ── Voice recording (rewritten for reliability) ──────────────────────────────
   async function startRec() {
     if (recording || !taskId || taskId === "undefined") return;
+    setErr("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
-      const mr = new MediaRecorder(stream, { mimeType });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      // Pick best supported format
+      const mimeType = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/ogg","audio/mp4"]
+        .find(t => MediaRecorder.isTypeSupported(t)) || "";
+      const mrOpts = mimeType ? { mimeType } : {};
+      const mr = new MediaRecorder(stream, mrOpts);
       recChunksRef.current = [];
-      mr.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data); };
-      mr.onstop = async () => {
+      mr.addEventListener("dataavailable", e => {
+        if (e.data && e.data.size > 0) recChunksRef.current.push(e.data);
+      });
+      mr.addEventListener("stop", async () => {
         stream.getTracks().forEach(t => t.stop());
-        clearInterval(recTimerRef.current); setRecSec(0);
-        const blob = new Blob(recChunksRef.current, { type: mimeType });
-        const fname = "voice_" + Date.now() + ".webm";
+        clearInterval(recTimerRef.current);
+        setRecSec(0);
+        await new Promise(r => setTimeout(r, 100)); // let last chunk arrive
+        const chunks = recChunksRef.current;
+        if (!chunks.length) { setErr("Нет данных записи — разрешите микрофон"); setUploading(false); return; }
+        const actualType = mr.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunks, { type: actualType });
+        if (blob.size < 50) { setErr("Запись пустая, попробуйте ещё раз"); setUploading(false); return; }
+        const ext = actualType.includes("ogg") ? "ogg" : actualType.includes("mp4") ? "mp4" : "webm";
+        const fname = "voice_" + Date.now() + "." + ext;
         setUploading(true); setUploadName("🎙️ Отправляю...");
         try {
-          // Upload voice via server (reliable, handles audio/webm content-type fix)
           const fd2 = new FormData();
-          fd2.append("file", new File([blob], fname, { type: mimeType }));
+          // Force audio content type so server stores correctly
+          const audioType = actualType.startsWith("audio/") ? actualType : "audio/webm";
+          fd2.append("file", new File([blob], fname, { type: audioType }));
           const putRes = await fetch("/api/upload", { method:"POST", body: fd2 });
+          if (!putRes.ok) { const t=await putRes.text(); throw new Error("Upload error " + putRes.status + ": " + t); }
           const upD = await putRes.json();
           const dlurl = upD.url || "";
-          if (dlurl) {
-            const msgR = await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"",file_url:dlurl,file_name:fname}) });
-            if (msgR.ok) {
-              const m=await msgR.json();
-              setMsgs(p=>[...p,{id:m.id||genId(),user:m.user_id||myId,text:"",ts:m.created_at||Date.now(),fname,furl:dlurl,isVoice:true,voiceBlob:blob}]);
-              setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
-            }
-          }
-        } catch(e2) { setErr("Ошибка записи: " + e2.message); }
+          if (!dlurl) throw new Error("Нет URL от сервера");
+          const msgR = await fetch(`/api/chat/${taskId}`, {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({user_id:myId, text:"", file_url:dlurl, file_name:fname})
+          });
+          if (!msgR.ok) throw new Error("Chat save error " + msgR.status);
+          const m = await msgR.json();
+          setMsgs(p => [...p, {id:m.id||genId(), user:m.user_id||myId, text:"", ts:m.created_at||Date.now(), fname, furl:dlurl, isVoice:true}]);
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 80);
+        } catch(e2) { setErr("Ошибка: " + e2.message); }
         setUploading(false); setUploadName("");
-      };
-      mr.start();
-      mediaRecRef.current = mr; setRecording(true); setRecSec(0);
-      recTimerRef.current = setInterval(() => setRecSec(s => s+1), 1000);
-    } catch(e) { setErr("Микрофон недоступен: " + e.message); }
+      });
+      mr.addEventListener("error", e => { setErr("Ошибка записи: " + e.message); setRecording(false); });
+      mr.start(100); // flush every 100ms
+      mediaRecRef.current = mr;
+      setRecording(true); setRecSec(0);
+      recTimerRef.current = setInterval(() => setRecSec(s => s + 1), 1000);
+    } catch(e) {
+      setErr("Микрофон: " + e.message);
+    }
   }
   function stopRec() {
-    if (mediaRecRef.current && recording) { mediaRecRef.current.stop(); setRecording(false); }
+    if (mediaRecRef.current && mediaRecRef.current.state !== "inactive") {
+      mediaRecRef.current.requestData(); // flush any remaining data
+      mediaRecRef.current.stop();
+    }
+    setRecording(false);
   }
   async function transcribeMsg(msgId, furl, fname) {
     setMsgs(p => p.map(m => m.id===msgId ? {...m, transcribing:true} : m));
@@ -383,7 +407,10 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
                       <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
                         <span style={{fontSize:14}}>{fileIcon}</span>
                         <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
-                        <a href={m.furl} target="_blank" rel="noreferrer"
+                        <a href={m.furl&&m.furl.includes("s3.")
+                            ? `/api/download?key=${encodeURIComponent(m.furl.split("/vinogradov/")[1]?"vinogradov/"+m.furl.split("/vinogradov/")[1]:"")}&name=${encodeURIComponent(m.fname||"file")}`
+                            : m.furl}
+                          target="_blank" rel="noreferrer" download={m.fname||"file"}
                           style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none"}}>↓</a>
                       </div>
                     );
@@ -836,7 +863,12 @@ function FinalFileOrLink({d,u,fileRef}){
                 <span>🎬</span>
                 <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
                 {d.final_file_url
-                  ? <a href={d.final_file_url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
+                  ? <a
+                      href={d.final_file_url&&d.final_file_url.includes("s3.")
+                        ? `/api/download?key=${encodeURIComponent("vinogradov/"+d.final_file_url.split("/vinogradov/")[1])}&name=${encodeURIComponent(d.final_file_name||"file")}`
+                        : d.final_file_url}
+                      target="_blank" rel="noreferrer" download={d.final_file_name||"file"}
+                      style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none"}}>↓ Скачать</a>
                   : <span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
                 <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
               </div>
@@ -891,7 +923,12 @@ function SourceInputs({d, u}){
       <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:7,padding:"6px 10px",marginBottom:5}}>
         <span>{s.url&&s.url.startsWith("http")?"🔗":"📁"}</span>
         <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
-        {s.url&&<a href={s.url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none"}}>↓</a>}
+        {s.url&&<a
+          href={s.url&&s.url.includes("s3.")
+            ? `/api/download?key=${encodeURIComponent("vinogradov/"+s.url.split("/vinogradov/")[1])}&name=${encodeURIComponent(s.name||"file")}`
+            : s.url}
+          target="_blank" rel="noreferrer" download={s.name||"file"}
+          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none"}}>↓</a>}
         <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
       </div>
     ))}
@@ -956,20 +993,7 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
     <SourceInputs d={d} u={u}/>
     
     <TzField label="ТЗ ДЛЯ МОНТАЖЁРА" value={d.tz} onChange={v=>u("tz",v)} placeholder="Описание задачи..." minHeight={55}/>
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-        <span style={LB}>ТРАНСКРИПЦИЯ (Whisper AI)</span>
-        <Btn onClick={transcribe} disabled={tr||(!d.source_name&&!(d.sources&&d.sources.length))} color="#7c3aed">{tr?"⏳ Транскрибирую...":"🎙️ Транскрибировать"}</Btn>
-      </div>
-      <textarea value={d.transcript} onChange={e=>u("transcript",e.target.value)} placeholder="Загрузите исходник и нажмите кнопку..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/>
-    </div>
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-        <span style={LB}>ИДЕИ ДЛЯ БИРОЛОВ (GPT-4)</span>
-        <Btn onClick={genBirolls} disabled={gb||!d.transcript} color="#10b981">{gb?"⏳ Генерирую...":"✨ Сгенерировать"}</Btn>
-      </div>
-      <textarea value={d.birolls} onChange={e=>u("birolls",e.target.value)} placeholder="Появятся после транскрипции..." style={{...SI,minHeight:90,resize:"vertical",fontFamily:"monospace",fontSize:11}}/>
-    </div>
+
     <FinalFileOrLink d={d} u={u} fileRef={fileRef}/>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
       <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
@@ -1001,15 +1025,7 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Field label="ДЕДЛАЙН"><input type="date" value={d.post_deadline||""} onChange={e=>u("post_deadline",e.target.value)} style={SI}/></Field>
     </div>
-    <Field label="ИСХОДНИКИ (ССЫЛКИ)">
-      {d.source_links.map((l,i)=>(
-        <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-          <input value={l} onChange={e=>setLink(i,e.target.value)} placeholder="https://..." style={{...SI,flex:1,color:"#a78bfa"}} autoFocus={l===""&&i===d.source_links.length-1}/>
-          <button onClick={()=>removeLink(i)} style={{background:"transparent",border:"none",color:"#4b5563",cursor:"pointer",fontSize:18,lineHeight:1,flexShrink:0,padding:"0 2px"}}>×</button>
-        </div>
-      ))}
-      <button onClick={addLink} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:7,padding:"7px",color:"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit",width:"100%",textAlign:"center"}}>+ Добавить ссылку</button>
-    </Field>
+
     <Field label="КОЛ-ВО ИТОГОВЫХ ВИДЕО"><input type="number" min="1" value={d.video_count||1} onChange={e=>u("video_count",parseInt(e.target.value)||1)} style={{...SI,width:100}}/></Field>
     <TzField label="ТЗ ДЛЯ МОНТАЖЁРА" value={d.tz} onChange={v=>u("tz",v)} placeholder="Подробное ТЗ..." minHeight={100}/>
     <FinalFileOrLink d={d} u={u} fileRef={fileRef}/>

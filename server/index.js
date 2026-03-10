@@ -667,9 +667,14 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const origName = req.file.originalname;
     // Keep original filename in key (only replace truly unsafe chars)
     const safeKey = `vinogradov/${Date.now()}_${origName.replace(/[^\w.\-а-яёА-ЯЁ]/gi, "_")}`;
-    // Fix: multer detects voice_.webm as video/webm, but it's audio — browsers can't play video/webm in <audio>
+    // Fix content type for voice messages — multer may detect audio as video/webm
     let contentType = req.file.mimetype;
-    if (origName.startsWith("voice_") && contentType === "video/webm") contentType = "audio/webm";
+    if (origName.startsWith("voice_")) {
+      // Always treat voice_ files as audio regardless of what multer detected
+      if (!contentType.startsWith("audio/")) {
+        contentType = origName.endsWith(".ogg") ? "audio/ogg" : origName.endsWith(".mp4") ? "audio/mp4" : "audio/webm";
+      }
+    }
     await r2.send(new PutObjectCommand({
       Bucket:      R2_BUCKET,
       Key:         safeKey,
