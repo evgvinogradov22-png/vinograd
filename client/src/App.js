@@ -818,7 +818,7 @@ function FinalFileOrLink({d,u,fileRef}){
   return <div>
     <span style={LB}>ФИНАЛЬНОЕ ВИДЕО</span>
 
-    {mode==="file"&&<>
+    <>
       <input ref={fRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={async e=>{
         const f=e.target.files[0]; if(!f) return;
         setUploading(true); setUploadProgress(0); u("final_file_name",f.name); u("final_file_url","");
@@ -847,7 +847,7 @@ function FinalFileOrLink({d,u,fileRef}){
             </div>
           : <button onClick={()=>fRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"12px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📤 Загрузить финальное видео</button>
       }
-    </>}
+    </>
   </div>;
 }
 
