@@ -73,16 +73,12 @@ function UploadProgress({progress, fileName}) {
 
 const genId = () => Math.random().toString(36).slice(2,9);
 
-// ── Direct download via presigned R2 URL (bypasses Railway completely) ────────
-async function triggerDownload(key, name) {
+// ── Direct download — works in all browsers including Yandex ─────────────────
+function triggerDownload(key, name) {
   if (!key) return;
-  try {
-    const r = await fetch(`/api/download-url?key=${encodeURIComponent(key)}&name=${encodeURIComponent(name||"file")}`);
-    if (!r.ok) throw new Error(r.status);
-    const { url } = await r.json();
-    // Use window.location for same-tab download — works in all browsers including Yandex
-    window.location.href = url;
-  } catch(e) { alert("Ошибка скачивания: " + e.message); }
+  // Simple redirect through /api/download — Railway does 302 to R2, browser follows
+  const href = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(name||"file")}`;
+  window.open(href, "_blank");
 }
 
 
@@ -434,11 +430,9 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
                       <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
                         <span style={{fontSize:14}}>{fileIcon}</span>
                         <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
-                        <button onClick={()=>{
-                            const key = m.furl&&m.furl.includes("/vinogradov/") ? "vinogradov/"+m.furl.split("/vinogradov/")[1] : null;
-                            triggerDownload(key, m.fname||"file");
-                          }}
-                          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,border:"none",cursor:"pointer"}}>↓</button>
+                        <a href={(()=>{const k=m.furl&&m.furl.includes("/vinogradov/")?"vinogradov/"+m.furl.split("/vinogradov/")[1]:null; return k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(m.fname||"file")}`:m.furl;})()}
+                          target="_blank" rel="noreferrer"
+                          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none",display:"inline-block"}}>↓</a>
                       </div>
                     );
                   })()}
@@ -891,8 +885,10 @@ function FinalFileOrLink({d,u,fileRef}){
                 <span>🎬</span>
                 <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
                 {d.final_file_url
-                  ? <button onClick={()=>triggerDownload(d.final_file_key, d.final_file_name||"file")}
-                      style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer"}}>↓ Скачать</button>
+                  ? <a
+                      href={d.final_file_key ? `/api/download?key=${encodeURIComponent(d.final_file_key)}&name=${encodeURIComponent(d.final_file_name||"file")}` : d.final_file_url}
+                      target="_blank" rel="noreferrer"
+                      style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none",display:"inline-block"}}>↓ Скачать</a>
                   : <span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
                 <button onClick={()=>{u("final_file_name","");u("final_file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:16}}>×</button>
               </div>
@@ -947,8 +943,10 @@ function SourceInputs({d, u}){
       <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:7,padding:"6px 10px",marginBottom:5}}>
         <span>{s.url&&s.url.startsWith("http")?"🔗":"📁"}</span>
         <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
-        {s.url&&<button onClick={()=>triggerDownload(s.key, s.name||"file")}
-          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,border:"none",cursor:"pointer"}}>↓</button>}
+        {s.url&&<a
+          href={s.key ? `/api/download?key=${encodeURIComponent(s.key)}&name=${encodeURIComponent(s.name||"file")}` : s.url}
+          target="_blank" rel="noreferrer"
+          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none",display:"inline-block"}}>↓</a>}
         <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
       </div>
     ))}
@@ -1207,7 +1205,7 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       {!uploading&&d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.file_name}</span>
-            {d.file_url&&<a href="#" onClick={e=>{e.preventDefault();triggerDownload(d.file_key, d.file_name||"file");}} style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>⬇ Скачать</a>}
+            {d.file_url&&<a href={d.file_key ? `/api/download?key=${encodeURIComponent(d.file_key)}&name=${encodeURIComponent(d.file_name||"file")}` : d.file_url} target="_blank" rel="noreferrer" style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>⬇ Скачать</a>}
             <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
           </div>
         :!uploading&&<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
