@@ -89,7 +89,7 @@ function TeamSelect({label,value,onChange,team}){
 }
 
 // ── MiniChat ──────────────────────────────────────────────────────────────────
-function MiniChat({taskId, team, currentUser}){
+function MiniChat({taskId, team, currentUser, embedded=false}){
   const [msgs,     setMsgs]   = useState([]);
   const [text,     setText]   = useState("");
   const [uploading,setUploading] = useState(false); // bool
@@ -290,11 +290,12 @@ function MiniChat({taskId, team, currentUser}){
   const mentionList = (team||[]).filter(m => m.id !== myId && m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0,5);
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:300,background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,position:"relative"}}>
-      <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700,flexShrink:0}}>💬 ЧАТ</div>
+    <div style={{display:"flex",flexDirection:"column",height:embedded?"100%":300,flex:embedded?1:undefined,background:"#0d0d16",border:embedded?"none":"1px solid #1e1e2e",borderRadius:embedded?0:10,position:"relative"}}>
+      {!embedded && <div style={{padding:"6px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#9ca3af",fontFamily:"monospace",fontWeight:700,flexShrink:0}}>💬 ЧАТ</div>}
+      {embedded && <div style={{padding:"8px 12px",borderBottom:"1px solid #1e1e2e",fontSize:9,color:"#4b5563",fontFamily:"monospace",fontWeight:700,letterSpacing:1,flexShrink:0}}>💬 ЧАТ</div>}
 
       {/* messages */}
-      <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,minHeight:0}}>
+      <div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,minHeight:0,justifyContent:"flex-start"}}>
         {msgs.length===0 && <div style={{textAlign:"center",color:"#6b7280",fontSize:10,paddingTop:20}}>Начните обсуждение</div>}
         {msgs.map(m => {
           // ── Log entry ──
@@ -578,18 +579,13 @@ function Modal({title,color,onClose,onSave,onDelete,children,taskId,team,current
 
           {/* Right — chat */}
           {taskId && <div style={{
-            width:320,flexShrink:0,
+            width:360,flexShrink:0,
             borderLeft:"1px solid #1e1e2e",
             display:"flex",flexDirection:"column",
-            background:"#0d0d14",
             borderRadius:"0 0 16px 0",
+            overflow:"hidden",
           }}>
-            <div style={{padding:"8px 12px",borderBottom:"1px solid #1e1e2e",fontSize:10,color:"#4b5563",fontFamily:"monospace",fontWeight:700,letterSpacing:1}}>
-              💬 ЧАТ
-            </div>
-            <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column"}}>
-              <MiniChat taskId={taskId} team={team} currentUser={currentUser}/>
-            </div>
+            <MiniChat taskId={taskId} team={team} currentUser={currentUser} embedded/>
           </div>}
         </div>
       </div>
