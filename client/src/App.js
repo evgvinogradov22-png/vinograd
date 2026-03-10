@@ -303,13 +303,13 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
             const t = Number(m.ts);
             const timeStr = t > 1000000000 ? new Date(t).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"}) : "";
             const actorName = nm(m.user);
-            return <div key={m.id} style={{display:"flex",alignItems:"center",gap:6,margin:"4px 0",padding:"0 8px"}}>
-              <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
-              <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"center",whiteSpace:"nowrap",maxWidth:"80%"}}>
+            return <div key={m.id} style={{display:"flex",alignItems:"center",gap:4,margin:"4px 0",padding:"0 8px",minWidth:0}}>
+              <div style={{flexShrink:0,width:16,height:1,background:"#1e1e2e"}}/>
+              <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace",textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0,flex:1}}>
                 {timeStr && <span style={{color:"#374151"}}>{timeStr} </span>}
                 <span style={{color:"#6b7280"}}>{m.text}</span>
               </div>
-              <div style={{flex:1,height:1,background:"#1e1e2e"}}/>
+              <div style={{flexShrink:0,width:16,height:1,background:"#1e1e2e"}}/>
             </div>;
           }
           const isMe = m.user === myId;
