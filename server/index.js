@@ -12,7 +12,7 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const { Readable } = require("stream");
 const execFileAsync = promisify(execFile);
-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, PutBucketCorsCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
@@ -37,6 +37,27 @@ const r2 = new S3Client({
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
   },
 });
+
+// Set CORS on R2 bucket to allow direct browser uploads via presigned PUT
+async function ensureR2Cors() {
+  try {
+    await r2.send(new PutBucketCorsCommand({
+      Bucket: R2_BUCKET,
+      CORSConfiguration: {
+        CORSRules: [{
+          AllowedOrigins: ["*"],
+          AllowedMethods: ["GET", "PUT", "HEAD"],
+          AllowedHeaders: ["*"],
+          ExposeHeaders: ["ETag"],
+          MaxAgeSeconds: 3600,
+        }]
+      }
+    }));
+    console.log("✅ R2 CORS configured");
+  } catch(e) { console.warn("⚠️ R2 CORS setup failed (may need manual config):", e.message); }
+}
+ensureR2Cors();
+
 const R2_BUCKET = process.env.R2_BUCKET || "contentflow-files";
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || "";
 
@@ -618,7 +639,26 @@ ${preview}${link}`;
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
-// FILE UPLOAD → R2
+// PRESIGNED UPLOAD URL — client uploads directly to R2, bypassing server
+// ════════════════════════════════════════════════════════════════════════════════
+app.post("/api/presign-upload", async (req, res) => {
+  try {
+    const { name, type } = req.body;
+    if (!name) return res.status(400).json({ error: "name required" });
+    const origName = name;
+    let contentType = type || "application/octet-stream";
+    // Fix audio/webm for voice messages
+    if (origName.startsWith("voice_") && contentType === "video/webm") contentType = "audio/webm";
+    const safeKey = `vinogradov/${Date.now()}_${origName.replace(/[^\w.\-а-яёА-ЯЁ]/gi, "_")}`;
+    const cmd = new PutObjectCommand({ Bucket: R2_BUCKET, Key: safeKey, ContentType: contentType });
+    const presignedUrl = await getSignedUrl(r2, cmd, { expiresIn: 3600 });
+    const publicUrl = `${R2_PUBLIC_URL}/${safeKey}`;
+    res.json({ presignedUrl, url: publicUrl, key: safeKey });
+  } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// FILE UPLOAD → R2 (fallback proxy — used for voice blobs that can't use presigned)
 // ════════════════════════════════════════════════════════════════════════════════
 
 app.post("/api/upload", upload.single("file"), async (req, res) => {

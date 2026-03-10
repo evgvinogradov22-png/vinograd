@@ -30,22 +30,30 @@ const WDAYS  = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 const AVATAR_COLORS = ["#ef4444","#3b82f6","#ec4899","#10b981","#f59e0b","#8b5cf6","#06b6d4","#f97316"];
 
 
-// ── XHR upload with progress ──────────────────────────────────────────────────
-function xhrUpload(file, onProgress) {
+// ── XHR upload with progress — direct to R2 via presigned URL ────────────────
+async function xhrUpload(file, onProgress) {
+  // Step 1: get presigned URL from server
+  const presignRes = await fetch("/api/presign-upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: file.name, type: file.type || "application/octet-stream" })
+  });
+  if (!presignRes.ok) throw new Error("Ошибка получения URL: " + presignRes.status);
+  const { presignedUrl, url } = await presignRes.json();
+
+  // Step 2: upload directly to R2 with progress
   return new Promise((resolve, reject) => {
-    const fd = new FormData(); fd.append("file", file);
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = ev => { if (ev.lengthComputable) onProgress(Math.round(ev.loaded/ev.total*100)); };
     xhr.onload = () => {
-      if (xhr.status === 200) {
-        const up = JSON.parse(xhr.responseText);
-        // Use direct R2 URL if available, fallback to download proxy
-        resolve(up.url || (up.key ? `/api/download?key=${encodeURIComponent(up.key)}&name=${encodeURIComponent(file.name)}` : ""));
-      } else { reject(new Error("Ошибка " + xhr.status)); }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(url);
+      } else { reject(new Error("Ошибка загрузки: " + xhr.status)); }
     };
     xhr.onerror = () => reject(new Error("Ошибка сети"));
-    xhr.open("POST", "/api/upload");
-    xhr.send(fd);
+    xhr.open("PUT", presignedUrl);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.send(file);
   });
 }
 
@@ -64,6 +72,40 @@ function UploadProgress({progress, fileName}) {
 
 
 const genId = () => Math.random().toString(36).slice(2,9);
+
+// ── TzField — textarea with clickable links preview ──────────────────────────
+function TzField({value, onChange, placeholder, label, minHeight=100}) {
+  const [editing, setEditing] = React.useState(false);
+  function renderWithLinks(text) {
+    if (!text) return <span style={{color:"#4b5563",fontSize:11}}>{placeholder}</span>;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) =>
+      urlRegex.test(part)
+        ? <a key={i} href={part} target="_blank" rel="noreferrer"
+            style={{color:"#06b6d4",wordBreak:"break-all",textDecoration:"underline"}}
+            onClick={e=>e.stopPropagation()}>{part}</a>
+        : <span key={i} style={{whiteSpace:"pre-wrap"}}>{part}</span>
+    );
+  }
+  return <Field label={label}>
+    {editing
+      ? <textarea
+          autoFocus
+          value={value||""}
+          onChange={e=>onChange(e.target.value)}
+          onBlur={()=>setEditing(false)}
+          placeholder={placeholder}
+          style={{...SI,minHeight,resize:"vertical",lineHeight:1.5}}
+        />
+      : <div
+          onClick={()=>setEditing(true)}
+          style={{...SI,minHeight,lineHeight:1.5,cursor:"text",whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:12,color:"#f0eee8"}}
+        >{renderWithLinks(value)}</div>
+    }
+  </Field>;
+}
+
 const dim=(y,m)=>new Date(y,m+1,0).getDate();
 const fd=(y,m)=>{const d=new Date(y,m,1).getDay();return d===0?6:d-1;};
 
@@ -165,30 +207,29 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
     setUploadPct(0);
     setUploadName(f.name);
 
-    const fd = new FormData();
-    fd.append("file", f);
+    // Get presigned URL then upload directly to R2
+    fetch("/api/presign-upload", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ name: f.name, type: f.type || "application/octet-stream" })
+    }).then(r => r.json()).then(({ presignedUrl, url: fileUrl }) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", presignedUrl);
+      xhr.setRequestHeader("Content-Type", f.type || "application/octet-stream");
 
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload");
-
-    xhr.upload.onprogress = (ev) => {
-      if (ev.lengthComputable) {
-        setUploadPct(Math.round((ev.loaded / ev.total) * 90));
-      }
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable) {
+          setUploadPct(Math.round((ev.loaded / ev.total) * 90));
+        }
     };
 
     xhr.onload = async () => {
-      if (xhr.status !== 200) {
+      if (xhr.status < 200 || xhr.status >= 300) {
         setErr("Ошибка загрузки: " + xhr.statusText);
         setUploading(false);
         uploadNext(files, i + 1);
         return;
       }
-      let upData;
-      try { upData = JSON.parse(xhr.responseText); } catch(e) { setErr("Ошибка ответа сервера"); setUploading(false); return; }
-      const dlurl = upData.url || (upData.key
-        ? `/api/download?key=${encodeURIComponent(upData.key)}&name=${encodeURIComponent(f.name)}`
-        : "");
+      const dlurl = fileUrl;
       setUploadPct(95);
       try {
         const msgR = await fetch(`/api/chat/${taskId}`, {
@@ -211,7 +252,8 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
       uploadNext(files, i + 1);
     };
 
-    xhr.send(fd);
+    xhr.send(f);
+    }).catch(e => { setErr("Ошибка: " + e.message); setUploading(false); });
   }
 
   // ── Voice recording ──────────────────────────────────────────────────────────
@@ -230,12 +272,15 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
         const fname = "voice_" + Date.now() + ".webm";
         setUploading(true); setUploadName("🎙️ Отправляю...");
         try {
-          const fd2 = new FormData();
-          fd2.append("file", new File([blob], fname, { type: blob.type }));
-          const up = await fetch("/api/upload", { method:"POST", body:fd2 });
-          if (up.ok) {
-            const upD = await up.json();
-            const dlurl = upD.url || (upD.key ? `/api/download?key=${encodeURIComponent(upD.key)}&name=${encodeURIComponent(fname)}` : "");
+          // Upload voice directly to R2 via presigned URL
+          const presignRes = await fetch("/api/presign-upload", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ name: fname, type: mimeType })
+          });
+          if (!presignRes.ok) throw new Error("presign failed");
+          const { presignedUrl, url: dlurl } = await presignRes.json();
+          const putRes = await fetch(presignedUrl, { method:"PUT", headers:{"Content-Type": mimeType}, body: blob });
+          if (putRes.ok) {
             const msgR = await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"",file_url:dlurl,file_name:fname}) });
             if (msgR.ok) {
               const m=await msgR.json();
@@ -774,17 +819,11 @@ function FinalFileOrLink({d,u,fileRef}){
   const [uploading,setUploading]=useState(false);
   const [uploadProgress,setUploadProgress]=useState(0);
   return <div>
-    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-      <span style={LB}>ФИНАЛЬНОЕ ВИДЕО</span>
-      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
-        <button onClick={()=>setMode("link")} style={{background:mode==="link"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="link"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>🔗 Ссылка</button>
-        <button onClick={()=>setMode("file")} style={{background:mode==="file"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="file"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>📁 Файл</button>
-      </div>
+    <span style={LB}>ФИНАЛЬНОЕ ВИДЕО</span>
+    {/* Link input always visible */}
+    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+      <input value={d.final_link||""} onChange={e=>u("final_link",e.target.value)} placeholder="ссылка на Google Drive / Яндекс Диск..." style={{...SI,flex:1}}/>
     </div>
-    {mode==="link"&&<div style={{display:"flex",gap:6,alignItems:"center"}}>
-      <input value={d.final_link||""} onChange={e=>u("final_link",e.target.value)} placeholder="https://drive.google.com/..." style={{...SI,flex:1}}/>
-      {d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"5px 12px",borderRadius:6,textDecoration:"none"}}>↓ Открыть</a>}
-    </div>}
     {mode==="file"&&<>
       <input ref={fRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={async e=>{
         const f=e.target.files[0]; if(!f) return;
@@ -862,32 +901,29 @@ function SourceInputs({d, u}){
   }
 
   return <div>
-    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-      <span style={LB}>ИСХОДНИК (ВИДЕО)</span>
-      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
-        <button onClick={()=>setMode("file")} style={{background:mode==="file"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="file"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>📁 Файл</button>
-        <button onClick={()=>setMode("link")} style={{background:mode==="link"?"#374151":"transparent",border:"1px solid #2d2d44",borderRadius:5,padding:"2px 9px",color:mode==="link"?"#f0eee8":"#9ca3af",cursor:"pointer",fontSize:10}}>🔗 Ссылка</button>
-      </div>
-    </div>
+    <span style={LB}>ИСХОДНИК (ВИДЕО)</span>
     {/* Existing sources */}
     {sources.map((s,i)=>(
       <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:7,padding:"6px 10px",marginBottom:5}}>
-        <span>{s.url&&!s.url.startsWith("http")?"📁":"🔗"}</span>
+        <span>{s.url&&s.url.startsWith("http")?"🔗":"📁"}</span>
         <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
         {s.url&&<a href={s.url} target="_blank" rel="noreferrer" style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none"}}>↓</a>}
         <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
       </div>
     ))}
-    {/* Add new */}
-    {mode==="file"&&<>
+    {/* Upload progress */}
+    {uploading&&<UploadProgress progress={uploadProgress} fileName={uploadingName}/>}
+    {uploadErr&&<div style={{fontSize:10,color:"#ef4444",marginTop:4}}>{uploadErr}</div>}
+    {/* Add file */}
+    {!uploading&&<>
       <input ref={fileRef} type="file" accept="video/*,audio/*" multiple style={{display:"none"}} onChange={addFile}/>
-      <button onClick={()=>fileRef.current?.click()} disabled={uploading} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:uploading?"#f59e0b":"#9ca3af",cursor:"pointer",fontSize:12}}>{uploading?"⏳ Загрузка...":"📤 "+ (sources.length?"+ Ещё файл":"Загрузить исходник")}</button>
-      {uploadErr&&<div style={{fontSize:10,color:"#ef4444",marginTop:4}}>{uploadErr}</div>}
+      <button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontSize:12,marginBottom:5}}>{"📤 "+(sources.length?"+ Ещё файл":"Загрузить исходник")}</button>
     </>}
-    {mode==="link"&&<div style={{display:"flex",gap:6,marginTop:4}}>
-      <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="https://drive.google.com/..." onKeyDown={e=>e.key==="Enter"&&addLink()} style={{...SI,flex:1,fontSize:11}}/>
-      <button onClick={addLink} style={{background:"#1e1e35",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 14px",color:"#a78bfa",cursor:"pointer",fontSize:16}}>+</button>
-    </div>}
+    {/* Add link */}
+    <div style={{display:"flex",gap:6}}>
+      <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="или вставьте ссылку..." onKeyDown={e=>e.key==="Enter"&&addLink()} style={{...SI,flex:1,fontSize:11}}/>
+      <button onClick={addLink} disabled={!nl.trim()} style={{background:nl.trim()?"#1e1e35":"#111118",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 14px",color:nl.trim()?"#a78bfa":"#374151",cursor:nl.trim()?"pointer":"default",fontSize:16}}>+</button>
+    </div>
   </div>;
 }
 
@@ -940,7 +976,7 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
     </div>
     <SourceInputs d={d} u={u}/>
     
-    <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Описание задачи..." style={{...SI,minHeight:55,resize:"vertical"}}/></Field>
+    <TzField label="ТЗ ДЛЯ МОНТАЖЁРА" value={d.tz} onChange={v=>u("tz",v)} placeholder="Описание задачи..." minHeight={55}/>
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <span style={LB}>ТРАНСКРИПЦИЯ (Whisper AI)</span>
@@ -996,7 +1032,7 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
       <button onClick={addLink} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:7,padding:"7px",color:"#4b5563",cursor:"pointer",fontSize:11,fontFamily:"inherit",width:"100%",textAlign:"center"}}>+ Добавить ссылку</button>
     </Field>
     <Field label="КОЛ-ВО ИТОГОВЫХ ВИДЕО"><input type="number" min="1" value={d.video_count||1} onChange={e=>u("video_count",parseInt(e.target.value)||1)} style={{...SI,width:100}}/></Field>
-    <Field label="ТЗ ДЛЯ МОНТАЖЁРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Подробное ТЗ..." style={{...SI,minHeight:100,resize:"vertical",lineHeight:1.5}}/></Field>
+    <TzField label="ТЗ ДЛЯ МОНТАЖЁРА" value={d.tz} onChange={v=>u("tz",v)} placeholder="Подробное ТЗ..." minHeight={100}/>
     <FinalFileOrLink d={d} u={u} fileRef={fileRef}/>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
       <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
@@ -1018,10 +1054,9 @@ function SlideImageUpload({slide,idx,onUploaded}){
     const f=e.target.files[0]; if(!f) return;
     setLoading(true);
     try{
-      const fd=new FormData(); fd.append("file",f);
-      const r=await fetch("/api/upload",{method:"POST",body:fd});
-      if(r.ok){const upD=await r.json();const k=upD.key||"";onUploaded(k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upD.url,f.name);}
-    }catch{}
+      const url = await xhrUpload(f, ()=>{});
+      onUploaded(url, f.name);
+    }catch(err){alert("Ошибка: "+err.message);}
     setLoading(false); e.target.value="";
   }
   return <div style={{marginTop:4}}>
@@ -1069,7 +1104,7 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
       <button onClick={()=>u("slides",[...d.slides,{id:genId(),text:"",img:"",img_name:""}])} style={{background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"7px",color:"#9ca3af",cursor:"pointer",fontSize:11,width:"100%"}}>+ Добавить слайд</button>
       
     </Field>
-    <Field label="ТЗ ДЛЯ ДИЗАЙНЕРА"><textarea value={d.tz} onChange={e=>u("tz",e.target.value)} placeholder="Стиль, цвета, шрифты, особенности оформления..." style={{...SI,minHeight:70,resize:"vertical",lineHeight:1.5}}/></Field>
+    <TzField label="ТЗ ДЛЯ ДИЗАЙНЕРА" value={d.tz} onChange={v=>u("tz",v)} placeholder="Стиль, цвета, шрифты, особенности оформления..." minHeight={70}/>
     <Field label="ФИНАЛЬНАЯ ССЫЛКА"><div style={{display:"flex",gap:6,alignItems:"center"}}><input value={d.final_link} onChange={e=>u("final_link",e.target.value)} placeholder="https://..." style={{...SI,flex:1}}/>{d.final_link&&<a href={d.final_link} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#06b6d4",textDecoration:"none",flexShrink:0}}>↓ Открыть</a>}</div></Field>
     <div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:10,padding:"10px 12px"}}>
       <div style={{fontSize:9,color:"#9ca3af",fontFamily:"monospace",marginBottom:8,fontWeight:700}}>УЧАСТНИКИ</div>
@@ -1134,7 +1169,15 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
     </div>
     <Field label="ХЕШТЕГИ"><textarea value={d.hashtags} onChange={e=>u("hashtags",e.target.value)} placeholder="#хештег1 #хештег2" style={{...SI,minHeight:45,resize:"vertical",fontFamily:"monospace",fontSize:11}}/></Field>
     <Field label="ФАЙЛ / МЕДИА">
-      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(!f)return;u("file_name",f.name);setUploading(true);setUploadProgress(0);const fd=new FormData();fd.append("file",f);const xhr=new XMLHttpRequest();xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setUploadProgress(Math.round(ev.loaded/ev.total*100));};xhr.onload=()=>{setUploading(false);if(xhr.status===200){const upD=JSON.parse(xhr.responseText);const k=upD.key||"";u("file_url",k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(f.name)}`:upD.url);}};xhr.onerror=()=>{setUploading(false);alert("Ошибка загрузки");};xhr.open("POST","/api/upload");xhr.send(fd);}}/>
+      <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:"none"}} onChange={async e=>{
+        const f=e.target.files[0]; if(!f) return;
+        u("file_name",f.name); setUploading(true); setUploadProgress(0);
+        try {
+          const url = await xhrUpload(f, p=>setUploadProgress(p));
+          u("file_url", url);
+        } catch(err) { alert("Ошибка загрузки: "+err.message); }
+        setUploading(false);
+      }}/>
       {uploading&&<div style={{background:"#0d0d16",border:"1px solid #1e1e2e",borderRadius:8,padding:"10px 12px"}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <span style={{fontSize:11,color:"#9ca3af"}}>{d.file_name}</span>
