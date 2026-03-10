@@ -12,7 +12,7 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const { Readable } = require("stream");
 const execFileAsync = promisify(execFile);
-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, PutBucketCorsCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, PutBucketCorsCommand, ListObjectsV2Command } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
@@ -707,6 +707,52 @@ app.get("/api/download", async (req, res) => {
     console.error("Download error:", e);
     res.status(500).send("Ошибка: " + e.message);
   }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// DIRECTOR PANEL API
+// ════════════════════════════════════════════════════════════════════════════════
+
+// List all files in R2
+app.get("/api/director/files", async (req, res) => {
+  try {
+    const cmd = new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: "vinogradov/", MaxKeys: 1000 });
+    const data = await r2.send(cmd);
+    const files = (data.Contents || []).map(f => ({
+      key: f.Key,
+      name: f.Key.split("/").pop(),
+      size: f.Size,
+      lastModified: f.LastModified,
+      url: `${R2_PUBLIC_URL}/${f.Key}`,
+    }));
+    res.json(files);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Delete file from R2
+app.delete("/api/director/files", async (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.status(400).json({ error: "key required" });
+  try {
+    await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Get activity logs (chat messages from all tasks, joined with task info)
+app.get("/api/director/logs", async (req, res) => {
+  try {
+    const rows = await pool.query(`
+      SELECT 
+        cm.id, cm.task_id, cm.user_id, cm.text, cm.file_name, cm.file_url, cm.created_at,
+        u.name as user_name, u.role as user_role
+      FROM chat_messages cm
+      LEFT JOIN users u ON u.id::text = cm.user_id::text
+      ORDER BY cm.created_at DESC
+      LIMIT 500
+    `);
+    res.json(rows.rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
