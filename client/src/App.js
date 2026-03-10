@@ -322,7 +322,15 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
   async function transcribeMsg(msgId, furl, fname) {
     setMsgs(p => p.map(m => m.id===msgId ? {...m, transcribing:true} : m));
     try {
-      const rb = await fetch(furl);
+      // Get presigned download URL so server can fetch the file
+      const key = furl && furl.includes("/vinogradov/")
+        ? "vinogradov/" + furl.split("/vinogradov/")[1]
+        : null;
+      const downloadUrl = key
+        ? `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(fname||"voice.webm")}`
+        : furl;
+      const rb = await fetch(downloadUrl);
+      if (!rb.ok) throw new Error("Не удалось получить файл: " + rb.status);
       const blob = await rb.blob();
       const fd = new FormData();
       fd.append("file", new File([blob], fname||"voice.webm", { type: blob.type||"audio/webm" }));
