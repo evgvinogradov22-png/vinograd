@@ -282,22 +282,29 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
       const blob = new Blob(chunks, { type: mimeType });
       setUploading(true); setUploadName("🎙️ Отправляю...");
       try {
-        const fd2 = new FormData();
-        fd2.append("file", new File([blob], fname, { type: "audio/" + ext }));
-        const r1 = await fetch("/api/upload", { method: "POST", body: fd2 });
-        if (!r1.ok) throw new Error("upload " + r1.status);
-        const j1 = await r1.json();
-        if (!j1.url) throw new Error("no url");
-        // store key for playback via /api/download
-        const key = j1.key || ("vinogradov/" + j1.url.split("/vinogradov/")[1]);
-        const playUrl = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(fname)}`;
-        const r2 = await fetch(`/api/chat/${taskId}`, {
+        // Step 1: get presigned URL (fast, just a server call)
+        const ps = await fetch("/api/presign-upload", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: myId, text: "", file_url: j1.url, file_name: fname })
+          body: JSON.stringify({ name: fname, type: "audio/" + ext })
         });
-        if (!r2.ok) throw new Error("chat " + r2.status);
-        const m = await r2.json();
-        setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: "", ts: m.created_at||Date.now(), fname, furl: j1.url, playUrl, isVoice: true }]);
+        if (!ps.ok) throw new Error("presign " + ps.status);
+        const { presignedUrl, url: fileUrl, key } = await ps.json();
+        // Step 2: PUT blob directly to R2 (no Railway bottleneck)
+        const put = await fetch(presignedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "audio/" + ext },
+          body: blob
+        });
+        if (!put.ok) throw new Error("put " + put.status);
+        const playUrl = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(fname)}`;
+        // Step 3: save message
+        const rc = await fetch(`/api/chat/${taskId}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: myId, text: "", file_url: fileUrl, file_name: fname })
+        });
+        if (!rc.ok) throw new Error("chat " + rc.status);
+        const m = await rc.json();
+        setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: "", ts: m.created_at||Date.now(), fname, furl: fileUrl, playUrl, isVoice: true }]);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
       } catch(e) { setErr("Ошибка: " + e.message); }
       setUploading(false); setUploadName("");
