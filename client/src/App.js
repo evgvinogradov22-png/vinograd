@@ -256,70 +256,61 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
     }).catch(e => { setErr("Ошибка: " + e.message); setUploading(false); });
   }
 
-  // ── Voice recording (rewritten for reliability) ──────────────────────────────
+  // ── Voice recording ──────────────────────────────────────────────────────────
   async function startRec() {
-    if (recording || !taskId || taskId === "undefined") return;
+    if (recording) return;
+    if (!taskId || taskId === "undefined") { setErr("Сохраните задачу перед отправкой голосового"); return; }
     setErr("");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      // Pick best supported format
-      const mimeType = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/ogg","audio/mp4"]
-        .find(t => MediaRecorder.isTypeSupported(t)) || "";
-      const mrOpts = mimeType ? { mimeType } : {};
-      const mr = new MediaRecorder(stream, mrOpts);
-      recChunksRef.current = [];
-      mr.addEventListener("dataavailable", e => {
-        if (e.data && e.data.size > 0) recChunksRef.current.push(e.data);
-      });
-      mr.addEventListener("stop", async () => {
-        stream.getTracks().forEach(t => t.stop());
-        clearInterval(recTimerRef.current);
-        setRecSec(0);
-        await new Promise(r => setTimeout(r, 100)); // let last chunk arrive
-        const chunks = recChunksRef.current;
-        if (!chunks.length) { setErr("Нет данных записи — разрешите микрофон"); setUploading(false); return; }
-        const actualType = mr.mimeType || mimeType || "audio/webm";
-        const blob = new Blob(chunks, { type: actualType });
-        if (blob.size < 50) { setErr("Запись пустая, попробуйте ещё раз"); setUploading(false); return; }
-        const ext = actualType.includes("ogg") ? "ogg" : actualType.includes("mp4") ? "mp4" : "webm";
-        const fname = "voice_" + Date.now() + "." + ext;
-        setUploading(true); setUploadName("🎙️ Отправляю...");
-        try {
-          const fd2 = new FormData();
-          // Force audio content type so server stores correctly
-          const audioType = actualType.startsWith("audio/") ? actualType : "audio/webm";
-          fd2.append("file", new File([blob], fname, { type: audioType }));
-          const putRes = await fetch("/api/upload", { method:"POST", body: fd2 });
-          if (!putRes.ok) { const t=await putRes.text(); throw new Error("Upload error " + putRes.status + ": " + t); }
-          const upD = await putRes.json();
-          const dlurl = upD.url || "";
-          if (!dlurl) throw new Error("Нет URL от сервера");
-          const msgR = await fetch(`/api/chat/${taskId}`, {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({user_id:myId, text:"", file_url:dlurl, file_name:fname})
-          });
-          if (!msgR.ok) throw new Error("Chat save error " + msgR.status);
-          const m = await msgR.json();
-          setMsgs(p => [...p, {id:m.id||genId(), user:m.user_id||myId, text:"", ts:m.created_at||Date.now(), fname, furl:dlurl, isVoice:true}]);
-          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 80);
-        } catch(e2) { setErr("Ошибка: " + e2.message); }
-        setUploading(false); setUploadName("");
-      });
-      mr.addEventListener("error", e => { setErr("Ошибка записи: " + e.message); setRecording(false); });
-      mr.start(100); // flush every 100ms
-      mediaRecRef.current = mr;
-      setRecording(true); setRecSec(0);
-      recTimerRef.current = setInterval(() => setRecSec(s => s + 1), 1000);
-    } catch(e) {
-      setErr("Микрофон: " + e.message);
-    }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch(e) { setErr("Нет доступа к микрофону: " + e.message); return; }
+
+    const chunks = [];
+    let mr;
+    try { mr = new MediaRecorder(stream); }
+    catch(e) { stream.getTracks().forEach(t=>t.stop()); setErr("MediaRecorder недоступен"); return; }
+
+    mr.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+    mr.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(recTimerRef.current);
+      setRecording(false); setRecSec(0);
+      if (!chunks.length) { setErr("Запись пустая"); return; }
+      const mimeType = mr.mimeType || "audio/webm";
+      const ext = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "mp4" : "webm";
+      const fname = "voice_" + Date.now() + "." + ext;
+      const blob = new Blob(chunks, { type: mimeType });
+      setUploading(true); setUploadName("🎙️ Отправляю...");
+      try {
+        const fd2 = new FormData();
+        fd2.append("file", new File([blob], fname, { type: "audio/" + ext }));
+        const r1 = await fetch("/api/upload", { method: "POST", body: fd2 });
+        if (!r1.ok) throw new Error("upload " + r1.status);
+        const j1 = await r1.json();
+        if (!j1.url) throw new Error("no url");
+        // store key for playback via /api/download
+        const key = j1.key || ("vinogradov/" + j1.url.split("/vinogradov/")[1]);
+        const playUrl = `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(fname)}`;
+        const r2 = await fetch(`/api/chat/${taskId}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: myId, text: "", file_url: j1.url, file_name: fname })
+        });
+        if (!r2.ok) throw new Error("chat " + r2.status);
+        const m = await r2.json();
+        setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: "", ts: m.created_at||Date.now(), fname, furl: j1.url, playUrl, isVoice: true }]);
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+      } catch(e) { setErr("Ошибка: " + e.message); }
+      setUploading(false); setUploadName("");
+    };
+    mr.start();
+    mediaRecRef.current = mr;
+    setRecording(true); setRecSec(0);
+    recTimerRef.current = setInterval(() => setRecSec(s => s + 1), 1000);
   }
   function stopRec() {
-    if (mediaRecRef.current && mediaRecRef.current.state !== "inactive") {
-      mediaRecRef.current.requestData(); // flush any remaining data
+    if (mediaRecRef.current && mediaRecRef.current.state === "recording") {
       mediaRecRef.current.stop();
     }
-    setRecording(false);
   }
   async function transcribeMsg(msgId, furl, fname) {
     setMsgs(p => p.map(m => m.id===msgId ? {...m, transcribing:true} : m));
@@ -393,16 +384,24 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
                   {m.text && <div style={{fontSize:11,color:"#f0eee8",lineHeight:1.4,wordBreak:"break-word"}}>{m.text.split(/(@[^\s]+)/g).map((p,i)=>p.startsWith("@")?<span key={i} style={{color:"#a78bfa",fontWeight:700}}>{p}</span>:p)}</div>}
                   {m.furl && (()=>{
                     const isVoiceFile = (m.fname||"").match(/\.webm$|\.ogg$|\.mp3$|\.m4a$/i) || m.isVoice;
-                    if (isVoiceFile) return (
+                    if (isVoiceFile) {
+                      // Use /api/download for proper audio streaming headers
+                      const key = m.furl && m.furl.includes("/vinogradov/")
+                        ? "vinogradov/" + m.furl.split("/vinogradov/")[1]
+                        : null;
+                      const audioSrc = m.playUrl || (key
+                        ? `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(m.fname||"voice.webm")}`
+                        : m.furl);
+                      return (
                       <div style={{marginTop:m.text?5:0}}>
-                        <audio controls src={m.furl} style={{width:"100%",height:32,borderRadius:6,accentColor:"#8b5cf6"}}/>
+                        <audio controls src={audioSrc} style={{width:"100%",height:32,borderRadius:6,accentColor:"#8b5cf6"}}/>
                         {m.transcript && <div style={{marginTop:5,fontSize:10,color:"#d1d5db",background:"#ffffff0a",borderRadius:5,padding:"5px 8px",lineHeight:1.4}}>📝 {m.transcript}</div>}
                         {!m.transcript && <button onClick={()=>transcribeMsg(m.id,m.furl,m.fname)} disabled={m.transcribing}
                           style={{marginTop:4,background:"transparent",border:"1px solid #4b5563",borderRadius:5,padding:"2px 8px",color:m.transcribing?"#4b5563":"#9ca3af",cursor:m.transcribing?"not-allowed":"pointer",fontSize:9,fontFamily:"monospace"}}>
                           {m.transcribing?"⏳ Транскрибирую...":"📝 Транскрибировать"}
                         </button>}
                       </div>
-                    );
+                    );}
                     return (
                       <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
                         <span style={{fontSize:14}}>{fileIcon}</span>

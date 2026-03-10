@@ -686,17 +686,22 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка загрузки: " + e.message }); }
 });
 
-// Download — redirect to presigned R2 URL (direct download, bypasses server)
+// Download — redirect to presigned R2 URL with attachment header
 app.get("/api/download", async (req, res) => {
   const { key, name } = req.query;
   if (!key) return res.status(400).send("key required");
   try {
+    const fname = name || key.split("/").pop() || "file";
+    const isAudio = /voice_|\.(webm|ogg|mp3|m4a|wav)$/i.test(fname);
     const cmd = new GetObjectCommand({
       Bucket: R2_BUCKET,
       Key: key,
-      ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name || key.split("/").pop() || "file")}`,
+      // For audio files use inline so <audio> can stream it; for others use attachment
+      ResponseContentDisposition: isAudio
+        ? `inline; filename*=UTF-8''${encodeURIComponent(fname)}`
+        : `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`,
     });
-    const url = await getSignedUrl(r2, cmd, { expiresIn: 3600 }); // 1 hour
+    const url = await getSignedUrl(r2, cmd, { expiresIn: 3600 });
     res.redirect(302, url);
   } catch(e) {
     console.error("Download error:", e);
