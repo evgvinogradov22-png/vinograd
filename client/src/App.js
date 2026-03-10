@@ -39,8 +39,8 @@ function xhrUpload(file, onProgress) {
     xhr.onload = () => {
       if (xhr.status === 200) {
         const up = JSON.parse(xhr.responseText);
-        const k = up.key||"";
-        resolve(k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(file.name)}` : up.url);
+        // Use direct R2 URL if available, fallback to download proxy
+        resolve(up.url || (up.key ? `/api/download?key=${encodeURIComponent(up.key)}&name=${encodeURIComponent(file.name)}` : ""));
       } else { reject(new Error("Ошибка " + xhr.status)); }
     };
     xhr.onerror = () => reject(new Error("Ошибка сети"));
@@ -186,10 +186,9 @@ function MiniChat({taskId, team, currentUser}){
       }
       let upData;
       try { upData = JSON.parse(xhr.responseText); } catch(e) { setErr("Ошибка ответа сервера"); setUploading(false); return; }
-      const key = upData.key || "";
-      const dlurl = key
-        ? `/api/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(f.name)}`
-        : upData.url;
+      const dlurl = upData.url || (upData.key
+        ? `/api/download?key=${encodeURIComponent(upData.key)}&name=${encodeURIComponent(f.name)}`
+        : "");
       setUploadPct(95);
       try {
         const msgR = await fetch(`/api/chat/${taskId}`, {
@@ -236,8 +235,7 @@ function MiniChat({taskId, team, currentUser}){
           const up = await fetch("/api/upload", { method:"POST", body:fd2 });
           if (up.ok) {
             const upD = await up.json();
-            const k = upD.key||"";
-            const dlurl = k ? `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(fname)}` : upD.url;
+            const dlurl = upD.url || (upD.key ? `/api/download?key=${encodeURIComponent(upD.key)}&name=${encodeURIComponent(fname)}` : "");
             const msgR = await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"",file_url:dlurl,file_name:fname}) });
             if (msgR.ok) {
               const m=await msgR.json();
@@ -546,7 +544,7 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay,onToggleSta
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-function Modal({title,color,onClose,onSave,onDelete,children}){
+function Modal({title,color,onClose,onSave,onDelete,children,taskId,team,currentUser}){\
   const [confirmDel,setConfirmDel]=useState(false);
   const onCloseRef=useRef(onClose);
   useEffect(()=>{onCloseRef.current=onClose;},[onClose]);
@@ -557,7 +555,12 @@ function Modal({title,color,onClose,onSave,onDelete,children}){
   },[]);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.87)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-      <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,width:"min(700px,96vw)",maxHeight:"93vh",display:"flex",flexDirection:"column",boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:16,
+        width:"min(1100px,97vw)",height:"min(88vh,860px)",
+        display:"flex",flexDirection:"column",
+        boxShadow:"0 40px 80px rgba(0,0,0,0.8)"}} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
         <div style={{padding:"10px 16px",borderBottom:"1px solid #1e1e2e",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           <div style={{flex:1,fontSize:13,fontWeight:800,color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
           {onDelete&&!confirmDel&&<button onClick={()=>setConfirmDel(true)} title="Удалить" style={{background:"transparent",border:"1px solid #ef444450",borderRadius:7,padding:"5px 10px",color:"#ef4444",cursor:"pointer",fontSize:12}}>🗑</button>}
@@ -565,7 +568,30 @@ function Modal({title,color,onClose,onSave,onDelete,children}){
           {onSave&&<button onClick={onSave} style={{background:`linear-gradient(135deg,${color},${color}bb)`,border:"none",borderRadius:7,padding:"5px 16px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>💾 Сохранить</button>}
           <button onClick={onClose} style={{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:6,width:26,height:26,cursor:"pointer",color:"#9ca3af",fontSize:14,flexShrink:0}}>×</button>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"16px 18px",isolation:"isolate"}}>{children}</div>
+
+        {/* Body: left = form, right = chat */}
+        <div style={{flex:1,display:"flex",minHeight:0}}>
+          {/* Left — form */}
+          <div style={{flex:1,overflowY:"auto",padding:"16px 18px",isolation:"isolate",minWidth:0}}>
+            {children}
+          </div>
+
+          {/* Right — chat */}
+          {taskId && <div style={{
+            width:320,flexShrink:0,
+            borderLeft:"1px solid #1e1e2e",
+            display:"flex",flexDirection:"column",
+            background:"#0d0d14",
+            borderRadius:"0 0 16px 0",
+          }}>
+            <div style={{padding:"8px 12px",borderBottom:"1px solid #1e1e2e",fontSize:10,color:"#4b5563",fontFamily:"monospace",fontWeight:700,letterSpacing:1}}>
+              💬 ЧАТ
+            </div>
+            <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column"}}>
+              <MiniChat taskId={taskId} team={team} currentUser={currentUser}/>
+            </div>
+          </div>}
+        </div>
       </div>
     </div>
   );
@@ -678,7 +704,6 @@ function PreForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.scriptwriter} onChange={v=>u("scriptwriter",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
 
     
   </div>;
@@ -740,7 +765,6 @@ function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFn
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.operator} onChange={v=>u("operator",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
 
     
   </div>;
@@ -943,7 +967,6 @@ function PostReelsForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     {d.status==="done"&&onSendToPub&&<button onClick={()=>onSendToPub(d)} style={{width:"100%",marginTop:4,background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚀 Отправить на публикацию</button>}
     
   </div>;
@@ -986,7 +1009,6 @@ function PostVideoForm({item,onSave,onDelete,onClose,projects,team,currentUser,s
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.editor} onChange={v=>u("editor",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     {d.status==="done"&&onSendToPub&&<button onClick={()=>onSendToPub(d)} style={{width:"100%",marginTop:4,background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚀 Отправить на публикацию</button>}
     
   </div>;
@@ -1060,7 +1082,6 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.designer} onChange={v=>u("designer",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
 
     
   </div>;
@@ -1142,7 +1163,6 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
         <div><div style={{fontSize:9,color:"#10b981",fontFamily:"monospace",marginBottom:4,textAlign:"right"}}>ИСПОЛНИТЕЛЬ ▶</div><TeamSelect label="" value={d.executor||""} onChange={v=>u("executor",v)} team={team}/></div>
       </div>
     </div>
-    <MiniChat taskId={d.id} team={team} currentUser={currentUser}/>
     {d.pub_type!=="carousel"&&<ReelStatsBlock
       taskId={d.id}
       reelUrls={(() => {
@@ -1418,7 +1438,6 @@ function AdminForm({item, onSave, onDelete, onClose, projects, team, currentUser
         placeholder="Подробное описание задачи..."
         style={{...SI, minHeight:90, resize:"vertical", lineHeight:1.5}}/>
     </div>
-    {item?.id && <MiniChat taskId={item.id} team={team} currentUser={currentUser}/>}
     <SaveRow onClose={onClose} onSave={()=>onSave(d)} onDelete={item?.id ? ()=>onDelete(item.id) : undefined}/>
   </div>;
 }
@@ -3438,13 +3457,13 @@ function MainApp({currentUser, onLogout}){
     </div>
 
     {/* MODALS */}
-    {modal?.type==="pre"          &&<Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="prod"         &&<Modal title="Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="post_reels"   &&<Modal title="Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_reels",d)}/></Modal>}
-    {modal?.type==="post_video"   &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_video",d)}/></Modal>}
-    {modal?.type==="post_carousel"&&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} onSendToPub={d=>sendToPub("post_carousel",d)}/></Modal>}
-    {modal?.type==="admin"        &&<Modal title="Административная задача" color="#f97316" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("admin",modal.item.id):undefined}><AdminForm item={modal.item} onSave={d=>save("admin",d)} onDelete={id=>deleteTask("admin",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-    {modal?.type==="pub"          &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
+    {modal?.type==="pre"          &&<Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="prod"         &&<Modal title="Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="post_reels"   &&<Modal title="Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_reels",d)}/></Modal>}
+    {modal?.type==="post_video"   &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_video",d)}/></Modal>}
+    {modal?.type==="post_carousel"&&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PostCarouselForm item={modal.item} onSave={d=>save("post_carousel",d)} onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} onSendToPub={d=>sendToPub("post_carousel",d)}/></Modal>}
+    {modal?.type==="admin"        &&<Modal title="Административная задача" color="#f97316" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("admin",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><AdminForm item={modal.item} onSave={d=>save("admin",d)} onDelete={id=>deleteTask("admin",id)} onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="pub"          &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PubForm          item={modal.item} onSave={d=>save("pub",d)} onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={teamMembers} currentUser={currentUser}/></Modal>}
     </div>{/* /MAIN COLUMN */}
   </div>;
 }
@@ -4120,13 +4139,13 @@ function MobileApp({currentUser,onLogout,stores}){
       </>}
 
       {/* МОДАЛКИ */}
-      {modal?.type==="pre"           &&<Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined}><PreForm           item={modal.item} onSave={d=>save("pre",d)}            onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="prod"          &&<Modal title="Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined}><ProdForm          item={modal.item} onSave={d=>save("prod",d)}           onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="post_reels"    &&<Modal title="Постпродакшн — Рилс"     color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined}><PostReelsForm     item={modal.item} onSave={d=>save("post_reels",d)}     onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_reels",d)}/></Modal>}
-      {modal?.type==="post_video"    &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined}><PostVideoForm     item={modal.item} onSave={d=>save("post_video",d)}     onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_video",d)}/></Modal>}
-      {modal?.type==="post_carousel" &&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined}><PostCarouselForm  item={modal.item} onSave={d=>save("post_carousel",d)}  onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={team} currentUser={currentUser} onSendToPub={d=>sendToPub("post_carousel",d)}/></Modal>}
-      {modal?.type==="admin"         &&<Modal title="Административная задача"  color="#f97316" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("admin",modal.item.id):undefined}><AdminForm          item={modal.item} onSave={d=>save("admin",d)}           onDelete={id=>deleteTask("admin",id)}         onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
-      {modal?.type==="pub"           &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined}><PubForm           item={modal.item} onSave={d=>save("pub",d)}            onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={team} currentUser={currentUser}/></Modal>}
+      {modal?.type==="pre"           &&<Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined} taskId={modal.item?.id} team={team} currentUser={currentUser}><PreForm           item={modal.item} onSave={d=>save("pre",d)}            onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="prod"          &&<Modal title="Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined} taskId={modal.item?.id} team={team} currentUser={currentUser}><ProdForm          item={modal.item} onSave={d=>save("prod",d)}           onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="post_reels"    &&<Modal title="Постпродакшн — Рилс"     color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined} taskId={modal.item?.id} team={team} currentUser={currentUser}><PostReelsForm     item={modal.item} onSave={d=>save("post_reels",d)}     onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_reels",d)}/></Modal>}
+      {modal?.type==="post_video"    &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined} taskId={modal.item?.id} team={team} currentUser={currentUser}><PostVideoForm     item={modal.item} onSave={d=>save("post_video",d)}     onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_video",d)}/></Modal>}
+      {modal?.type==="post_carousel" &&<Modal title="Постпродакшн — Карусель" color="#a78bfa" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_carousel",modal.item.id):undefined} taskId={modal.item?.id} team={team} currentUser={currentUser}><PostCarouselForm  item={modal.item} onSave={d=>save("post_carousel",d)}  onDelete={id=>deleteTask("post_carousel",id)} onClose={close} projects={projects} team={team} currentUser={currentUser} onSendToPub={d=>sendToPub("post_carousel",d)}/></Modal>}
+      {modal?.type==="admin"         &&<Modal title="Административная задача"  color="#f97316" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("admin",modal.item.id):undefined} taskId={modal.item?.id} team={team} currentUser={currentUser}><AdminForm          item={modal.item} onSave={d=>save("admin",d)}           onDelete={id=>deleteTask("admin",id)}         onClose={close} projects={projects} team={team} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+      {modal?.type==="pub"           &&<Modal title="Публикация"               color="#10b981" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pub",modal.item.id):undefined} taskId={modal.item?.id} team={team} currentUser={currentUser}><PubForm           item={modal.item} onSave={d=>save("pub",d)}            onDelete={id=>deleteTask("pub",id)}           onClose={close} saveFnRef={saveFnRef} projects={projects} team={team} currentUser={currentUser}/></Modal>}
     </div>
   );
 }
