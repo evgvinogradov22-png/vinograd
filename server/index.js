@@ -13,6 +13,7 @@ const { promisify } = require("util");
 const { Readable } = require("stream");
 const execFileAsync = promisify(execFile);
 const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
 const server = http.createServer(app);
@@ -637,21 +638,21 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка загрузки: " + e.message }); }
 });
 
-// Download proxy — serve file from R2 through our server so browser can download it
+// Download — redirect to presigned R2 URL (direct download, bypasses server)
 app.get("/api/download", async (req, res) => {
   const { key, name } = req.query;
   if (!key) return res.status(400).send("key required");
   try {
-    const obj = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
-    const fname = name || key.split("/").pop() || "file";
-    res.setHeader("Content-Type",        obj.ContentType || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
-    if (obj.ContentLength) res.setHeader("Content-Length", obj.ContentLength);
-    // Stream body directly to client
-    Readable.fromWeb(obj.Body.transformToWebStream()).pipe(res);
+    const cmd = new GetObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name || key.split("/").pop() || "file")}`,
+    });
+    const url = await getSignedUrl(r2, cmd, { expiresIn: 3600 }); // 1 hour
+    res.redirect(302, url);
   } catch(e) {
     console.error("Download error:", e);
-    if (!res.headersSent) res.status(500).send("Ошибка: " + e.message);
+    res.status(500).send("Ошибка: " + e.message);
   }
 });
 
