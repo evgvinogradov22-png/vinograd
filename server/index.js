@@ -58,6 +58,22 @@ async function ensureR2Cors() {
 }
 ensureR2Cors();
 
+// Clean corrupted source_url values in DB (bug: repeated URL concatenation)
+(async () => {
+  try {
+    const rows = await pool.query(`SELECT id, data FROM tasks WHERE data->>'source_url' LIKE '%https://%https://%'`);
+    for (const row of rows.rows) {
+      const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+      if (data.source_url) {
+        const parts = data.source_url.split("https://");
+        data.source_url = parts.length > 1 ? "https://" + parts[parts.length - 1] : data.source_url;
+        await pool.query(`UPDATE tasks SET data = data || $1::jsonb WHERE id = $2`, [JSON.stringify({source_url: data.source_url}), row.id]);
+      }
+    }
+    if (rows.rows.length > 0) console.log(`✅ Cleaned ${rows.rows.length} corrupted source_url values`);
+  } catch(e) { console.warn("⚠️ URL cleanup failed:", e.message); }
+})();
+
 const R2_BUCKET = process.env.R2_BUCKET || "contentflow-files";
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || "";
 
@@ -704,23 +720,24 @@ app.get("/api/download-url", async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Download — redirect to presigned R2 URL with attachment header
+// Download — proxy file from R2 with proper headers (works in all browsers including Yandex)
 app.get("/api/download", async (req, res) => {
   const { key, name } = req.query;
   if (!key) return res.status(400).send("key required");
   try {
     const fname = name || key.split("/").pop() || "file";
     const isAudio = /voice_|\.(webm|ogg|mp3|m4a|wav)$/i.test(fname);
-    const cmd = new GetObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key,
-      // For audio files use inline so <audio> can stream it; for others use attachment
-      ResponseContentDisposition: isAudio
-        ? `inline; filename*=UTF-8''${encodeURIComponent(fname)}`
-        : `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`,
-    });
-    const url = await getSignedUrl(r2, cmd, { expiresIn: 3600 });
-    res.redirect(302, url);
+    const ext = fname.split(".").pop().toLowerCase();
+    const mimeMap = { mp4:"video/mp4", mov:"video/quicktime", avi:"video/x-msvideo", mkv:"video/x-matroska", webm: isAudio?"audio/webm":"video/webm", ogg:"audio/ogg", mp3:"audio/mpeg", m4a:"audio/mp4", wav:"audio/wav", jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", gif:"image/gif", pdf:"application/pdf" };
+    const mime = mimeMap[ext] || "application/octet-stream";
+    const obj = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Disposition", isAudio
+      ? `inline; filename*=UTF-8''${encodeURIComponent(fname)}`
+      : `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
+    if (obj.ContentLength) res.setHeader("Content-Length", obj.ContentLength);
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    obj.Body.pipe(res);
   } catch(e) {
     console.error("Download error:", e);
     res.status(500).send("Ошибка: " + e.message);
