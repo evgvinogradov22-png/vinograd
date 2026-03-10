@@ -272,15 +272,13 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
         const fname = "voice_" + Date.now() + ".webm";
         setUploading(true); setUploadName("🎙️ Отправляю...");
         try {
-          // Upload voice directly to R2 via presigned URL
-          const presignRes = await fetch("/api/presign-upload", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ name: fname, type: mimeType })
-          });
-          if (!presignRes.ok) throw new Error("presign failed");
-          const { presignedUrl, url: dlurl } = await presignRes.json();
-          const putRes = await fetch(presignedUrl, { method:"PUT", headers:{"Content-Type": mimeType}, body: blob });
-          if (putRes.ok) {
+          // Upload voice via server (reliable, handles audio/webm content-type fix)
+          const fd2 = new FormData();
+          fd2.append("file", new File([blob], fname, { type: mimeType }));
+          const putRes = await fetch("/api/upload", { method:"POST", body: fd2 });
+          const upD = await putRes.json();
+          const dlurl = upD.url || "";
+          if (dlurl) {
             const msgR = await fetch(`/api/chat/${taskId}`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({user_id:myId,text:"",file_url:dlurl,file_name:fname}) });
             if (msgR.ok) {
               const m=await msgR.json();
@@ -813,17 +811,13 @@ function ProdForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFn
 
 // ── FinalFileOrLink — upload file or paste link ──────────────────────────────
 function FinalFileOrLink({d,u,fileRef}){
-  const [mode,setMode]=useState(d.final_file_url?"file":d.final_link?"link":"link");
   const _ownRef=useRef(null);
   const fRef=fileRef||_ownRef;
   const [uploading,setUploading]=useState(false);
   const [uploadProgress,setUploadProgress]=useState(0);
   return <div>
     <span style={LB}>ФИНАЛЬНОЕ ВИДЕО</span>
-    {/* Link input always visible */}
-    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
-      <input value={d.final_link||""} onChange={e=>u("final_link",e.target.value)} placeholder="ссылка на Google Drive / Яндекс Диск..." style={{...SI,flex:1}}/>
-    </div>
+
     {mode==="file"&&<>
       <input ref={fRef} type="file" accept="video/*,audio/*" style={{display:"none"}} onChange={async e=>{
         const f=e.target.files[0]; if(!f) return;
@@ -861,8 +855,6 @@ function FinalFileOrLink({d,u,fileRef}){
 function SourceInputs({d, u}){
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingName, setUploadingName] = useState("");
-  const [mode, setMode] = useState(d.source_url||d.source_name ? "file" : d.source_link ? "link" : "file");
-  const [nl, setNl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState("");
   const fileRef = useRef(null);
@@ -883,14 +875,6 @@ function SourceInputs({d, u}){
       setUploading(false);
     }
     setUploading(false);
-  }
-
-  function addLink() {
-    if (!nl.trim()) return;
-    const newSources = [...sources, {name:nl, url:nl}];
-    u("sources", newSources);
-    if (newSources.length === 1) { u("source_link", nl); }
-    setNl("");
   }
 
   function removeSource(i) {
@@ -919,11 +903,6 @@ function SourceInputs({d, u}){
       <input ref={fileRef} type="file" accept="video/*,audio/*" multiple style={{display:"none"}} onChange={addFile}/>
       <button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"8px",color:"#9ca3af",cursor:"pointer",fontSize:12,marginBottom:5}}>{"📤 "+(sources.length?"+ Ещё файл":"Загрузить исходник")}</button>
     </>}
-    {/* Add link */}
-    <div style={{display:"flex",gap:6}}>
-      <input value={nl} onChange={e=>setNl(e.target.value)} placeholder="или вставьте ссылку..." onKeyDown={e=>e.key==="Enter"&&addLink()} style={{...SI,flex:1,fontSize:11}}/>
-      <button onClick={addLink} disabled={!nl.trim()} style={{background:nl.trim()?"#1e1e35":"#111118",border:"1px solid #3d3d5c",borderRadius:7,padding:"0 14px",color:nl.trim()?"#a78bfa":"#374151",cursor:nl.trim()?"pointer":"default",fontSize:16}}>+</button>
-    </div>
   </div>;
 }
 
