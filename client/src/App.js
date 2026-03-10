@@ -544,7 +544,7 @@ function WeekView({items,onItemClick,onDayClick,projects,onMoveToDay,onToggleSta
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-function Modal({title,color,onClose,onSave,onDelete,children,taskId,team,currentUser}){\
+function Modal({title,color,onClose,onSave,onDelete,children,taskId,team,currentUser}){
   const [confirmDel,setConfirmDel]=useState(false);
   const onCloseRef=useRef(onClose);
   useEffect(()=>{onCloseRef.current=onClose;},[onClose]);
