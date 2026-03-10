@@ -80,9 +80,8 @@ async function triggerDownload(key, name) {
     const r = await fetch(`/api/download-url?key=${encodeURIComponent(key)}&name=${encodeURIComponent(name||"file")}`);
     if (!r.ok) throw new Error(r.status);
     const { url } = await r.json();
-    const a = document.createElement("a");
-    a.href = url; a.download = name || "file"; a.target = "_blank";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    // Use window.location for same-tab download — works in all browsers including Yandex
+    window.location.href = url;
   } catch(e) { alert("Ошибка скачивания: " + e.message); }
 }
 
