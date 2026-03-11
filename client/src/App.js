@@ -11,6 +11,7 @@ const TABS = [
   { id:"post",      label:"Постпродакшн",  color:"#ec4899" },
   { id:"pub",       label:"Публикация",    color:"#10b981" },
   { id:"admin",     label:"Адм. задачи",   color:"#f97316" },
+  { id:"calendar",  label:"Календарь",     color:"#06b6d4" },
   { id:"projects",  label:"Проекты",       color:"#f59e0b" },
   { id:"board",     label:"Доска",         color:"#a78bfa" },
   { id:"summary",   label:"Сводка",        color:"#f97316" },
@@ -73,19 +74,26 @@ function UploadProgress({progress, fileName}) {
 
 const genId = () => Math.random().toString(36).slice(2,9);
 // Extract clean R2 key from any URL format
+function isR2Url(url) {
+  if (!url) return false;
+  if (url.startsWith("http")) {
+    return url.includes("cloudflarestorage.com") || url.includes("r2.dev") || url.includes(".pub.r2.") ||
+      (url.includes("/vinogradov/") && !url.includes("yandex") && !url.includes("google") && !url.includes("drive") && !url.includes("disk") && !url.includes("dropbox"));
+  }
+  return true; // bare key
+}
 function r2key(url) {
-  if (!url) return null;
-  if (!url.startsWith("http")) return url; // already a key
-  // Try to extract vinogradov/filename from URL
+  if (!url || !isR2Url(url)) return null;
+  if (!url.startsWith("http")) return url;
   const m = url.match(/\/vinogradov\/([^?#]+)/);
-  if (m) return "vinogradov/" + m[1];
-  // Fallback: use full path after domain as key
-  try {
-    const u = new URL(url);
-    const path = u.pathname.replace(/^\//, "");
-    if (path) return path;
-  } catch(e) {}
-  return null;
+  return m ? "vinogradov/" + m[1] : null;
+}
+// Build href for any file — R2 files go through /api/download, external links open directly
+function fileHref(url, key, name) {
+  const k = key || r2key(url);
+  if (k) return `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(name||"file")}`;
+  const clean = cleanR2Url(url||"");
+  return clean || "#";
 }
 // Clean corrupted URLs like "м=https://...м=https://...https://real.url"
 function cleanR2Url(url) {
@@ -197,7 +205,7 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
           text:  r.text  || "",
           ts:    r.created_at || Date.now(),
           fname: r.file_name || "",
-          furl:  r.file_url  || "",
+          furl:  cleanR2Url(r.file_url  || ""),
           isLog: r.file_name === "__log__",
         })));
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
@@ -273,7 +281,7 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
         if (!msgR.ok) throw new Error(await msgR.text());
         const m = await msgR.json();
         setUploadPct(100);
-        setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: "", ts: m.created_at||Date.now(), fname: f.name, furl: dlurl }]);
+        setMsgs(p => [...p, { id: m.id||genId(), user: m.user_id||myId, text: "", ts: m.created_at||Date.now(), fname: f.name, furl: cleanR2Url(dlurl||"") }]);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
       } catch(e) { setErr(e.message); }
       setTimeout(() => { setUploading(false); setUploadPct(0); setUploadName(""); uploadNext(files, i + 1); }, 800);
@@ -454,7 +462,7 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
                       <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
                         <span style={{fontSize:14}}>{fileIcon}</span>
                         <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
-                        <a href={(()=>{const k=r2key(m.furl);return k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(m.fname||"file")}`:m.furl;})()}
+                        <a href={fileHref(m.furl, null, m.fname)}
                           target="_blank" rel="noreferrer"
                           style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none",display:"inline-block"}}>↓</a>
                       </div>
@@ -910,7 +918,7 @@ function FinalFileOrLink({d,u,fileRef}){
                 <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
                 {d.final_file_url
                   ? <a
-                      href={(()=>{const k=d.final_file_key||r2key(d.final_file_url);return k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(d.final_file_name||"file")}`:d.final_file_url;})()}
+                      href={fileHref(d.final_file_url, d.final_file_key, d.final_file_name)}
                       target="_blank" rel="noreferrer"
                       style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none",display:"inline-block"}}>↓ Скачать</a>
                   : <span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
@@ -970,9 +978,9 @@ function SourceInputs({d, u}){
         <span>{s.url&&s.url.startsWith("http")?"🔗":"📁"}</span>
         <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
         {s.url&&<a
-          href={(()=>{const k=s.key||r2key(s.url);return k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(s.name||"file")}`:s.url;})()}
+          href={fileHref(s.url, s.key, s.name)}
           target="_blank" rel="noreferrer"
-          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none",display:"inline-block"}}>↓</a>}
+          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none",display:"inline-block"}}>{isR2Url(s.url)?"↓":"🔗"}</a>}
         <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
       </div>
     ))}
@@ -1231,7 +1239,7 @@ function PubForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnR
       {!uploading&&d.file_name
         ?<div style={{background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <span>📎</span><span style={{fontSize:12,color:"#10b981",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.file_name}</span>
-            {d.file_url&&<a href={(()=>{const k=d.file_key||r2key(d.file_url);return k?`/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(d.file_name||"file")}`:d.file_url;})()} target="_blank" rel="noreferrer" style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>⬇ Скачать</a>}
+            {d.file_url&&<a href={fileHref(d.file_url, d.file_key, d.file_name)} target="_blank" rel="noreferrer" style={{background:"#06b6d420",border:"1px solid #06b6d440",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#06b6d4",textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>⬇ Скачать</a>}
             <button onClick={()=>{u("file_name","");u("file_url","");}} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer"}}>×</button>
           </div>
         :!uploading&&<button onClick={()=>fileRef.current?.click()} style={{width:"100%",background:"transparent",border:"1px dashed #2d2d44",borderRadius:8,padding:"10px",color:"#9ca3af",cursor:"pointer",fontSize:12}}>📎 Прикрепить фото / видео</button>}
@@ -2990,6 +2998,208 @@ function PublishedView({items, projects, onOpen, onToggleStar}) {
   </div>;
 }
 
+// ── CalendarView ─────────────────────────────────────────────────────────────
+function CalendarView({projects, preItems, prodItems, postReels, postVideo, postCarousels, pubItems, adminItems, onOpenTask, onNewTask}) {
+  const today = new Date();
+  const [curYear, setCurYear] = useState(today.getFullYear());
+  const [curMonth, setCurMonth] = useState(today.getMonth());
+  const [view, setView] = useState("month"); // month | week
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date(today); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d;
+  });
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [showDayModal, setShowDayModal] = useState(false);
+
+  const typeColor = {pre:"#8b5cf6",prod:"#3b82f6",post_reels:"#ec4899",post_video:"#3b82f6",post_carousel:"#a78bfa",pub:"#10b981",admin:"#f97316"};
+  const typeLabel = {pre:"Сцен",prod:"Съёмка",post_reels:"Рилс",post_video:"Видео",post_carousel:"Карусель",pub:"Публ",admin:"Адм"};
+
+  const allTasks = [
+    ...preItems.map(t=>({...t,_type:"pre",_date:t.deadline})),
+    ...prodItems.map(t=>({...t,_type:"prod",_date:t.shoot_date||t.deadline})),
+    ...postReels.map(t=>({...t,_type:"post_reels",_date:t.post_deadline})),
+    ...postVideo.map(t=>({...t,_type:"post_video",_date:t.post_deadline})),
+    ...postCarousels.map(t=>({...t,_type:"post_carousel",_date:t.post_deadline})),
+    ...pubItems.map(t=>({...t,_type:"pub",_date:t.planned_date})),
+    ...adminItems.map(t=>({...t,_type:"admin",_date:t.deadline})),
+  ].filter(t=>t._date && !t.archived);
+
+  function tasksForDate(dateStr) {
+    return allTasks.filter(t => t._date === dateStr);
+  }
+  function toDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+  function fmtMonthYear(y,m) {
+    return new Date(y,m,1).toLocaleString("ru",{month:"long",year:"numeric"});
+  }
+
+  // Month view
+  function monthDays() {
+    const first = new Date(curYear, curMonth, 1);
+    const last = new Date(curYear, curMonth+1, 0);
+    const startDow = (first.getDay()+6)%7; // Mon=0
+    const days = [];
+    for (let i=0; i<startDow; i++) {
+      const d = new Date(curYear, curMonth, -startDow+i+1);
+      days.push({date:d, cur:false});
+    }
+    for (let i=1; i<=last.getDate(); i++) days.push({date:new Date(curYear,curMonth,i), cur:true});
+    while (days.length % 7 !== 0) {
+      const d = new Date(curYear, curMonth+1, days.length - last.getDate() - startDow + 1);
+      days.push({date:d, cur:false});
+    }
+    return days;
+  }
+
+  // Week view
+  function weekDays() {
+    return Array.from({length:7},(_,i)=>{const d=new Date(weekStart); d.setDate(d.getDate()+i); return d;});
+  }
+  function prevWeek() { const d=new Date(weekStart); d.setDate(d.getDate()-7); setWeekStart(d); }
+  function nextWeek() { const d=new Date(weekStart); d.setDate(d.getDate()+7); setWeekStart(d); }
+
+  const todayStr = toDateStr(today);
+  const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+
+  function DayCell({date, isCurMonth=true, compact=false}) {
+    const ds = toDateStr(date);
+    const tasks = tasksForDate(ds);
+    const isToday = ds === todayStr;
+    const proj = projects;
+    const maxShow = compact ? 3 : 4;
+    return (
+      <div onClick={()=>{setSelectedDay(ds);setShowDayModal(true);}}
+        style={{minHeight:compact?80:110,background:isToday?"#1a1a2e":"#0d0d16",border:"1px solid",borderColor:isToday?"#8b5cf6":"#1e1e2e",borderRadius:8,padding:"6px 7px",cursor:"pointer",opacity:isCurMonth?1:0.35,position:"relative",transition:"background 0.15s"}}
+        onMouseEnter={e=>e.currentTarget.style.background=isToday?"#1e1e38":"#111118"}
+        onMouseLeave={e=>e.currentTarget.style.background=isToday?"#1a1a2e":"#0d0d16"}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{fontSize:13,fontWeight:isToday?800:500,color:isToday?"#8b5cf6":isCurMonth?"#f0eee8":"#4b5563",
+            background:isToday?"#8b5cf620":"transparent",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {date.getDate()}
+          </span>
+          {tasks.length>0&&<span style={{fontSize:9,color:"#4b5563"}}>{tasks.length}</span>}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          {tasks.slice(0,maxShow).map(t=>{
+            const c = typeColor[t._type]||"#6b7280";
+            const p = proj.find(p=>p.id===t.project);
+            return <div key={t.id} onClick={e=>{e.stopPropagation();onOpenTask(t._type,t);}}
+              style={{background:c+"22",borderLeft:"2px solid "+c,borderRadius:"0 4px 4px 0",padding:"2px 5px",fontSize:10,color:c,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer"}}
+              title={t.title||"Без названия"}>
+              {t.title||"Без названия"}
+            </div>;
+          })}
+          {tasks.length>maxShow&&<div style={{fontSize:9,color:"#4b5563",textAlign:"center"}}>+{tasks.length-maxShow} ещё</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // Day detail modal
+  function DayModal() {
+    if (!showDayModal||!selectedDay) return null;
+    const tasks = tasksForDate(selectedDay);
+    const d = new Date(selectedDay+"T12:00:00");
+    const label = d.toLocaleString("ru",{weekday:"long",day:"numeric",month:"long"});
+    return (
+      <div style={{position:"fixed",inset:0,background:"#000a",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowDayModal(false)}>
+        <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:14,padding:20,width:380,maxHeight:"70vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#f0eee8",textTransform:"capitalize"}}>{label}</div>
+            <button onClick={()=>setShowDayModal(false)} style={{background:"transparent",border:"none",color:"#6b7280",cursor:"pointer",fontSize:18}}>×</button>
+          </div>
+          {tasks.length===0&&<div style={{textAlign:"center",color:"#4b5563",padding:"20px 0",fontSize:12}}>Нет задач на этот день</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {tasks.map(t=>{
+              const c = typeColor[t._type]||"#6b7280";
+              const p = projects.find(p=>p.id===t.project);
+              return <div key={t.id} onClick={()=>{onOpenTask(t._type,t);setShowDayModal(false);}}
+                style={{background:c+"15",border:"1px solid "+c+"40",borderRadius:8,padding:"10px 12px",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=c+"25"}
+                onMouseLeave={e=>e.currentTarget.style.background=c+"15"}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontSize:9,background:c+"30",color:c,borderRadius:4,padding:"1px 6px",fontWeight:700}}>{typeLabel[t._type]}</span>
+                  {p&&<span style={{fontSize:9,color:p.color,background:p.color+"20",borderRadius:4,padding:"1px 6px"}}>{p.label}</span>}
+                </div>
+                <div style={{fontSize:13,color:"#f0eee8",fontWeight:600}}>{t.title||"Без названия"}</div>
+              </div>;
+            })}
+          </div>
+          <button onClick={()=>{onNewTask(selectedDay);setShowDayModal(false);}}
+            style={{width:"100%",marginTop:14,background:"linear-gradient(135deg,#8b5cf6,#6d28d9)",border:"none",borderRadius:8,padding:"9px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>
+            + Новая задача на этот день
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{height:"100%",display:"flex",flexDirection:"column",overflow:"hidden",background:"#0a0a0f"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 20px",borderBottom:"1px solid #1e1e2e",flexShrink:0,background:"#0d0d16"}}>
+        {/* View toggle */}
+        <div style={{display:"flex",background:"#16161f",borderRadius:8,padding:2}}>
+          {[["month","Месяц"],["week","Неделя"]].map(([v,l])=>
+            <button key={v} onClick={()=>setView(v)} style={{padding:"4px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:view===v?700:400,background:view===v?"#8b5cf6":"transparent",color:view===v?"#fff":"#6b7280",fontFamily:"inherit"}}>{l}</button>
+          )}
+        </div>
+        {/* Nav */}
+        <button onClick={()=>view==="month"?(curMonth===0?(setCurMonth(11),setCurYear(y=>y-1)):setCurMonth(m=>m-1)):prevWeek()}
+          style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"4px 10px",color:"#9ca3af",cursor:"pointer",fontSize:13}}>‹</button>
+        <div style={{fontSize:14,fontWeight:700,color:"#f0eee8",minWidth:180,textAlign:"center",textTransform:"capitalize"}}>
+          {view==="month" ? fmtMonthYear(curYear,curMonth) : (()=>{const e=new Date(weekStart);e.setDate(e.getDate()+6);return weekStart.toLocaleString("ru",{day:"numeric",month:"short"})+" — "+e.toLocaleString("ru",{day:"numeric",month:"short",year:"numeric"});})()}
+        </div>
+        <button onClick={()=>view==="month"?(curMonth===11?(setCurMonth(0),setCurYear(y=>y+1)):setCurMonth(m=>m+1)):nextWeek()}
+          style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"4px 10px",color:"#9ca3af",cursor:"pointer",fontSize:13}}>›</button>
+        <button onClick={()=>{
+          if(view==="month"){setCurYear(today.getFullYear());setCurMonth(today.getMonth());}
+          else{const d=new Date(today);d.setDate(d.getDate()-d.getDay()+1);d.setHours(0,0,0,0);setWeekStart(d);}
+        }} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"4px 12px",color:"#9ca3af",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>Сегодня</button>
+        <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
+          {Object.entries(typeColor).map(([t,c])=><span key={t} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+            <span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>{typeLabel[t]}
+          </span>)}
+        </div>
+      </div>
+
+      {/* Month view */}
+      {view==="month"&&<div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:6}}>
+          {DOW.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:"#4b5563",fontWeight:700,padding:"4px 0"}}>{d}</div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+          {monthDays().map((d,i)=><DayCell key={i} date={d.date} isCurMonth={d.cur}/>)}
+        </div>
+      </div>}
+
+      {/* Week view */}
+      {view==="week"&&<div style={{flex:1,overflow:"auto",padding:"12px 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+          {weekDays().map((d,i)=>{
+            const ds = toDateStr(d);
+            const isToday = ds===todayStr;
+            return <div key={i}>
+              <div style={{textAlign:"center",marginBottom:6}}>
+                <div style={{fontSize:10,color:"#4b5563",fontWeight:700}}>{DOW[i]}</div>
+                <div style={{fontSize:18,fontWeight:800,color:isToday?"#8b5cf6":"#f0eee8",
+                  background:isToday?"#8b5cf620":"transparent",borderRadius:"50%",width:32,height:32,
+                  display:"flex",alignItems:"center",justifyContent:"center",margin:"2px auto"}}>
+                  {d.getDate()}
+                </div>
+              </div>
+              <DayCell date={d} isCurMonth={true} compact={false}/>
+            </div>;
+          })}
+        </div>
+      </div>}
+
+      <DayModal/>
+    </div>
+  );
+}
+
+
 // ── ProjectsView ─────────────────────────────────────────────────────────────
 function ProjectsView({projects, preItems, prodItems, postReels, postVideo, postCarousels, pubItems, adminItems, onOpenTask}) {
   const [selectedProject, setSelectedProject] = useState(null);
@@ -3684,6 +3894,10 @@ function MainApp({currentUser, onLogout}){
             {tab==="summary"&&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
       {tab==="analytics"&&<AnalyticsView pubItems={pubItems} projects={projects} kpisData={kpis}/>}
       {tab==="board"&&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><IntellectBoard projects={projects} currentUser={currentUser}/></div>}
+      {tab==="calendar"&&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><CalendarView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems||[]} onOpenTask={(type,item)=>openEdit(type,item)} onNewTask={(dateStr)=>{
+        // open new task modal pre-filled with date — default to post_reels
+        setModal({type:"post_reels",item:{...defItem("post_reels"),post_deadline:dateStr}});
+      }}/></div>}
       {tab==="projects"&&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><ProjectsView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} onOpenTask={(type,item)=>openEdit(type,item)}/></div>}
       {tab==="base"&&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
     </div>
@@ -4329,6 +4543,11 @@ function MobileApp({currentUser,onLogout,stores}){
         </div>}
         {tab==="summary"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
           <MSummaryScreen preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} projects={projects} team={team} currentUser={currentUser} onOpen={openEdit}/>
+        </div>}
+        {tab==="calendar"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
+          <CalendarView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems||[]} onOpenTask={(type,item)=>openEdit(type,item)} onNewTask={(dateStr)=>{
+            setModal({type:"post_reels",item:{...defItem("post_reels"),post_deadline:dateStr}});
+          }}/>
         </div>}
         {tab==="base"&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
           <MBaseScreen projects={projects} setProjects={stores.setProjects} teamMembers={team} setTeamMembers={stores.setTeam} currentUser={currentUser}/>
