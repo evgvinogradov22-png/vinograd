@@ -1717,215 +1717,216 @@ function SummaryView({preItems,prodItems,postReels,postVideo,postCarousels,pubIt
 // ── Analytics View ────────────────────────────────────────────────────────────
 // ── ContentPlanView ───────────────────────────────────────────────────────────
 // ── ContentPlanView ───────────────────────────────────────────────────────────
-function ContentPlanView({projects, teamMembers, kpisData={}}) {
+// ── ContentPlanView ───────────────────────────────────────────────────────────
+function ContentPlanView({projects}) {
   const today = new Date();
   const [selYear,  setSelYear]  = useState(today.getFullYear());
   const [selMonth, setSelMonth] = useState(today.getMonth() + 1);
+  const [showPast, setShowPast] = useState(false);
 
-  // rows stored per month key: { [monthKey]: [{id, projId, type, manager, plan, days:{1:n,...}}] }
-  const STORAGE_KEY = `cp_rows_v1`;
+  const STORAGE_KEY = "cp_rows_v2";
   const monthKey = `${selYear}_${selMonth}`;
 
-  const [allRows, setAllRows] = useState(() => {
+  // { [monthKey]: { [projId]: [{id, type, plan, days:{1:n,...}}] } }
+  const [allData, setAllData] = useState(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
   });
 
-  function persistRows(next) {
-    setAllRows(next);
+  function persist(next) {
+    setAllData(next);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
   }
 
-  const rows = allRows[monthKey] || [];
+  function getProj(projId) { return allData[monthKey]?.[projId] || []; }
 
-  function updateRows(newRows) {
-    persistRows({...allRows, [monthKey]: newRows});
+  function addRow(projId) {
+    const rows = getProj(projId);
+    const next = {...allData, [monthKey]: {...(allData[monthKey]||{}), [projId]: [...rows, {id: Math.random().toString(36).slice(2,9), type:"Рилс", plan:"", days:{}}]}};
+    persist(next);
   }
 
-  function addRow() {
-    const newRow = {
-      id: Math.random().toString(36).slice(2,9),
-      projId: projects[0]?.id || "",
-      type: "Рилс",
-      manager: "",
-      plan: "",
-      days: {}
-    };
-    updateRows([...rows, newRow]);
+  function deleteRow(projId, rowId) {
+    const rows = getProj(projId).filter(r => r.id !== rowId);
+    persist({...allData, [monthKey]: {...(allData[monthKey]||{}), [projId]: rows}});
   }
 
-  function deleteRow(id) {
-    updateRows(rows.filter(r => r.id !== id));
+  function updateRow(projId, rowId, field, value) {
+    const rows = getProj(projId).map(r => r.id === rowId ? {...r, [field]: value} : r);
+    persist({...allData, [monthKey]: {...(allData[monthKey]||{}), [projId]: rows}});
   }
 
-  function updateRow(id, field, value) {
-    updateRows(rows.map(r => r.id === id ? {...r, [field]: value} : r));
-  }
-
-  function updateDay(id, day, value) {
+  function updateDay(projId, rowId, day, value) {
     const num = parseInt(value) || 0;
-    updateRows(rows.map(r => r.id === id ? {...r, days: {...r.days, [day]: num || undefined}} : r));
+    const rows = getProj(projId).map(r => {
+      if (r.id !== rowId) return r;
+      const days = {...r.days};
+      if (num > 0) days[day] = num; else delete days[day];
+      return {...r, days};
+    });
+    persist({...allData, [monthKey]: {...(allData[monthKey]||{}), [projId]: rows}});
   }
 
-  // Days in selected month
   const daysInMonth = new Date(selYear, selMonth, 0).getDate();
-  const dayNums = Array.from({length: daysInMonth}, (_, i) => i + 1);
+  const allDays = Array.from({length: daysInMonth}, (_, i) => i + 1);
   const todayDay = (today.getFullYear()===selYear && today.getMonth()+1===selMonth) ? today.getDate() : null;
 
-  const MONTH_NAMES = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  // Past days = before today in current month, hide unless showPast
+  const visibleDays = allDays.filter(d => showPast || !todayDay || d >= Math.max(1, todayDay - 2));
 
-  function prevMonth() { if (selMonth===1){setSelMonth(12);setSelYear(y=>y-1);}else setSelMonth(m=>m-1); }
-  function nextMonth() { if (selMonth===12){setSelMonth(1);setSelYear(y=>y+1);}else setSelMonth(m=>m+1); }
+  const MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  function prevMonth() { if(selMonth===1){setSelMonth(12);setSelYear(y=>y-1);}else setSelMonth(m=>m-1); }
+  function nextMonth() { if(selMonth===12){setSelMonth(1);setSelYear(y=>y+1);}else setSelMonth(m=>m+1); }
 
-  // Totals
-  const totalFact = rows.reduce((s,r) => s + Object.values(r.days||{}).reduce((a,v)=>a+(v||0),0), 0);
-  const totalPlan = rows.reduce((s,r) => s + (parseInt(r.plan)||0), 0);
-  const totalByDay = {};
-  rows.forEach(r => { Object.entries(r.days||{}).forEach(([d,v])=>{ totalByDay[d]=(totalByDay[d]||0)+(v||0); }); });
-
-  // Group rows by project for display
-  const projOrder = projects.filter(p=>!p.archived).map(p=>p.id);
-  const sortedRows = [...rows].sort((a,b) => projOrder.indexOf(a.projId)-projOrder.indexOf(b.projId));
+  const activeProjects = projects.filter(p => !p.archived);
 
   const TH = {background:"#111118",color:"#6b7280",fontSize:9,fontFamily:"monospace",fontWeight:700,
     padding:"6px 5px",borderRight:"1px solid #1e1e2e",borderBottom:"2px solid #2d2d44",
-    textAlign:"center",whiteSpace:"nowrap",position:"sticky",top:0,zIndex:2,userSelect:"none"};
-  const TD = {padding:"4px 5px",borderRight:"1px solid #0d0d16",borderBottom:"1px solid #0d0d16",
+    textAlign:"center",whiteSpace:"nowrap",position:"sticky",top:0,zIndex:2};
+  const TD = {padding:"4px 5px",borderRight:"1px solid #0d0d16",borderBottom:"1px solid #111118",
     fontSize:11,textAlign:"center",whiteSpace:"nowrap",verticalAlign:"middle"};
 
-  // Group by project for section headers
-  let lastProjId = null;
+  // no spinner on number inputs
+  const noSpinner = {MozAppearance:"textfield",WebkitAppearance:"none"};
 
   return (
     <div style={{height:"100%",display:"flex",flexDirection:"column",background:"#0a0a0f",overflow:"hidden"}}>
       {/* Header */}
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 20px",borderBottom:"1px solid #1e1e2e",flexShrink:0,background:"#0d0d16",flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 20px",borderBottom:"1px solid #1e1e2e",flexShrink:0,background:"#0d0d16"}}>
         <div style={{fontSize:14,fontWeight:800,color:"#f0eee8"}}>📋 Контент-план</div>
         <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:12}}>
           <button onClick={prevMonth} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"3px 10px",color:"#9ca3af",cursor:"pointer",fontSize:14}}>‹</button>
-          <div style={{fontSize:13,fontWeight:700,color:"#f0eee8",minWidth:140,textAlign:"center"}}>{MONTH_NAMES[selMonth-1]} {selYear}</div>
+          <div style={{fontSize:13,fontWeight:700,color:"#f0eee8",minWidth:140,textAlign:"center"}}>{MONTHS[selMonth-1]} {selYear}</div>
           <button onClick={nextMonth} style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"3px 10px",color:"#9ca3af",cursor:"pointer",fontSize:14}}>›</button>
         </div>
         <button onClick={()=>{setSelYear(today.getFullYear());setSelMonth(today.getMonth()+1);}}
           style={{background:"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"3px 10px",color:"#9ca3af",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>Сегодня</button>
-        <button onClick={addRow}
-          style={{marginLeft:"auto",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:8,padding:"6px 16px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>+ Строка</button>
+        <button onClick={()=>setShowPast(p=>!p)}
+          style={{background:showPast?"#ffffff15":"transparent",border:"1px solid #2d2d44",borderRadius:6,padding:"3px 12px",color:showPast?"#f0eee8":"#6b7280",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>
+          {showPast ? "Скрыть прошлое" : "Показать всё"}
+        </button>
       </div>
 
       {/* Table */}
       <div style={{flex:1,overflow:"auto"}}>
-        {rows.length === 0 ? (
-          <div style={{textAlign:"center",padding:"60px 20px",color:"#4b5563"}}>
-            <div style={{fontSize:32,marginBottom:12}}>📋</div>
-            <div style={{fontSize:14,marginBottom:8,color:"#6b7280"}}>Контент-план пустой</div>
-            <div style={{fontSize:12,marginBottom:20}}>Нажмите «+ Строка» чтобы добавить строку</div>
-            <button onClick={addRow} style={{background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:8,padding:"8px 20px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>+ Добавить строку</button>
-          </div>
-        ) : (
-          <table style={{borderCollapse:"collapse",width:"max-content",minWidth:"100%"}}>
-            <thead>
-              <tr>
-                <th style={{...TH,textAlign:"left",minWidth:170,position:"sticky",left:0,zIndex:3,background:"#111118"}}>Проект</th>
-                <th style={{...TH,minWidth:90}}>Тип контента</th>
-                <th style={{...TH,minWidth:80}}>Менеджер</th>
-                <th style={{...TH,minWidth:50,color:"#f0eee8"}}>KPI%</th>
-                <th style={{...TH,minWidth:45,color:"#f0eee8"}}>Факт</th>
-                <th style={{...TH,minWidth:45,color:"#8b5cf6"}}>План</th>
-                {dayNums.map(d=>(
-                  <th key={d} style={{...TH,minWidth:28,
-                    color:d===todayDay?"#8b5cf6":"#4b5563",
-                    background:d===todayDay?"#1a1a2e":"#111118"}}>
-                    {String(d).padStart(2,"0")}
-                  </th>
-                ))}
-                <th style={{...TH,minWidth:28}}/>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((r,i) => {
-                const proj = projects.find(p=>p.id===r.projId);
-                const fact = Object.values(r.days||{}).reduce((a,v)=>a+(v||0),0);
-                const plan = parseInt(r.plan)||0;
-                const kpiPct = plan>0 ? Math.round(fact/plan*100) : null;
-                const kpiColor = kpiPct===null?"#4b5563":kpiPct>=100?"#10b981":kpiPct>=60?"#f59e0b":"#ef4444";
-                const isNewProj = r.projId !== lastProjId;
-                lastProjId = r.projId;
-                return (
-                  <tr key={r.id} style={{background:i%2===0?"#0d0d16":"#0a0a14"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#111118"}
-                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#0d0d16":"#0a0a14"}>
-                    {/* Project */}
-                    <td style={{...TD,textAlign:"left",position:"sticky",left:0,background:"inherit",zIndex:1,padding:"4px 10px"}}>
-                      <select value={r.projId} onChange={e=>updateRow(r.id,"projId",e.target.value)}
-                        style={{background:"transparent",border:"none",color:proj?.color||"#9ca3af",fontSize:11,fontWeight:700,cursor:"pointer",outline:"none",fontFamily:"inherit",width:"100%"}}>
-                        {projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id} style={{background:"#111118",color:p.color}}>{p.label}</option>)}
-                      </select>
-                    </td>
-                    {/* Type */}
-                    <td style={{...TD,padding:"2px 4px"}}>
-                      <input value={r.type} onChange={e=>updateRow(r.id,"type",e.target.value)}
-                        style={{background:"transparent",border:"none",color:"#d1d5db",fontSize:11,textAlign:"center",outline:"none",fontFamily:"inherit",width:"100%"}}
-                        placeholder="Рилс"/>
-                    </td>
-                    {/* Manager */}
-                    <td style={{...TD,padding:"2px 4px"}}>
-                      <select value={r.manager||""} onChange={e=>updateRow(r.id,"manager",e.target.value)}
-                        style={{background:"transparent",border:"none",color:"#9ca3af",fontSize:10,cursor:"pointer",outline:"none",fontFamily:"inherit",width:"100%",textAlign:"center"}}>
-                        <option value="" style={{background:"#111118"}}>—</option>
-                        {(teamMembers||[]).map(m=><option key={m.id} value={m.name} style={{background:"#111118"}}>{m.name}</option>)}
-                      </select>
-                    </td>
-                    {/* KPI% */}
-                    <td style={{...TD,color:kpiColor,fontWeight:700}}>{kpiPct!==null?kpiPct+"%":"—"}</td>
-                    {/* Fact (auto) */}
-                    <td style={{...TD,color:"#f0eee8",fontWeight:700}}>{fact}</td>
-                    {/* Plan */}
-                    <td style={{...TD,padding:"2px 3px"}}>
-                      <input type="number" min="0" value={r.plan||""} onChange={e=>updateRow(r.id,"plan",e.target.value)}
-                        style={{background:"transparent",border:"none",color:"#8b5cf6",fontSize:11,fontWeight:700,textAlign:"center",outline:"none",fontFamily:"inherit",width:40}}
-                        placeholder="0"/>
-                    </td>
-                    {/* Day cells */}
-                    {dayNums.map(d=>{
-                      const val = r.days?.[d]||0;
-                      return <td key={d} style={{...TD,padding:"1px 2px",
-                        background:d===todayDay?(i%2===0?"#111128":"#0d0d20"):"inherit"}}>
-                        <input type="number" min="0" value={val||""}
-                          onChange={e=>updateDay(r.id,d,e.target.value)}
-                          style={{width:26,background:"transparent",border:"none",
-                            color:val>0?"#10b981":"#374151",fontSize:10,fontWeight:val>0?700:400,
-                            textAlign:"center",outline:"none",fontFamily:"inherit",padding:0}}
-                          placeholder=""/>
-                      </td>;
-                    })}
-                    {/* Delete */}
-                    <td style={{...TD,padding:"2px"}}>
-                      <button onClick={()=>deleteRow(r.id)}
-                        style={{background:"transparent",border:"none",color:"#374151",cursor:"pointer",fontSize:13,lineHeight:1}}
-                        onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
-                        onMouseLeave={e=>e.currentTarget.style.color="#374151"}>×</button>
-                    </td>
-                  </tr>
-                );
-              })}
+        <table style={{borderCollapse:"collapse",width:"max-content",minWidth:"100%"}}>
+          <thead>
+            <tr>
+              <th style={{...TH,textAlign:"left",minWidth:200,position:"sticky",left:0,zIndex:3}}>Проект / Тип</th>
+              <th style={{...TH,minWidth:50,color:"#f0eee8"}}>KPI%</th>
+              <th style={{...TH,minWidth:42,color:"#d1d5db"}}>Факт</th>
+              <th style={{...TH,minWidth:42,color:"#8b5cf6"}}>План</th>
+              {visibleDays.map(d=>(
+                <th key={d} style={{...TH,minWidth:30,
+                  color:d===todayDay?"#8b5cf6":"#4b5563",
+                  background:d===todayDay?"#1a1a2e":"#111118",
+                  borderBottom:d===todayDay?"2px solid #8b5cf6":"2px solid #2d2d44"}}>
+                  {String(d).padStart(2,"0")}
+                </th>
+              ))}
+              <th style={{...TH,minWidth:24,borderRight:"none"}}/>
+            </tr>
+          </thead>
+          <tbody>
+            {activeProjects.map(proj => {
+              const rows = getProj(proj.id);
+              const projFact = rows.reduce((s,r)=>s+Object.values(r.days||{}).reduce((a,v)=>a+(v||0),0),0);
+              const projPlan = rows.reduce((s,r)=>s+(parseInt(r.plan)||0),0);
+              const projKpi = projPlan>0 ? Math.round(projFact/projPlan*100) : null;
+              const kpiColor = projKpi===null?"#4b5563":projKpi>=100?"#10b981":projKpi>=60?"#f59e0b":"#ef4444";
 
-              {/* Totals */}
-              <tr style={{background:"#111118",borderTop:"2px solid #2d2d44"}}>
-                <td style={{...TD,textAlign:"left",position:"sticky",left:0,background:"#111118",zIndex:1,fontWeight:800,color:"#f0eee8",fontSize:12,padding:"6px 10px"}}>ИТОГО</td>
-                <td style={TD}/><td style={TD}/>
-                <td style={{...TD,color:totalPlan>0?(totalFact>=totalPlan?"#10b981":totalFact/totalPlan>=0.6?"#f59e0b":"#ef4444"):"#4b5563",fontWeight:800}}>
-                  {totalPlan>0?Math.round(totalFact/totalPlan*100)+"%":"—"}
-                </td>
-                <td style={{...TD,color:"#f0eee8",fontWeight:800}}>{totalFact}</td>
-                <td style={{...TD,color:"#8b5cf6",fontWeight:800}}>{totalPlan}</td>
-                {dayNums.map(d=>{const c=totalByDay[d]||0;return(
-                  <td key={d} style={{...TD,color:c>0?"#10b981":"#374151",fontWeight:c>0?800:400,
-                    background:d===todayDay?"#111128":"#111118"}}>{c>0?c:"·"}</td>
-                );})}
-                <td style={TD}/>
-              </tr>
-            </tbody>
-          </table>
-        )}
+              return [
+                /* Project header row */
+                <tr key={`ph_${proj.id}`} style={{background:"#111118"}}>
+                  <td style={{...TD,textAlign:"left",position:"sticky",left:0,background:"#111118",zIndex:1,padding:"6px 12px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:proj.color,flexShrink:0,display:"inline-block"}}/>
+                      <span style={{fontSize:11,fontWeight:800,color:proj.color,fontFamily:"monospace"}}>{proj.label.toUpperCase()}</span>
+                      <button onClick={()=>addRow(proj.id)}
+                        style={{marginLeft:"auto",background:proj.color+"20",border:"1px solid "+proj.color+"40",borderRadius:5,padding:"2px 8px",color:proj.color,cursor:"pointer",fontSize:10,fontWeight:700,fontFamily:"inherit"}}>+ строка</button>
+                    </div>
+                  </td>
+                  <td style={{...TD,color:kpiColor,fontWeight:800,background:"#111118"}}>{projKpi!==null?projKpi+"%":"—"}</td>
+                  <td style={{...TD,color:"#d1d5db",fontWeight:700,background:"#111118"}}>{projFact||""}</td>
+                  <td style={{...TD,color:"#8b5cf6",fontWeight:700,background:"#111118"}}>{projPlan||""}</td>
+                  {visibleDays.map(d=>{
+                    const c=rows.reduce((s,r)=>s+(r.days?.[d]||0),0);
+                    return <td key={d} style={{...TD,background:d===todayDay?"#1a1a2e":"#111118",color:c>0?"#10b981":"#1e1e2e",fontWeight:800}}>{c>0?c:""}</td>;
+                  })}
+                  <td style={{...TD,background:"#111118"}}/>
+                </tr>,
+
+                /* Content rows */
+                ...rows.map((r,i)=>{
+                  const fact = Object.values(r.days||{}).reduce((a,v)=>a+(v||0),0);
+                  const plan = parseInt(r.plan)||0;
+                  const kpi = plan>0?Math.round(fact/plan*100):null;
+                  const rc = kpi===null?"#4b5563":kpi>=100?"#10b981":kpi>=60?"#f59e0b":"#ef4444";
+                  const bg = i%2===0?"#0d0d16":"#0a0a14";
+                  return (
+                    <tr key={r.id} style={{background:bg}}
+                      onMouseEnter={e=>e.currentTarget.style.background="#111118"}
+                      onMouseLeave={e=>e.currentTarget.style.background=bg}>
+                      <td style={{...TD,textAlign:"left",position:"sticky",left:0,background:"inherit",zIndex:1,padding:"3px 12px 3px 28px"}}>
+                        <input value={r.type} onChange={e=>updateRow(proj.id,r.id,"type",e.target.value)}
+                          style={{background:"transparent",border:"none",color:"#9ca3af",fontSize:11,outline:"none",fontFamily:"inherit",width:"100%"}}
+                          placeholder="Тип контента"/>
+                      </td>
+                      <td style={{...TD,color:rc,fontWeight:700}}>{kpi!==null?kpi+"%":"—"}</td>
+                      <td style={{...TD,color:"#d1d5db",fontWeight:700}}>{fact||""}</td>
+                      <td style={{...TD,padding:"2px 3px"}}>
+                        <input value={r.plan||""} onChange={e=>updateRow(proj.id,r.id,"plan",e.target.value)}
+                          style={{...noSpinner,width:36,background:"transparent",border:"none",color:"#8b5cf6",fontSize:11,fontWeight:700,textAlign:"center",outline:"none",fontFamily:"inherit"}}
+                          placeholder="0"/>
+                      </td>
+                      {visibleDays.map(d=>{
+                        const v=r.days?.[d]||0;
+                        return <td key={d} style={{...TD,padding:"1px 2px",background:d===todayDay?(i%2===0?"#111128":"#0d0d20"):"inherit"}}>
+                          <input value={v||""} onChange={e=>updateDay(proj.id,r.id,d,e.target.value)}
+                            style={{...noSpinner,width:26,background:"transparent",border:"none",
+                              color:v>0?"#10b981":"#374151",fontSize:10,fontWeight:v>0?700:400,
+                              textAlign:"center",outline:"none",fontFamily:"inherit"}}
+                            placeholder=""/>
+                        </td>;
+                      })}
+                      <td style={{...TD,padding:"2px"}}>
+                        <button onClick={()=>deleteRow(proj.id,r.id)}
+                          style={{background:"transparent",border:"none",color:"#2d2d44",cursor:"pointer",fontSize:14,lineHeight:1}}
+                          onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
+                          onMouseLeave={e=>e.currentTarget.style.color="#2d2d44"}>×</button>
+                      </td>
+                    </tr>
+                  );
+                }),
+
+                /* Spacer between projects */
+                <tr key={`sp_${proj.id}`}><td colSpan={5+visibleDays.length} style={{height:6,background:"#0a0a0f",borderBottom:"1px solid #1e1e2e"}}/></tr>
+              ];
+            })}
+
+            {/* Grand total */}
+            {(() => {
+              const allRows = activeProjects.flatMap(p=>getProj(p.id));
+              const gFact = allRows.reduce((s,r)=>s+Object.values(r.days||{}).reduce((a,v)=>a+(v||0),0),0);
+              const gPlan = allRows.reduce((s,r)=>s+(parseInt(r.plan)||0),0);
+              const gKpi = gPlan>0?Math.round(gFact/gPlan*100):null;
+              const gKpiColor = gKpi===null?"#4b5563":gKpi>=100?"#10b981":gKpi>=60?"#f59e0b":"#ef4444";
+              const byDay = {};
+              allRows.forEach(r=>Object.entries(r.days||{}).forEach(([d,v])=>{byDay[d]=(byDay[d]||0)+(v||0);}));
+              return (
+                <tr style={{background:"#111118",borderTop:"2px solid #2d2d44"}}>
+                  <td style={{...TD,textAlign:"left",position:"sticky",left:0,background:"#111118",zIndex:1,fontWeight:800,color:"#f0eee8",fontSize:12,padding:"7px 12px"}}>ИТОГО</td>
+                  <td style={{...TD,color:gKpiColor,fontWeight:800,background:"#111118"}}>{gKpi!==null?gKpi+"%":"—"}</td>
+                  <td style={{...TD,color:"#d1d5db",fontWeight:800,background:"#111118"}}>{gFact||""}</td>
+                  <td style={{...TD,color:"#8b5cf6",fontWeight:800,background:"#111118"}}>{gPlan||""}</td>
+                  {visibleDays.map(d=>{const c=byDay[d]||0;return(
+                    <td key={d} style={{...TD,color:c>0?"#10b981":"#374151",fontWeight:c>0?800:400,background:d===todayDay?"#111128":"#111118"}}>{c>0?c:""}</td>
+                  );})}
+                  <td style={{...TD,background:"#111118"}}/>
+                </tr>
+              );
+            })()}
+          </tbody>
+        </table>
       </div>
     </div>
   );
