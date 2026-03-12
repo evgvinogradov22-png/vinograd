@@ -462,8 +462,8 @@ function MiniChat({taskId, team, currentUser, embedded=false}){
                       <div style={{display:"flex",alignItems:"center",gap:7,marginTop:m.text?5:0,background:"#ffffff0a",borderRadius:6,padding:"5px 9px"}}>
                         <span style={{fontSize:14}}>{fileIcon}</span>
                         <span style={{fontSize:11,color:"#d1d5db",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.fname||"файл"}</span>
-                        <a href={fileHref(m.furl, null, m.fname)}
-                          target="_blank" rel="noreferrer"
+                        <a href={cleanR2Url(m.furl||"")||"#"}
+                          target="_blank" rel="noreferrer" download={m.fname||"file"}
                           style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:5,textDecoration:"none",display:"inline-block"}}>↓</a>
                       </div>
                     );
@@ -918,7 +918,7 @@ function FinalFileOrLink({d,u,fileRef}){
                 <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.final_file_name}</span>
                 {d.final_file_url
                   ? <a
-                      href={fileHref(d.final_file_url, d.final_file_key, d.final_file_name)}
+                      href={(()=>{const c=cleanR2Url(d.final_file_url||"");return isR2Url(c)?c:fileHref(d.final_file_url,d.final_file_key,d.final_file_name);})()}
                       target="_blank" rel="noreferrer"
                       style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:5,textDecoration:"none",display:"inline-block"}}>↓ Скачать</a>
                   : <span style={{fontSize:9,color:"#f59e0b"}}>⏳</span>}
@@ -977,10 +977,13 @@ function SourceInputs({d, u}){
       <div key={i} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1a0a",border:"1px solid #10b98130",borderRadius:7,padding:"6px 10px",marginBottom:5}}>
         <span>{s.url&&s.url.startsWith("http")?"🔗":"📁"}</span>
         <span style={{flex:1,fontSize:11,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
-        {s.url&&<a
-          href={fileHref(s.url, s.key, s.name)}
-          target="_blank" rel="noreferrer"
-          style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none",display:"inline-block"}}>{isR2Url(s.url)?"↓":"🔗"}</a>}
+        {s.url&&(()=>{
+          const clean = cleanR2Url(s.url||"");
+          const r2 = isR2Url(clean);
+          return <a href={r2 ? clean : clean} target="_blank" rel="noreferrer"
+            download={r2 ? (s.name||"file") : undefined}
+            style={{flexShrink:0,background:"#06b6d4",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,textDecoration:"none",display:"inline-block"}}>{r2?"↓":"🔗"}</a>;
+        })()}
         <button onClick={()=>removeSource(i)} style={{background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14}}>×</button>
       </div>
     ))}
