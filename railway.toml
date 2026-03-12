@@ -1,12 +1,9 @@
-# cache-bust: 1772819153
 [build]
-builder = "NIXPACKS"
-buildCommand = "cd client && npm install && npm run build && cd ../server && npm install"
-
-[build.nixpacksPlan.phases.setup]
-nixPkgs = ["nodejs_22", "ffmpeg"]
+builder = "nixpacks"
 
 [deploy]
-startCommand = "cd server && node index.js"
-restartPolicyType = "ON_FAILURE"
+startCommand = "npm run start"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
