@@ -1,87 +1,69 @@
-# Бюджет Планнер
-
-Система планирования и учёта личного/бизнес бюджета.
-
-## Возможности
-
-- 📊 **Бюджет** — планирование приходов, расходов, долгов
-- 👥 **Сотрудники** — учёт зарплат с двумя выплатами в месяц
-- 💳 **Кредиты** — отслеживание долгов и ежемесячных платежей
-- 📋 **ДДС** — движение денежных средств (выполненные операции)
-- 📅 **Календарь** — визуальный обзор всех платежей
-- 📈 **Финансовое состояние** — график баланса на месяц
-
-## Технологии
-
-- React 18 + Vite
-- Tailwind CSS
-- Recharts (графики)
-- Express.js (backend)
-- SQLite (база данных)
+# 🍇 Виноград — Production System
 
 ## Деплой на Railway
 
-### 1. Залей код на GitHub
+### Шаг 1 — Добавь папку в репозиторий
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/budget-planner.git
-git push -u origin main
+git add vinogradov/
+git commit -m "add vinogradov project"
+git push
 ```
 
-### 2. Создай проект в Railway
+### Шаг 2 — Создай новый сервис на Railway
 
-1. Зайди на [railway.app](https://railway.app)
-2. **New Project** → **Deploy from GitHub repo**
-3. Выбери репозиторий
-4. Дождись деплоя
+1. Открой [railway.app](https://railway.app) → твой проект
+2. **+ New Service** → **GitHub Repo**
+3. Выбери репозиторий, **Root Directory** = `vinogradov`
+4. Railway сам найдёт `railway.toml` и всё настроит
 
-### 3. Добавь Volume для базы данных (ВАЖНО!)
+### Шаг 3 — Добавь PostgreSQL
 
-Чтобы данные не терялись при передеплое:
+1. В том же проекте Railway: **+ New Service** → **Database** → **PostgreSQL**
+2. Railway автоматически добавит `DATABASE_URL` в переменные
 
-1. В проекте нажми на сервис
-2. **Settings** → **Volumes** → **Add Volume**
-3. Mount Path: `/data`
-4. Нажми **Add**
-5. Railway передеплоит сервис
+### Шаг 4 — Добавь переменные окружения
 
-База данных будет храниться в `/data/budget.db` и сохранится между деплоями.
+В настройках сервиса **vinogradov** → вкладка **Variables**:
 
-### 4. Получи URL
-
-После деплоя Railway даст URL типа:
-`https://budget-planner-production.up.railway.app`
-
-## Локальная разработка
-
-```bash
-# Установка
-npm install
-
-# Запуск frontend (dev server)
-npm run dev
-
-# Запуск backend (в отдельном терминале)
-node server.js
+```
+INVITE_PASSWORD     = твой_код_для_регистрации   (например: vinograd2026)
+R2_ACCOUNT_ID       = 7ff81882f4e5d895f03bb7d791513075
+R2_ACCESS_KEY_ID    = deab66b8abc27bcfef91b38dc1a2f3ec
+R2_SECRET_ACCESS_KEY= 8d05f7e693e8047c1ce72ba1c8fc5bdd6fcb157f0c0214a8606b87cf311a7b71
+R2_BUCKET           = contentflow-files
+R2_PUBLIC_URL       = https://pub-3dd93ace78394e159c4cd843d4a6e876.r2.dev
 ```
 
-## Пароль
+### Шаг 5 — Deploy
 
-Пароль для входа: **1122**
+Railway задеплоит автоматически после push. Первый деплой ~3-5 минут.
 
-Изменить: файл `src/App.jsx`, константа `PASSWORD`
+---
 
-## Структура базы данных
+## Первый вход
 
-SQLite с одной таблицей `data`:
-- `key` — ключ (TEXT, PRIMARY KEY)
-- `value` — JSON данные (TEXT)
-- `updated_at` — время обновления
+1. Открой URL который даст Railway (типа `vinogradov.up.railway.app`)
+2. Нажми **Регистрация**
+3. Введи код приглашения который ты поставил в `INVITE_PASSWORD`
+4. Готово!
 
-## Лицензия
+---
 
-MIT
+## Структура
+
+```
+vinogradov/
+├── server/          — Node.js + Express + WebSocket
+│   ├── index.js     — весь сервер (API + WS + R2)
+│   └── package.json
+├── client/          — React приложение
+│   ├── src/
+│   │   ├── App.js   — главный интерфейс (все вкладки)
+│   │   ├── api.js   — все запросы к серверу
+│   │   └── index.js
+│   └── package.json
+├── railway.toml     — конфиг Railway
+├── Procfile         — команда запуска
+└── package.json     — build скрипт
+```

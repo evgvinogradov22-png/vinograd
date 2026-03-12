@@ -1,28 +1,9 @@
 {
-  "name": "budget-planner",
+  "name": "vinogradov",
   "version": "1.0.0",
-  "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "recharts": "^2.10.0",
-    "lucide-react": "^0.294.0",
-    "express": "^4.18.2",
-    "@libsql/client": "^0.4.0",
-    "cors": "^2.8.5"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.0",
-    "vite": "^5.0.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6"
+    "build": "cd client && npm install && npm run build",
+    "start": "cd server && npm install && node index.js",
+    "install:all": "cd server && npm install && cd ../client && npm install"
   }
 }
