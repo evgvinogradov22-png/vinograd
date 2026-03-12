@@ -745,6 +745,71 @@ app.get("/api/download", async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
+// CONTENT PLAN API
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Ensure table exists
+async function ensureContentPlanTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_plan (
+      id TEXT PRIMARY KEY,
+      proj_id TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      type TEXT NOT NULL DEFAULT '',
+      days JSONB NOT NULL DEFAULT '{}',
+      sort_order INTEGER DEFAULT 0,
+      created_at BIGINT DEFAULT 0
+    )
+  `);
+}
+ensureContentPlanTable().catch(e => console.warn("content_plan table:", e.message));
+
+// GET all rows for a month
+app.get("/api/content-plan", async (req, res) => {
+  const { year, month } = req.query;
+  if (!year || !month) return res.status(400).json({ error: "year and month required" });
+  try {
+    const rows = await pool.query(
+      "SELECT * FROM content_plan WHERE year=$1 AND month=$2 ORDER BY proj_id, sort_order, created_at",
+      [parseInt(year), parseInt(month)]
+    );
+    res.json(rows.rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST create row
+app.post("/api/content-plan", async (req, res) => {
+  const { id, proj_id, year, month, type, days, sort_order } = req.body;
+  if (!id || !proj_id) return res.status(400).json({ error: "id and proj_id required" });
+  try {
+    await pool.query(
+      "INSERT INTO content_plan(id,proj_id,year,month,type,days,sort_order,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET type=EXCLUDED.type, days=EXCLUDED.days, sort_order=EXCLUDED.sort_order",
+      [id, proj_id, parseInt(year), parseInt(month), type||"", JSON.stringify(days||{}), sort_order||0, Date.now()]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH update row (type or days)
+app.patch("/api/content-plan/:id", async (req, res) => {
+  const { type, days } = req.body;
+  try {
+    if (type !== undefined) await pool.query("UPDATE content_plan SET type=$1 WHERE id=$2", [type, req.params.id]);
+    if (days !== undefined) await pool.query("UPDATE content_plan SET days=$1 WHERE id=$2", [JSON.stringify(days), req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE row
+app.delete("/api/content-plan/:id", async (req, res) => {
+  try {
+    await pool.query("DELETE FROM content_plan WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
 // DIRECTOR PANEL API
 // ════════════════════════════════════════════════════════════════════════════════
 
