@@ -3756,13 +3756,15 @@ function MainApp({currentUser, onLogout}){
   async function save(type,d){
     try {
       const { id, project, status, title, chat, archived, ...rest } = d;
-      const payload = { type, title: title||"", project_id: project||"none", status, archived: archived||false, data: rest };
+      if (!project) { alert("Выберите проект перед сохранением"); return; }
+      const payload = { type, title: title||"", project_id: project, status, archived: archived||false, data: rest };
       // Check if item exists already
       const [getter, setter] = useTaskStore(type, stores);
       const exists = getter.find(x=>x.id===id);
       if (exists) {
         await api.updateTask(id, payload);
-        setter(p=>p.map(x=>x.id===id?d:x));
+        // Preserve chat from store — don't overwrite with potentially empty d.chat
+        setter(p=>p.map(x=>x.id===id?{...d, chat: x.chat||d.chat||[]}:x));
       } else {
         const saved = await api.createTask({...payload, id});
         const expanded = {id:saved.id,project:saved.project_id,status:saved.status,title:saved.title,archived:saved.archived||false,chat:[],...(saved.data||{})};
