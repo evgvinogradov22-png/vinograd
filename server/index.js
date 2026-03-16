@@ -769,13 +769,9 @@ ensureContentPlanTable().catch(e => console.warn("content_plan table:", e.messag
 async function cleanCorruptedUrls() {
   try {
     // Fix chat_messages with м= prefix
-    await pool.query(`
-      UPDATE chat_messages
-      SET file_url = REGEXP_REPLACE(file_url, '^.*?(https://)', '\1')
-      WHERE file_url LIKE '%=%https://%'
-         OR file_url LIKE '%м=%'
-         OR file_url LIKE '%=%http%'
-    `);
+    await pool.query(
+      "UPDATE chat_messages SET file_url = REGEXP_REPLACE(file_url, '^.*?(https://)', '\\1') WHERE file_url LIKE '%=%https://%' OR file_url LIKE '%м=%' OR file_url LIKE '%=%http%'"
+    );
     // Fix tasks data JSON field — file_url and final_file_url inside data jsonb
     const tasks = await pool.query("SELECT id, data FROM tasks WHERE data::text LIKE '%м=%' OR data::text LIKE '%=%https://%'");
     for (const row of tasks.rows) {
