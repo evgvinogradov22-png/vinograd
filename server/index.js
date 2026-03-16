@@ -765,6 +765,46 @@ async function ensureContentPlanTable() {
 }
 ensureContentPlanTable().catch(e => console.warn("content_plan table:", e.message));
 
+// One-time cleanup: fix corrupted file_url values like "м=https://..." in chat_messages and tasks
+async function cleanCorruptedUrls() {
+  try {
+    // Fix chat_messages with м= prefix
+    await pool.query(`
+      UPDATE chat_messages
+      SET file_url = REGEXP_REPLACE(file_url, '^.*?(https://)', '\1')
+      WHERE file_url LIKE '%=%https://%'
+         OR file_url LIKE '%м=%'
+         OR file_url LIKE '%=%http%'
+    `);
+    // Fix tasks data JSON field — file_url and final_file_url inside data jsonb
+    const tasks = await pool.query("SELECT id, data FROM tasks WHERE data::text LIKE '%м=%' OR data::text LIKE '%=%https://%'");
+    for (const row of tasks.rows) {
+      const data = row.data || {};
+      let changed = false;
+      for (const field of ['file_url','final_file_url','source_url']) {
+        if (data[field] && (data[field].includes('м=') || data[field].match(/=https?:\/\//))) {
+          const parts = data[field].split('https://');
+          if (parts.length > 1) { data[field] = 'https://' + parts[parts.length-1]; changed = true; }
+        }
+      }
+      if (data.sources && Array.isArray(data.sources)) {
+        data.sources = data.sources.map(s => {
+          if (s.url && (s.url.includes('м=') || s.url.match(/=https?:\/\//))) {
+            const parts = s.url.split('https://');
+            if (parts.length > 1) { changed = true; return {...s, url: 'https://' + parts[parts.length-1]}; }
+          }
+          return s;
+        });
+      }
+      if (changed) {
+        await pool.query("UPDATE tasks SET data=$1 WHERE id=$2", [JSON.stringify(data), row.id]);
+      }
+    }
+    console.log("✅ URL cleanup done");
+  } catch(e) { console.warn("URL cleanup error:", e.message); }
+}
+cleanCorruptedUrls();
+
 // GET all rows for a month
 app.get("/api/content-plan", async (req, res) => {
   const { year, month } = req.query;

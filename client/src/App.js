@@ -84,17 +84,19 @@ function isR2Url(url) {
   return true; // bare key
 }
 function r2key(url) {
-  if (!url || !isR2Url(url)) return null;
-  if (!url.startsWith("http")) return url;
-  const m = url.match(/\/vinogradov\/([^?#]+)/);
+  if (!url) return null;
+  const clean = url.startsWith("http") ? cleanR2Url(url) : url;
+  if (!isR2Url(clean)) return null;
+  if (!clean.startsWith("http")) return clean;
+  const m = clean.match(/\/vinogradov\/([^?#]+)/);
   return m ? "vinogradov/" + m[1] : null;
 }
 // Build href for any file — R2 files go through /api/download, external links open directly
 function fileHref(url, key, name) {
-  const k = key || r2key(url);
+  const cleanUrl = cleanR2Url(url||"");  // always strip м= and other garbage first
+  const k = key || r2key(cleanUrl);
   if (k) return `/api/download?key=${encodeURIComponent(k)}&name=${encodeURIComponent(name||"file")}`;
-  const clean = cleanR2Url(url||"");
-  return clean || "#";
+  return cleanUrl || "#";
 }
 // Clean corrupted URLs like "м=https://...м=https://...https://real.url"
 function cleanR2Url(url) {
@@ -3756,8 +3758,7 @@ function MainApp({currentUser, onLogout}){
   async function save(type,d){
     try {
       const { id, project, status, title, chat, archived, ...rest } = d;
-      if (!project) { alert("Выберите проект перед сохранением"); return; }
-      const payload = { type, title: title||"", project_id: project, status, archived: archived||false, data: rest };
+      const payload = { type, title: title||"", project_id: project||"none", status, archived: archived||false, data: rest };
       // Check if item exists already
       const [getter, setter] = useTaskStore(type, stores);
       const exists = getter.find(x=>x.id===id);
