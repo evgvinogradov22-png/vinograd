@@ -117,3 +117,5 @@ function FilterBar({pf,setPf,member,setMember,sortBy,setSortBy,projects,team,sho
 
 
 export { Badge, Field, Btn, TeamSelect, UploadProgress, TzField, StatusRow, SaveRow, FilterBar };
+
+export { default as TaskCard } from "./TaskCard";

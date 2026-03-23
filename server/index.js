@@ -117,6 +117,216 @@ const BUILD_PATH = path.join(__dirname, "..", "client", "build");
 if (fs.existsSync(BUILD_PATH)) app.use(express.static(BUILD_PATH));
 
 // ── Init DB ───────────────────────────────────────────────────────────────────
+// ── DB Migrations — each runs exactly once, tracked in db_migrations table ────
+async function runMigrations() {
+  // Create migrations table first
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS db_migrations (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      applied_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  const applied = new Set((await pool.query("SELECT name FROM db_migrations")).rows.map(r => r.name));
+
+  const migrations = [
+    ["001_create_users", `
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        telegram TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        role TEXT NOT NULL DEFAULT 'Оператор',
+        color TEXT NOT NULL DEFAULT '#8b5cf6',
+        password_hash TEXT NOT NULL,
+        telegram_chat_id TEXT DEFAULT '',
+        avatar_url TEXT DEFAULT '',
+        last_active BIGINT DEFAULT 0,
+        note TEXT DEFAULT '',
+        created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+      )
+    `],
+    ["002_create_projects", `
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#8b5cf6',
+        description TEXT DEFAULT '',
+        links JSONB DEFAULT '[]',
+        archived BOOLEAN DEFAULT FALSE,
+        avatar_url TEXT DEFAULT '',
+        pmp_project_id TEXT DEFAULT '',
+        created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+      )
+    `],
+    ["003_create_tasks", `
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        project_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'idea',
+        data JSONB DEFAULT '{}',
+        archived BOOLEAN DEFAULT FALSE,
+        completed_at TEXT DEFAULT '',
+        starred BOOLEAN DEFAULT FALSE,
+        created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+        updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+      )
+    `],
+    ["004_create_chat_messages", `
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        text TEXT DEFAULT '',
+        file_url TEXT DEFAULT '',
+        file_name TEXT DEFAULT '',
+        created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+      )
+    `],
+    ["005_create_notifications", `
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        task_id TEXT DEFAULT '',
+        task_type TEXT DEFAULT '',
+        title TEXT DEFAULT '',
+        body TEXT DEFAULT '',
+        created_at BIGINT DEFAULT 0,
+        read BOOLEAN DEFAULT FALSE
+      )
+    `],
+    ["006_create_analytics_kpi", `
+      CREATE TABLE IF NOT EXISTS analytics_kpi (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        month INT NOT NULL,
+        year INT NOT NULL,
+        kpi INT DEFAULT 0,
+        UNIQUE(project_id, month, year)
+      )
+    `],
+    ["007_create_training", `
+      CREATE TABLE IF NOT EXISTS training (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        url TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        category TEXT DEFAULT 'Другое',
+        created_at BIGINT DEFAULT 0
+      )
+    `],
+    ["008_create_content_plan", `
+      CREATE TABLE IF NOT EXISTS content_plan (
+        id TEXT PRIMARY KEY,
+        proj_id TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        type TEXT NOT NULL DEFAULT '',
+        days JSONB NOT NULL DEFAULT '{}',
+        sort_order INTEGER DEFAULT 0,
+        created_at BIGINT DEFAULT 0
+      )
+    `],
+    ["009_create_indexes", `
+      CREATE INDEX IF NOT EXISTS idx_tasks_type    ON tasks(type);
+      CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_task     ON chat_messages(task_id);
+      CREATE INDEX IF NOT EXISTS idx_notif_user    ON notifications(user_id)
+    `],
+    // Additive columns for existing installs (safe to re-run, IF NOT EXISTS guards)
+    ["010_alter_users_add_cols", `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT DEFAULT '';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT '';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active BIGINT DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS note TEXT DEFAULT ''
+    `],
+    ["011_alter_tasks_add_cols", `
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred BOOLEAN DEFAULT FALSE
+    `],
+    ["012_alter_projects_add_cols", `
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT '';
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS pmp_project_id TEXT DEFAULT ''
+    `],
+  ];
+
+  for (const [name, sql] of migrations) {
+    if (applied.has(name)) continue;
+    try {
+      await pool.query(sql);
+      await pool.query("INSERT INTO db_migrations(name) VALUES($1) ON CONFLICT DO NOTHING", [name]);
+      console.log("✅ Migration:", name);
+    } catch(e) {
+      console.warn("⚠️ Migration failed:", name, e.message);
+    }
+  }
+
+  // Set director role from env
+  const dirTg = process.env.DIRECTOR_TELEGRAM || "";
+  if (dirTg) {
+    const clean = dirTg.replace(/^@/,"").toLowerCase().trim();
+const dirTg = process.env.DIRECTOR_TELEGRAM || "";
+  if (dirTg) {
+    const clean = dirTg.replace(/^@/,"").toLowerCase().trim();
+    await q("UPDATE users SET role='Директор' WHERE LOWER(REPLACE(telegram,'@',''))=$1", [clean]).catch(()=>{});
+    console.log("[DIRECTOR] role set for:", clean);
+  }
+  console.log("✅ Database ready");
+}
+}
+
+runMigrations().catch(e => console.error('Migration error:', e));
+
+// Clean corrupted source_url values in DB (bug: repeated URL concatenation)
+(async () => {
+  try {
+    const rows = await pool.query(`SELECT id, data FROM tasks WHERE data->>'source_url' LIKE '%https://%https://%'`);
+    for (const row of rows.rows) {
+      const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+      if (data.source_url) {
+        const parts = data.source_url.split("https://");
+        data.source_url = parts.length > 1 ? "https://" + parts[parts.length - 1] : data.source_url;
+        await pool.query(`UPDATE tasks SET data = data || $1::jsonb WHERE id = $2`, [JSON.stringify({source_url: data.source_url}), row.id]);
+      }
+    }
+    if (rows.rows.length > 0) console.log(`✅ Cleaned ${rows.rows.length} corrupted source_url values`);
+  } catch(e) { console.warn("⚠️ URL cleanup failed:", e.message); }
+})();
+
+
+// ── Multer (memory) ───────────────────────────────────────────────────────────
+// ── Auth middleware ────────────────────────────────────────────────────────────
+function requireAuth(req, res, next) {
+  // Support both Bearer token and legacy x-user-id header
+  const auth = req.headers["authorization"];
+  const token = auth && auth.startsWith("Bearer ") ? auth.slice(7) : req.headers["x-token"];
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.userId = decoded.id;
+      req.userTelegram = decoded.telegram;
+    } catch(e) {
+      // Invalid token — fall through to x-user-id for backward compat
+    }
+  }
+  // Backward compat: accept x-user-id without token (for existing sessions)
+  if (!req.userId) req.userId = req.headers["x-user-id"] || null;
+  if (!req.userId) return res.status(401).json({ error: "Не авторизован" });
+  next();
+}
+
+// ── Update last_active on every authenticated request ─────────────────────────
+app.use((req, res, next) => {
+  const uid = req.headers["x-user-id"] || req.userId;
+  if (uid) q("UPDATE users SET last_active=$1 WHERE id=$2", [Date.now(), uid]).catch(() => {});
+  next();
+});
+
+// ── Init DB ───────────────────────────────────────────────────────────────────
 async function initDb() {
   // Each statement must be a separate query call for pg
   await pool.query(`
