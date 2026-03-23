@@ -1126,7 +1126,7 @@ function SlideImageUpload({slide,idx,onUploaded}){
 }
 
 function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUser,saveFnRef,onSendToPub}){
-  const [d,setD]=useState({...item,slides:[...(item.slides||[{id:genId(),text:"",img:"",img_name:""}])]}); const [newSlide,setNewSlide]=useState("");
+  const [d,setD]=useState({...item,slides:[...((item.slides&&item.slides.length?item.slides:[{id:genId(),text:"",img:"",img_name:""}]))]});  const [newSlide,setNewSlide]=useState("");
   const _dRef3=useRef(d);
   const u=(k,v)=>setD(p=>{ const next={...p,[k]:v}; _dRef3.current=next; return next; });
   useEffect(()=>{ _dRef3.current=d; if(saveFnRef) saveFnRef.current=()=>onSave(_dRef3.current); },[d]);
@@ -1143,8 +1143,8 @@ function PostCarouselForm({item,onSave,onDelete,onClose,projects,team,currentUse
     <Field label="ТЕКСТ НА ОБЛОЖКЕ (слайд 1)"><input value={d.cover_text} onChange={e=>u("cover_text",e.target.value)} placeholder="Заголовок карусели..." style={SI}/></Field>
     <Field label="СЛАЙДЫ КАРУСЕЛИ">
       <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
-        {d.slides.map((sl,i)=>(
-          <div key={sl.id} style={{display:"flex",gap:6,alignItems:"flex-start",background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 10px"}}>
+        {(d.slides||[]).map((sl,i)=>(
+          <div key={sl.id||i} style={{display:"flex",gap:6,alignItems:"flex-start",background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:8,padding:"8px 10px"}}>
             <div style={{width:24,height:24,borderRadius:6,background:"#2d2d44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#9ca3af",flexShrink:0}}>{i+1}</div>
             <div style={{flex:1}}>
               <textarea value={sl.text} onChange={e=>u("slides",d.slides.map((s,j)=>j===i?{...s,text:e.target.value}:s))} placeholder={`Текст слайда ${i+1}...`} style={{...SI,minHeight:40,resize:"vertical",fontSize:11,lineHeight:1.4}}/>
@@ -2141,6 +2141,67 @@ function StarredReelsView({pubItems, projects}){
 }
 
 // ── Base View ─────────────────────────────────────────────────────────────────
+
+// ── BaseProjectsView — управление проектами ──────────────────────────────────
+function BaseProjectsView({projects=[], setProjects}) {
+  const [adding, setAdding] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newColor, setNewColor] = useState("#8b5cf6");
+
+  const COLORS = ["#8b5cf6","#3b82f6","#ec4899","#10b981","#f59e0b","#f97316","#06b6d4","#a78bfa","#ef4444","#14b8a6"];
+
+  async function addProject() {
+    if (!newLabel.trim()) return;
+    const id = "proj_" + Math.random().toString(36).slice(2,9);
+    const proj = {id, label: newLabel.trim(), color: newColor, description: "", links: [], archived: false};
+    try {
+      await api.createProject(proj);
+      setProjects(p => [...p, proj]);
+      setNewLabel(""); setAdding(false);
+    } catch(e) { alert("Ошибка: " + e.message); }
+  }
+
+  const active = projects.filter(p => !p.archived);
+  const archived = projects.filter(p => p.archived);
+  const shown = showArchived ? archived : active;
+
+  return (
+    <div style={{padding:"4px 0"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+        <div style={{fontSize:11,color:"#4b5563"}}>{active.length} активных проектов</div>
+        <button onClick={()=>setShowArchived(p=>!p)} style={{marginLeft:"auto",background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"4px 12px",color:"#6b7280",cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>
+          {showArchived ? "← Активные" : "🗄 Архив ("+archived.length+")"}
+        </button>
+        {!showArchived && <button onClick={()=>setAdding(true)} style={{background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:7,padding:"5px 14px",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>+ Проект</button>}
+      </div>
+
+      {adding && (
+        <div style={{background:"#111118",border:"1px solid #2d2d44",borderRadius:10,padding:14,marginBottom:14}}>
+          <div style={{fontSize:10,color:"#6b7280",fontFamily:"monospace",marginBottom:8}}>НОВЫЙ ПРОЕКТ</div>
+          <input value={newLabel} onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addProject()}
+            placeholder="Название проекта" autoFocus
+            style={{background:"#0d0d16",border:"1px solid #2d2d44",borderRadius:7,padding:"7px 10px",color:"#f0eee8",fontSize:13,outline:"none",width:"100%",marginBottom:10,boxSizing:"border-box",fontFamily:"inherit"}}/>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+            {COLORS.map(c=>(
+              <button key={c} onClick={()=>setNewColor(c)} style={{width:22,height:22,borderRadius:"50%",background:c,border:newColor===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0}}/>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{setAdding(false);setNewLabel("");}} style={{flex:1,background:"transparent",border:"1px solid #2d2d44",borderRadius:7,padding:"7px",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>Отмена</button>
+            <button onClick={addProject} style={{flex:2,background:"linear-gradient(135deg,#06b6d4,#0891b2)",border:"none",borderRadius:7,padding:"7px",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:12}}>Добавить</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+        {shown.map(proj => <ProjectCard key={proj.id} proj={proj} showArchive={showArchived} setProjects={setProjects}/>)}
+        {shown.length===0 && <div style={{color:"#4b5563",fontSize:12,padding:"20px 0"}}>{showArchived?"Нет архивных проектов":"Нет активных проектов"}</div>}
+      </div>
+    </div>
+  );
+}
+
 function BaseView({projects,setProjects,teamMembers,setTeamMembers,currentUser}){
   const [subTab,setSubTab]=useState("projects");
   const tabs=[
@@ -2158,7 +2219,7 @@ function BaseView({projects,setProjects,teamMembers,setTeamMembers,currentUser})
           </button>
         ))}
       </div>
-      {subTab==="projects"&&<ProjectsView projects={projects} setProjects={setProjects}/>}
+      {subTab==="projects"&&<BaseProjectsView projects={projects} setProjects={setProjects}/>}
       {subTab==="team"&&<TeamView teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/>}
       {subTab==="training"&&<TrainingView/>}
     </div>
