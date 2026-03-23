@@ -1,4 +1,6 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
@@ -19,6 +21,7 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 const INVITE_PASSWORD = process.env.INVITE_PASSWORD || "vinograd2026";
+const JWT_SECRET = process.env.JWT_SECRET || "vg_secret_2026_change_in_production";
 
 // ── PostgreSQL ────────────────────────────────────────────────────────────────
 const pool = new Pool({
@@ -83,17 +86,35 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
+// ── Auth middleware ────────────────────────────────────────────────────────────
+function requireAuth(req, res, next) {
+  // Support both Bearer token and legacy x-user-id header
+  const auth = req.headers["authorization"];
+  const token = auth && auth.startsWith("Bearer ") ? auth.slice(7) : req.headers["x-token"];
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.userId = decoded.id;
+      req.userTelegram = decoded.telegram;
+    } catch(e) {
+      // Invalid token — fall through to x-user-id for backward compat
+    }
+  }
+  // Backward compat: accept x-user-id without token (for existing sessions)
+  if (!req.userId) req.userId = req.headers["x-user-id"] || null;
+  if (!req.userId) return res.status(401).json({ error: "Не авторизован" });
+  next();
+}
+
 // ── Update last_active on every authenticated request ─────────────────────────
 app.use((req, res, next) => {
-  const uid = req.headers["x-user-id"];
+  const uid = req.headers["x-user-id"] || req.userId;
   if (uid) q("UPDATE users SET last_active=$1 WHERE id=$2", [Date.now(), uid]).catch(() => {});
   next();
 });
 
 const BUILD_PATH = path.join(__dirname, "..", "client", "build");
 if (fs.existsSync(BUILD_PATH)) app.use(express.static(BUILD_PATH));
-
-// plain text passwords
 
 // ── Init DB ───────────────────────────────────────────────────────────────────
 async function initDb() {
@@ -259,9 +280,12 @@ app.post("/api/auth/register", async (req, res) => {
     if (await q1("SELECT id FROM users WHERE telegram=$1", [clean]))
       return res.status(409).json({ error: "Этот ник уже зарегистрирован" });
     const id = "u_" + uuidv4().replace(/-/g, "").slice(0, 10);
+    // Hash password before storing
+    const hashed = await bcrypt.hash(password, 10);
     await q("INSERT INTO users(id,telegram,name,role,color,password_hash) VALUES($1,$2,$3,$4,$5,$6)",
-      [id, clean, name || clean, role || "Оператор", color || "#8b5cf6", password]);
-    res.json({ id, telegram: clean, name: name || clean, role: role || "Оператор", color: color || "#8b5cf6" });
+      [id, clean, name || clean, role || "Оператор", color || "#8b5cf6", hashed]);
+    const token = jwt.sign({ id, telegram: clean }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ id, telegram: clean, name: name || clean, role: role || "Оператор", color: color || "#8b5cf6", token });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
 });
 
@@ -269,11 +293,24 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const { telegram, password } = req.body;
     const clean = telegram.replace(/^@/, "").toLowerCase().trim();
-        const user = await q1("SELECT * FROM users WHERE telegram=$1 OR telegram=$2", [clean, "@"+clean]);
+    const user = await q1("SELECT * FROM users WHERE telegram=$1 OR telegram=$2", [clean, "@"+clean]);
     if (!user) return res.status(401).json({ error: "Пользователь не найден" });
-    if (password !== user.password_hash) return res.status(401).json({ error: "Неверный пароль" });
+    // Support both hashed and plain-text passwords (migration period)
+    let valid = false;
+    if (user.password_hash && user.password_hash.startsWith("$2")) {
+      valid = await bcrypt.compare(password, user.password_hash);
+    } else {
+      // Plain text — compare directly, then upgrade to hash
+      valid = password === user.password_hash;
+      if (valid) {
+        const hashed = await bcrypt.hash(password, 10);
+        await q("UPDATE users SET password_hash=$1 WHERE id=$2", [hashed, user.id]);
+      }
+    }
+    if (!valid) return res.status(401).json({ error: "Неверный пароль" });
     await q("UPDATE users SET last_active=$1 WHERE id=$2", [Date.now(), user.id]);
-    res.json({ id: user.id, telegram: user.telegram, name: user.name, role: user.role, color: user.color });
+    const token = jwt.sign({ id: user.id, telegram: user.telegram }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ id: user.id, telegram: user.telegram, name: user.name, role: user.role, color: user.color, token });
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
 });
 
@@ -282,7 +319,7 @@ app.post("/api/auth/login", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 // GET /api/notifications — получить непрочитанные для текущего пользователя
-app.get("/api/notifications", async (req, res) => {
+app.get("/api/notifications", requireAuth, async (req, res) => {
   const uid = req.headers["x-user-id"];
   if (!uid) return res.json([]);
   try {
@@ -293,7 +330,7 @@ app.get("/api/notifications", async (req, res) => {
 });
 
 // POST /api/notifications/read — отметить прочитанным
-app.post("/api/notifications/read", async (req, res) => {
+app.post("/api/notifications/read", requireAuth, async (req, res) => {
   const uid = req.headers["x-user-id"];
   const { id } = req.body;
   if (!uid) return res.json({});
@@ -358,12 +395,12 @@ app.delete("/api/training/:id", async (req, res) => {
 // USERS (team)
 // ════════════════════════════════════════════════════════════════════════════════
 
-app.get("/api/users", async (req, res) => {
+app.get("/api/users", requireAuth, async (req, res) => {
   try { res.json(await q("SELECT id,telegram,name,role,color,last_active,avatar_url FROM users ORDER BY created_at")); }
   catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.patch("/api/users/:id", async (req, res) => {
+app.patch("/api/users/:id", requireAuth, async (req, res) => {
   try {
     const { name, role, color, telegram } = req.body;
     await q("UPDATE users SET name=COALESCE($1,name), role=COALESCE($2,role), color=COALESCE($3,color), telegram=COALESCE($4,telegram) WHERE id=$5",
@@ -372,7 +409,7 @@ app.patch("/api/users/:id", async (req, res) => {
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.delete("/api/users/:id", async (req, res) => {
+app.delete("/api/users/:id", requireAuth, async (req, res) => {
   try { await q("DELETE FROM users WHERE id=$1", [req.params.id]); res.json({ ok: true }); }
   catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
@@ -381,12 +418,12 @@ app.delete("/api/users/:id", async (req, res) => {
 // PROJECTS
 // ════════════════════════════════════════════════════════════════════════════════
 
-app.get("/api/projects", async (req, res) => {
+app.get("/api/projects", requireAuth, async (req, res) => {
   try { res.json(await q("SELECT * FROM projects ORDER BY created_at")); }
   catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.post("/api/projects", async (req, res) => {
+app.post("/api/projects", requireAuth, async (req, res) => {
   try {
     const { label, color, description, links } = req.body;
     if (!label) return res.status(400).json({ error: "Нужно название" });
@@ -397,7 +434,7 @@ app.post("/api/projects", async (req, res) => {
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.patch("/api/projects/:id", async (req, res) => {
+app.patch("/api/projects/:id", requireAuth, async (req, res) => {
   try {
     const { label, color, description, links, archived, pmp_project_id } = req.body;
     await q(`UPDATE projects SET
@@ -413,7 +450,7 @@ app.patch("/api/projects/:id", async (req, res) => {
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.delete("/api/projects/:id", async (req, res) => {
+app.delete("/api/projects/:id", requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -432,7 +469,7 @@ app.delete("/api/projects/:id", async (req, res) => {
 // TASKS  (type = pre | prod | post_reels | post_video | post_carousel | pub)
 // ════════════════════════════════════════════════════════════════════════════════
 
-app.get("/api/tasks", async (req, res) => {
+app.get("/api/tasks", requireAuth, async (req, res) => {
   try {
     const { type, project_id } = req.query;
     let sql = "SELECT * FROM tasks WHERE 1=1";
@@ -444,7 +481,7 @@ app.get("/api/tasks", async (req, res) => {
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.post("/api/tasks", async (req, res) => {
+app.post("/api/tasks", requireAuth, async (req, res) => {
   try {
     const { type, title, project_id, status, data } = req.body;
     if (!type) return res.status(400).json({ error: "type обязателен" });
@@ -468,7 +505,7 @@ app.post("/api/tasks", async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.patch("/api/tasks/:id", async (req, res) => {
+app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
   try {
     const { title, project_id, status, data, archived, completed_at } = req.body;
     const now = Date.now();
@@ -577,7 +614,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
   } catch(e) { console.error(e); res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.delete("/api/tasks/:id", async (req, res) => {
+app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
   try {
     await q("DELETE FROM chat_messages WHERE task_id=$1", [req.params.id]);
     await q("DELETE FROM tasks WHERE id=$1", [req.params.id]);
@@ -586,16 +623,44 @@ app.delete("/api/tasks/:id", async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
+// SEND TO PUB — transactional: create pub task + archive source in one transaction
+// ════════════════════════════════════════════════════════════════════════════════
+app.post("/api/tasks/send-to-pub", requireAuth, async (req, res) => {
+  const { sourceId, pubTask } = req.body;
+  if (!sourceId || !pubTask) return res.status(400).json({ error: "sourceId and pubTask required" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // 1. Create pub task
+    const { id, type, title, project_id, status, data } = pubTask;
+    await client.query(
+      "INSERT INTO tasks(id,type,title,project_id,status,data,archived,completed_at,starred) VALUES($1,$2,$3,$4,$5,$6,false,'',false)",
+      [id, "pub", title||"", project_id||"none", status||"draft", JSON.stringify(data||{})]
+    );
+    // 2. Archive source task
+    await client.query("UPDATE tasks SET archived=true, completed_at=$1 WHERE id=$2", [new Date().toISOString().slice(0,10), sourceId]);
+    await client.query("COMMIT");
+    res.json({ ok: true, id });
+  } catch(e) {
+    await client.query("ROLLBACK");
+    console.error("send-to-pub error:", e);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
 // CHAT
 // ════════════════════════════════════════════════════════════════════════════════
 
-app.get("/api/chat/:taskId", async (req, res) => {
+app.get("/api/chat/:taskId", requireAuth, async (req, res) => {
   try {
     res.json(await q("SELECT * FROM chat_messages WHERE task_id=$1 ORDER BY created_at LIMIT 200", [req.params.taskId]));
   } catch(e) { res.status(500).json({ error: "Ошибка" }); }
 });
 
-app.post("/api/chat/:taskId", async (req, res) => {
+app.post("/api/chat/:taskId", requireAuth, async (req, res) => {
   try {
     const { user_id, text, file_url, file_name } = req.body;
     if (!user_id) return res.status(400).json({ error: "user_id обязателен" });
@@ -657,7 +722,7 @@ ${preview}${link}`;
 // ════════════════════════════════════════════════════════════════════════════════
 // PRESIGNED UPLOAD URL — client uploads directly to R2, bypassing server
 // ════════════════════════════════════════════════════════════════════════════════
-app.post("/api/presign-upload", async (req, res) => {
+app.post("/api/presign-upload", requireAuth, async (req, res) => {
   try {
     const { name, type } = req.body;
     if (!name) return res.status(400).json({ error: "name required" });
@@ -677,7 +742,7 @@ app.post("/api/presign-upload", async (req, res) => {
 // FILE UPLOAD → R2 (fallback proxy — used for voice blobs that can't use presigned)
 // ════════════════════════════════════════════════════════════════════════════════
 
-app.post("/api/upload", upload.single("file"), async (req, res) => {
+app.post("/api/upload", requireAuth, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Нет файла" });
     const origName = req.file.originalname;
@@ -802,7 +867,7 @@ async function cleanCorruptedUrls() {
 cleanCorruptedUrls();
 
 // GET all rows for a month
-app.get("/api/content-plan", async (req, res) => {
+app.get("/api/content-plan", requireAuth, async (req, res) => {
   const { year, month } = req.query;
   if (!year || !month) return res.status(400).json({ error: "year and month required" });
   try {
@@ -815,7 +880,7 @@ app.get("/api/content-plan", async (req, res) => {
 });
 
 // POST create row
-app.post("/api/content-plan", async (req, res) => {
+app.post("/api/content-plan", requireAuth, async (req, res) => {
   const { id, proj_id, year, month, type, days, sort_order } = req.body;
   if (!id || !proj_id) return res.status(400).json({ error: "id and proj_id required" });
   try {
@@ -828,7 +893,7 @@ app.post("/api/content-plan", async (req, res) => {
 });
 
 // PATCH update row (type or days)
-app.patch("/api/content-plan/:id", async (req, res) => {
+app.patch("/api/content-plan/:id", requireAuth, async (req, res) => {
   const { type, days } = req.body;
   try {
     if (type !== undefined) await pool.query("UPDATE content_plan SET type=$1 WHERE id=$2", [type, req.params.id]);
@@ -838,7 +903,7 @@ app.patch("/api/content-plan/:id", async (req, res) => {
 });
 
 // DELETE row
-app.delete("/api/content-plan/:id", async (req, res) => {
+app.delete("/api/content-plan/:id", requireAuth, async (req, res) => {
   try {
     await pool.query("DELETE FROM content_plan WHERE id=$1", [req.params.id]);
     res.json({ ok: true });
@@ -850,7 +915,7 @@ app.delete("/api/content-plan/:id", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 // List all files in R2
-app.get("/api/director/files", async (req, res) => {
+app.get("/api/director/files", requireAuth, async (req, res) => {
   try {
     const cmd = new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: "vinogradov/", MaxKeys: 1000 });
     const data = await r2.send(cmd);
@@ -866,7 +931,7 @@ app.get("/api/director/files", async (req, res) => {
 });
 
 // Delete file from R2
-app.delete("/api/director/files", async (req, res) => {
+app.delete("/api/director/files", requireAuth, async (req, res) => {
   const { key } = req.body;
   if (!key) return res.status(400).json({ error: "key required" });
   try {
@@ -876,7 +941,7 @@ app.delete("/api/director/files", async (req, res) => {
 });
 
 // Get activity logs (chat messages from all tasks, joined with task info)
-app.get("/api/director/logs", async (req, res) => {
+app.get("/api/director/logs", requireAuth, async (req, res) => {
   try {
     const rows = await pool.query(`
       SELECT 

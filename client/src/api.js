@@ -1,8 +1,21 @@
 const BASE = "";
 
+function getAuthHeaders() {
+  try {
+    const user = JSON.parse(localStorage.getItem("vg_user") || "{}");
+    const h = {};
+    if (user.id) h["x-user-id"] = user.id;
+    const token = user.token || localStorage.getItem("vg_token");
+    if (token) h["Authorization"] = "Bearer " + token;
+    return h;
+  } catch { return {}; }
+}
+
 async function req(method, url, body) {
-  const userId = (() => { try { return JSON.parse(localStorage.getItem("vg_user")||"{}").id||""; } catch(e){ return ""; } })();
-  const opts = { method, headers: { "Content-Type": "application/json", ...(userId ? {"x-user-id": userId} : {}) } };
+  const opts = {
+    method,
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() }
+  };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(BASE + url, opts);
   if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || r.statusText); }
@@ -31,6 +44,9 @@ export const api = {
   updateTask: (id,d)      => req("PATCH",  `/api/tasks/${id}`, d),
   deleteTask: (id)        => req("DELETE", `/api/tasks/${id}`),
 
+  // analytics
+  getKpi: () => req("GET", "/api/analytics/kpi"),
+
   // chat
   getChat:    (taskId)    => req("GET",  `/api/chat/${taskId}`),
   sendMsg:    (taskId, d) => req("POST", `/api/chat/${taskId}`, d),
@@ -39,7 +55,7 @@ export const api = {
   uploadFile: async (file) => {
     const fd = new FormData();
     fd.append("file", file);
-    const r = await fetch("/api/upload", { method: "POST", body: fd });
+    const r = await fetch("/api/upload", { method: "POST", headers: getAuthHeaders(), body: fd });
     if (!r.ok) throw new Error("Upload failed");
     return r.json();
   },

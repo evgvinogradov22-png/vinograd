@@ -31,6 +31,8 @@ export default function LoginScreen({ onLogin }) {
         const user = mode === "login"
           ? await api.login({ telegram: form.telegram, password: form.password })
           : await api.register(form);
+        // Save token separately for API requests
+        if (user.token) localStorage.setItem("vg_token", user.token);
         localStorage.setItem("vg_user", JSON.stringify(user));
         onLogin(user);
       }
