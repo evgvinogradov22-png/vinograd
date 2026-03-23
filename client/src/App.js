@@ -7,16 +7,34 @@ import { genId, teamOf, projOf, stColor, getTaskStore } from "./utils/helpers";
 import { Field, Btn, Badge, TeamSelect, StatusRow, FilterBar, SaveRow, UploadProgress, TzField, TaskCard } from "./components/ui";
 import MiniChat from "./components/chat/MiniChat";
 import Modal from "./components/modal/Modal";
-import { FinalFileOrLink, SourceInputs, SlideImageUpload, PreForm, ProdForm, PostReelsForm, PostVideoForm, PostCarouselForm, PubForm, AdminForm, SingleReelStats, ReelStatsBlock } from "./components/forms";
-import { UnreadMentions, StarredReelsView, BaseProjectsView, TrainingView, ProjectCard, TeamView, DirectorPage } from "./components/views";
-import SummaryView from "./components/views/SummaryView";
-import ContentPlanView from "./components/views/ContentPlanView";
-import AnalyticsView from "./components/views/AnalyticsView";
-import CalendarView from "./components/views/CalendarView";
-import ProjectsView from "./components/views/ProjectsView";
-import IntellectBoard from "./components/views/IntellectBoard";
-import BaseView from "./components/views/BaseView";
-import MobileApp from "./components/mobile";
+// ── Eager imports — small, used everywhere ────────────────────────────────────
+import { UnreadMentions, StarredReelsView } from "./components/views/SummaryView";
+import { FinalFileOrLink, SourceInputs, SlideImageUpload, SingleReelStats, ReelStatsBlock } from "./components/forms/shared";
+
+// ── Lazy imports — only loaded when first needed ──────────────────────────────
+const { Suspense, lazy } = React;
+
+// Heavy views — load when tab first clicked
+const SummaryView      = lazy(() => import("./components/views/SummaryView").then(m => ({default: m.default})));
+const ContentPlanView  = lazy(() => import("./components/views/ContentPlanView"));
+const AnalyticsView    = lazy(() => import("./components/views/AnalyticsView"));
+const CalendarView     = lazy(() => import("./components/views/CalendarView"));
+const ProjectsView     = lazy(() => import("./components/views/ProjectsView"));
+const IntellectBoard   = lazy(() => import("./components/views/IntellectBoard"));
+const BaseView         = lazy(() => import("./components/views/BaseView"));
+const DirectorPage     = lazy(() => import("./components/views/DirectorPage"));
+
+// Mobile app — huge, only load on mobile
+const MobileApp        = lazy(() => import("./components/mobile/MobileApp"));
+
+// Forms — load when modal first opens
+const PreForm          = lazy(() => import("./components/forms/PreForm"));
+const ProdForm         = lazy(() => import("./components/forms/ProdForm"));
+const PostReelsForm    = lazy(() => import("./components/forms/PostReelsForm"));
+const PostVideoForm    = lazy(() => import("./components/forms/PostVideoForm"));
+const PostCarouselForm = lazy(() => import("./components/forms/PostCarouselForm"));
+const PubForm          = lazy(() => import("./components/forms/PubForm"));
+const AdminForm        = lazy(() => import("./components/forms/AdminForm"));
 import { PreTab, ProdTab, PostTab, PubTab, AdminTab } from "./components/tabs/TabContent";
 
 class ErrorBoundary extends React.Component {
@@ -148,6 +166,18 @@ function TopBar({ tab, cnt, notifs, setNotifs, showNotifs, setShowNotifs, curren
   );
 }
 
+
+// ── Fallback for lazy-loaded components ──────────────────────────────────────
+function LazyFallback() {
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",minHeight:200,color:"#4b5563",fontSize:12,fontFamily:"monospace",gap:8}}>
+      <style>{`@keyframes vg-spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{width:16,height:16,border:"2px solid #2d2d44",borderTopColor:"#8b5cf6",borderRadius:"50%",animation:"vg-spin 0.8s linear infinite"}}/>
+      загрузка...
+    </div>
+  );
+}
+
 function MainApp({currentUser, onLogout}){
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<=768);
   useEffect(()=>{
@@ -209,7 +239,7 @@ function MainApp({currentUser, onLogout}){
         const [projs, users, tasks] = await Promise.all([
           api.getProjects(),
           api.getUsers(),
-          api.getTasks(),
+          api.getTasks({ archived: "false" }), // active only — archived loaded on demand
         ]);
         // Single dispatch — one re-render instead of 7
         const expand = t => {
@@ -551,7 +581,7 @@ function MainApp({currentUser, onLogout}){
     openEdit,openNew,close,save,deleteTask,sendToPub,
   };
 
-  if(isMobile) return <ErrorBoundary key="mobile"><MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/></ErrorBoundary>;
+  if(isMobile) return <Suspense fallback={<div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0f",color:"#9ca3af",fontSize:12,fontFamily:"monospace"}}>🍇 загрузка...</div>}><ErrorBoundary key="mobile"><MobileApp currentUser={currentUser} onLogout={onLogout} stores={mobileStores}/></ErrorBoundary>;
 
   return <div style={{fontFamily:"'Syne','Inter',sans-serif",height:"100vh",background:"#0a0a0f",color:"#f0eee8",display:"flex",overflow:"hidden"}}>
     <Sidebar tab={tab} setTab={setTab} setViewMode={setViewMode} cnt={cnt} currentUser={currentUser} onLogout={onLogout}/>
@@ -567,17 +597,17 @@ function MainApp({currentUser, onLogout}){
       {tab==="post"      &&<PostTab  reels={filtPostReels} video={filtPostVideo} carousels={filtPostCarousels} filt={postFilt} setFilt={setPostFilt} subTab={postSubTab} setSubTab={setPostSubTab} projects={projects} team={teamMembers} openNew={openNew} drop={drop} showArchived={showArchivedPost}  setShowArchived={setShowArchivedPost}/>}
       {tab==="pub"       &&<PubTab   items={filtPub} allItems={pubItems} filt={pubFilt}  setFilt={setPubFilt}  viewMode={pubViewMode} setViewMode={setPubViewMode} projects={projects} team={teamMembers} openNew={openNew} openEdit={openEdit} drop={drop} moveToDay={moveToDay} toggleStar={toggleStar} showArchived={showArchivedPub}   setShowArchived={setShowArchivedPub}/>}
       {tab==="admin"     &&<AdminTab items={filtAdmin}  filt={adminFilt} setFilt={setAdminFilt} projects={projects} team={teamMembers} openNew={openNew} drop={drop} showArchived={showArchivedAdmin} setShowArchived={setShowArchivedAdmin}/>}
-      {tab==="summary"   &&<SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/>}
-      {tab==="contentplan"&&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><ContentPlanView projects={projects} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} kpisData={kpis} teamMembers={teamMembers}/></div>}
-      {tab==="analytics" &&<AnalyticsView pubItems={pubItems} projects={projects} kpisData={kpis}/>}
-      {tab==="calendar"  &&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><CalendarView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems||[]} onOpenTask={(type,item)=>openEdit(type,item)} onNewTask={(dateStr)=>setModal({type:"post_reels",item:{...defItem("post_reels"),post_deadline:dateStr}})}/></div>}
-      {tab==="projects"  &&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><ProjectsView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} onOpenTask={(type,item)=>openEdit(type,item)}/></div>}
-      {tab==="board"     &&<div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><IntellectBoard projects={projects} currentUser={currentUser}/></div>}
-      {tab==="base"      &&<ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary>}
+      {tab==="summary"   &&<Suspense fallback={<LazyFallback/>}><SummaryView preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} projects={projects} team={teamMembers} currentUser={currentUser} onOpenTask={(type,item)=>openEdit(type,item)}/></Suspense>}
+      {tab==="contentplan"&&<Suspense fallback={<LazyFallback/>}><div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><ContentPlanView projects={projects} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} kpisData={kpis} teamMembers={teamMembers}/></div></Suspense>}
+      {tab==="analytics" &&<Suspense fallback={<LazyFallback/>}><AnalyticsView pubItems={pubItems} projects={projects} kpisData={kpis}/></Suspense>}
+      {tab==="calendar"  &&<Suspense fallback={<LazyFallback/>}><div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><CalendarView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems||[]} onOpenTask={(type,item)=>openEdit(type,item)} onNewTask={(dateStr)=>setModal({type:"post_reels",item:{...defItem("post_reels"),post_deadline:dateStr}})}/></div></Suspense>}
+      {tab==="projects"  &&<Suspense fallback={<LazyFallback/>}><div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><ProjectsView projects={projects} preItems={preItems} prodItems={prodItems} postReels={postReels} postVideo={postVideo} postCarousels={postCarousels} pubItems={pubItems} adminItems={adminItems} onOpenTask={(type,item)=>openEdit(type,item)}/></div></Suspense>}
+      {tab==="board"     &&<Suspense fallback={<LazyFallback/>}><div style={{height:"calc(100vh - 48px)",overflow:"hidden"}}><IntellectBoard projects={projects} currentUser={currentUser}/></div></Suspense>}
+      {tab==="base"      &&<Suspense fallback={<LazyFallback/>}><ErrorBoundary key="base"><BaseView projects={projects} setProjects={setProjects} teamMembers={teamMembers} setTeamMembers={setTeamMembers} currentUser={currentUser}/></ErrorBoundary></Suspense>}
     </div>
 
     {/* MODALS */}
-    {modal?.type==="pre"          &&<Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
+    {modal?.type==="pre"          &&<Suspense fallback={<LazyFallback/>}><Modal title="Препродакшн — Сценарий"  color="#8b5cf6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("pre",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PreForm          item={modal.item} onSave={d=>save("pre",d)} onDelete={id=>deleteTask("pre",id)}           onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
     {modal?.type==="prod"         &&<Modal title="Продакшн — Съёмка"       color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("prod",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><ProdForm         item={modal.item} onSave={d=>save("prod",d)} onDelete={id=>deleteTask("prod",id)}          onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef}/></Modal>}
     {modal?.type==="post_reels"   &&<Modal title="Постпродакшн — Рилс"    color="#ec4899" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_reels",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PostReelsForm    item={modal.item} onSave={d=>save("post_reels",d)} onDelete={id=>deleteTask("post_reels",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_reels",d)}/></Modal>}
     {modal?.type==="post_video"   &&<Modal title="Постпродакшн — Видео"    color="#3b82f6" onClose={close} onSave={()=>saveFnRef.current?.()} onDelete={modal.item?.id?()=>deleteTask("post_video",modal.item.id):undefined} taskId={modal.item?.id} team={teamMembers} currentUser={currentUser}><PostVideoForm    item={modal.item} onSave={d=>save("post_video",d)} onDelete={id=>deleteTask("post_video",id)}    onClose={close} projects={projects} team={teamMembers} currentUser={currentUser} saveFnRef={saveFnRef} onSendToPub={d=>sendToPub("post_video",d)}/></Modal>}
